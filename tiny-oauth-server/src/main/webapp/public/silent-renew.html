@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Silent Renew</title>
+    <script type="module">
+        import { UserManager } from 'https://cdn.jsdelivr.net/npm/oidc-client-ts/+esm'
+        new UserManager({ response_mode: 'query' }).signinSilentCallback()
+            .then(() => console.log('[OIDC] Silent renew completed'))
+            .catch(err => console.error('[OIDC] Silent renew error', err))
+    </script>
+</head>
+<body></body>
+</html>

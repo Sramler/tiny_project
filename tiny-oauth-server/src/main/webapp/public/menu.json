@@ -1,0 +1,44 @@
+[
+  {
+    "title": "工作台",
+    "path": "/",
+    "icon": "HomeOutlined",
+    "showIcon": true,
+    "component": "/views/Dashboard.vue" 
+  },
+  {
+    "title": "系统管理",
+    "path": "/system",
+    "icon": "SettingOutlined",
+    "showIcon": true,
+    "redirect": "/system/role",
+    "children": [
+      { "title": "角色管理", "path": "/system/role", "showIcon": false, "component": "/views/Role.vue" },
+      { "title": "权限管理", "path": "/system/resource", "showIcon": false, "component": "/views/Resource.vue" },
+      { "title": "用户管理", "path": "/system/user", "showIcon": false, "component": "/views/User.vue" }
+    ]
+  },
+  {
+    "title": "个人页",
+    "path": "/profile",
+    "icon": "UserOutlined",
+    "showIcon": true,
+    "redirect": "/profile/center",
+    "children": [
+      { "title": "个人中心", "path": "/profile/center", "showIcon": false, "component": "/views/Profile.vue" },
+      { "title": "个人设置", "path": "/profile/setting", "showIcon": false, "component": "/views/Setting.vue" }
+    ]
+  },
+  {
+    "title": "异常页",
+    "path": "/exception",
+    "icon": "WarningOutlined",
+    "showIcon": true,
+    "redirect": "/exception/403",
+    "children": [
+      { "title": "403", "path": "/exception/403", "showIcon": false, "component": "/views/403.vue" },
+      { "title": "404", "path": "/exception/404", "showIcon": false, "component": "/views/404.vue" },
+      { "title": "500", "path": "/exception/500", "showIcon": false, "component": "/views/500.vue" }
+    ]
+  }
+] 

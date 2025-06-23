@@ -1,0 +1,38 @@
+@import './base.css';
+
+#app {
+  /* 取消最大宽度和居中，保证页面铺满全屏 */
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  font-weight: normal;
+}
+
+a,
+.green {
+  text-decoration: none;
+  color: hsla(160, 100%, 37%, 1);
+  transition: 0.4s;
+  padding: 3px;
+}
+
+@media (hover: hover) {
+  a:hover {
+    background-color: hsla(160, 100%, 37%, 0.2);
+  }
+}
+
+@media (min-width: 1024px) {
+  body {
+    /* 移除 flex 居中，防止内容不铺满 */
+    display: block;
+    place-items: unset;
+  }
+  #app {
+    /* 取消 grid 和 padding，保证全屏 */
+    display: block;
+    grid-template-columns: unset;
+    padding: 0;
+  }
+}

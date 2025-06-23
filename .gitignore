@@ -1,0 +1,15 @@
+# Java/Maven/Spring 多模块常见忽略
+/target/
+**/target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# 日志、临时文件
+*.log
+*.tmp
+*.swp
+
+# IDEA 工具相关
+.idea/
+*.iml
+*.iws
+out/

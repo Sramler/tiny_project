@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container">
+  <div class="page-container" style="position: relative;">
     <div class="card">
       <div class="form-card">
         <a-form layout="inline" :model="query">
@@ -72,6 +72,12 @@
           <a-tooltip title="刷新">
             <ReloadOutlined class="action-icon" @click="handleRefresh" />
           </a-tooltip>
+          <a-tooltip :title="showSortTooltip ? '关闭排序提示' : '开启排序提示'">
+            <PoweroffOutlined
+              :class="['action-icon', { active: showSortTooltip }]"
+              @click="showSortTooltip = !showSortTooltip"
+            />
+          </a-tooltip>
           <a-popover
             placement="bottomRight"
             trigger="click"
@@ -96,7 +102,7 @@
               </div>
               <VueDraggable
                 v-model="draggableColumns"
-                :item-key="(item: any) => item.dataIndex"
+                :item-key="(item: any) => item?.dataIndex || `col_${Math.random()}`"
                 handle=".drag-handle"
                 @end="onDragEnd"
                 class="draggable-columns"
@@ -128,20 +134,60 @@
           :columns="columns"
           :data-source="tableData"
           :pagination="false"
-          row-key="id"
+          :row-key="(record: any) => record?.id || `row_${Math.random()}`"
           bordered
           :loading="loading"
           @change="handleTableChange"
           :row-selection="rowSelection"
           :custom-row="onCustomRow"
           :row-class-name="getRowClassName"
-          :scroll="{ y: tableBodyHeight }"
+          :scroll="{ x: 1500, y: tableBodyHeight }"
+          :locale="tableLocale"
+          :show-sorter-tooltip="showSortTooltip"
         >
           <template #bodyCell="{ column, record }">
             <template v-if="['enabled','account_non_expired','account_non_locked','credentials_non_expired'].includes(column.dataIndex)">
               <a-tag :color="record[column.dataIndex] ? 'green' : 'red'">
                 {{ record[column.dataIndex] ? '是' : '否' }}
               </a-tag>
+            </template>
+            <template v-else-if="column.dataIndex === 'action'">
+              <div class="action-buttons">
+                <a-button 
+                  type="link" 
+                  size="small" 
+                  @click="handleEdit(record)"
+                  class="action-btn"
+                >
+                  <template #icon>
+                    <EditOutlined />
+                  </template>
+                  编辑
+                </a-button>
+                <a-button 
+                  type="link" 
+                  size="small" 
+                  danger 
+                  @click="handleDelete(record)"
+                  class="action-btn"
+                >
+                  <template #icon>
+                    <DeleteOutlined />
+                  </template>
+                  删除
+                </a-button>
+                <a-button 
+                  type="link" 
+                  size="small" 
+                  @click="handleView(record)"
+                  class="action-btn"
+                >
+                  <template #icon>
+                    <EyeOutlined />
+                  </template>
+                  查看
+                </a-button>
+              </div>
             </template>
           </template>
         </a-table>
@@ -152,7 +198,7 @@
           :page-size="pagination.pageSize"
           :total="pagination.total"
           :show-size-changer="pagination.showSizeChanger"
-          :page-size-options="pagination.pageSizeOptions"
+          :page-size-options="paginationConfig.pageSizeOptions"
           :show-total="pagination.showTotal"
           @change="handlePageChange"
           @showSizeChange="handlePageSizeChange"
@@ -160,14 +206,35 @@
         />
       </div>
     </div>
+
+    <a-drawer
+      v-model:open="drawerVisible"
+      :title="drawerMode === 'create' ? '新建用户' : drawerMode === 'edit' ? '编辑用户' : '查看用户'"
+      width="50%"
+      :get-container="false"
+      :style="{ position: 'absolute' }"
+      @close="handleDrawerClose"
+    >
+      <UserEditModal
+        v-if="drawerVisible"
+        :mode="drawerMode"
+        :user-data="currentUser"
+        @submit="handleDrawerClose"
+        @cancel="handleDrawerClose"
+      />
+    </a-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, h, onBeforeUnmount, nextTick } from 'vue'
-import { userList } from '@/api/user'
-import { PlusOutlined, ReloadOutlined, SettingOutlined, HolderOutlined, DeleteOutlined, CheckCircleOutlined, StopOutlined, CloseOutlined } from '@ant-design/icons-vue'
+import { userList, updateUser, deleteUser, batchDeleteUsers, batchEnableUsers, batchDisableUsers } from '@/api/user'
+import { PlusOutlined, ReloadOutlined, SettingOutlined, HolderOutlined, DeleteOutlined, CheckCircleOutlined, StopOutlined, CloseOutlined, EditOutlined, EyeOutlined, InfoCircleOutlined, QuestionCircleOutlined, PoweroffOutlined } from '@ant-design/icons-vue'
 import VueDraggable from 'vuedraggable'
+import UserEditModal from '@/views/Login/UserEditModal.vue'
+import UserViewModal from '@/components/UserViewModal.vue'
+import { message } from 'ant-design-vue'
+import { useRouter } from 'vue-router'
 
 const query = ref({
   username: '',
@@ -184,14 +251,23 @@ const pagination = ref({
   current: 1,
   pageSize: 10,
   showSizeChanger: true,
-  pageSizeOptions: ['10', '20', '30', '40', '50'],
+  pageSizeOptions: ['10', '20', '30', '40', '50'].filter(option => option && typeof option === 'string'),
   total: 0,
   showTotal: (total: number) => `共 ${total} 条`
 })
 
-const paginationConfig = computed(() => ({
-  ...pagination.value
-}))
+const paginationConfig = computed(() => {
+  const config = {
+    current: Number(pagination.value.current) || 1,
+    pageSize: Number(pagination.value.pageSize) || 10,
+    showSizeChanger: pagination.value.showSizeChanger,
+    pageSizeOptions: pagination.value.pageSizeOptions.filter(option => option && typeof option === 'string'),
+    total: Number(pagination.value.total) || 0,
+    showTotal: pagination.value.showTotal
+  }
+  console.log('paginationConfig computed:', config)
+  return config
+})
 
 const allColumns = ref([
   { title: 'ID', dataIndex: 'id', sorter: true },
@@ -206,21 +282,46 @@ const allColumns = ref([
     title: '最后登录时间',
     dataIndex: 'last_login_at',
     width: 180,
-    ellipsis: true,
     sorter: true
+  },
+  {
+    title: '操作',
+    dataIndex: 'action',
+    width: 200,
+    fixed: 'right',
+    align: 'center'
   }
-])
+]);
 
 const draggableColumns = ref([...allColumns.value])
 
-const showColumnKeys = ref(allColumns.value.map(col => col.dataIndex))
+const showColumnKeys = ref(
+  allColumns.value
+    .map(col => col.dataIndex)
+    .filter(key => typeof key === 'string' && key !== undefined && key !== null)
+);
+
+watch(allColumns, (val) => {
+  showColumnKeys.value = showColumnKeys.value.filter(key =>
+    val.some(col => col.dataIndex === key)
+  );
+});
 
 watch(draggableColumns, (val) => {
-  allColumns.value = [...val]
+  // 只保留合法列
+  allColumns.value = val.filter(col => col && typeof col.dataIndex === 'string')
+  // showColumnKeys 只保留 allColumns 里存在的 dataIndex
+  showColumnKeys.value = showColumnKeys.value.filter(key =>
+    allColumns.value.some(col => col.dataIndex === key)
+  )
 })
 
 function onCheckboxChange(dataIndex: string, checked: boolean) {
   console.log('复选框变化:', dataIndex, checked)
+  if (!dataIndex || typeof dataIndex !== 'string') {
+    console.warn('无效的 dataIndex:', dataIndex)
+    return
+  }
   if (checked) {
     if (!showColumnKeys.value.includes(dataIndex)) {
       showColumnKeys.value.push(dataIndex)
@@ -231,21 +332,39 @@ function onCheckboxChange(dataIndex: string, checked: boolean) {
   console.log('当前显示的列:', showColumnKeys.value)
 }
 
-const columns = computed(() => [
-  {
-    title: '序号',
-    dataIndex: 'index',
-    width: 80,
-    align: 'center',
-    customRender: ({ index, record }: { index: number, record: any }) => {
-      return h('div', {
-        class: 'cell-content',
-        onClick: () => handleCellClick(record, 'index')
-      }, (pagination.value.current - 1) * pagination.value.pageSize + index + 1)
-    }
-  },
-  ...allColumns.value.filter(col => showColumnKeys.value.includes(col.dataIndex))
-])
+console.log('allColumns.value:', allColumns.value)
+console.log('showColumnKeys.value:', showColumnKeys.value)
+const columns = computed(() => {
+  console.log('columns computed 触发，allColumns:', allColumns.value)
+  console.log('columns computed 触发，showColumnKeys:', showColumnKeys.value)
+  
+  // 只保留合法列
+  const filtered = allColumns.value.filter(
+    col =>
+      col &&
+      typeof col.dataIndex === 'string' &&
+      col.dataIndex &&
+      showColumnKeys.value.includes(col.dataIndex)
+  )
+  // 打印调试最终columns
+  console.log('columns for table:', filtered)
+  return [
+    {
+      title: '序号',
+      dataIndex: 'index',
+      width: 80,
+      align: 'center',
+      fixed: 'left',
+      customRender: ({ index }: { index?: number }) => {
+        const safeIndex = typeof index === 'number' && !isNaN(index) ? index : 0
+        const current = Number(pagination.value.current) || 1
+        const pageSize = Number(pagination.value.pageSize) || 10
+        return (current - 1) * pageSize + safeIndex + 1
+      }
+    },
+    ...filtered
+  ]
+})
 
 const rowSelection = computed(() => ({
   selectedRowKeys: selectedRowKeys.value,
@@ -254,7 +373,8 @@ const rowSelection = computed(() => ({
     console.log('复选框选中变化后的行:', selectedRowKeys.value)
   },
   checkStrictly: false,
-  preserveSelectedRowKeys: true
+  preserveSelectedRowKeys: true,
+  fixed: true
 }))
 
 async function loadData() {
@@ -263,14 +383,15 @@ async function loadData() {
     const params = {
       username: query.value.username.trim(),
       nickname: query.value.nickname.trim(),
-      current: pagination.value.current,
-      pageSize: pagination.value.pageSize
+      current: Number(pagination.value.current) || 1,
+      pageSize: Number(pagination.value.pageSize) || 10
     }
     const res = await userList(params)
-    tableData.value = res.records
-    pagination.value.total = res.total
+    tableData.value = Array.isArray(res.records) ? res.records : []
+    pagination.value.total = res.total || 0
   } catch (error) {
-    console.error('加载数据失败:', error)
+    tableData.value = []
+    pagination.value.total = 0
   } finally {
     loading.value = false
   }
@@ -289,13 +410,36 @@ function handleReset() {
 }
 
 function handleTableChange(pag: any, filters: any, sorter: any) {
-  pagination.value.current = pag.current
-  pagination.value.pageSize = pag.pageSize
+  console.log('表格变化事件:', { pag, filters, sorter })
+  console.log('变化前的 pagination:', pagination.value)
+  console.log('变化前的 paginationConfig:', paginationConfig.value)
+  console.log('变化前的 columns:', columns.value)
+  
+  // 添加安全检查
+  if (pag && typeof pag.current === 'number') {
+    pagination.value.current = pag.current
+  }
+  if (pag && typeof pag.pageSize === 'number') {
+    pagination.value.pageSize = pag.pageSize
+  }
+  
+  console.log('变化后的 pagination:', pagination.value)
   loadData()
+  
+  console.log('变化后的 columns:', columns.value)
 }
 
 function handleCreate() {
-  alert('新建功能待实现')
+  drawerMode.value = 'create'
+  currentUser.value = {
+    username: '',
+    nickname: '',
+    enabled: true,
+    account_non_expired: true,
+    account_non_locked: true,
+    credentials_non_expired: true
+  }
+  drawerVisible.value = true
 }
 
 function handleRefresh() {
@@ -314,7 +458,9 @@ function handleRefresh() {
 function onCheckAllChange(e: any) {
   console.log('全选复选框变化:', e.target.checked)
   if (e.target.checked) {
-    showColumnKeys.value = allColumns.value.map(col => col.dataIndex)
+    showColumnKeys.value = allColumns.value
+      .filter(col => col && typeof col.dataIndex === 'string' && col.dataIndex)
+      .map(col => col.dataIndex)
   } else {
     showColumnKeys.value = []
   }
@@ -323,7 +469,9 @@ function onCheckAllChange(e: any) {
 
 function resetColumnOrder() {
   draggableColumns.value = [...allColumns.value]
-  showColumnKeys.value = allColumns.value.map(col => col.dataIndex)
+  showColumnKeys.value = allColumns.value
+    .filter(col => col && typeof col.dataIndex === 'string' && col.dataIndex)
+    .map(col => col.dataIndex)
 }
 
 function onDragEnd(event: any) {
@@ -398,34 +546,64 @@ watch(() => pagination.value.pageSize, () => {
 
 function handleBatchDelete() {
   if (selectedRowKeys.value.length === 0) {
-    alert('请先选择要删除的用户')
+    message.warning('请先选择要删除的用户')
     return
   }
   
   if (confirm(`确定要删除选中的 ${selectedRowKeys.value.length} 个用户吗？`)) {
     console.log('批量删除用户:', selectedRowKeys.value)
-    alert('批量删除功能待实现')
+    
+    batchDeleteUsers(selectedRowKeys.value)
+      .then(() => {
+        message.success('批量删除成功')
+        selectedRowKeys.value = [] // 清空选择
+        loadData() // 重新加载数据
+      })
+      .catch((error: any) => {
+        console.error('批量删除失败:', error)
+        message.error('批量删除失败: ' + (error.message || '未知错误'))
+      })
   }
 }
 
 function handleBatchEnable() {
   if (selectedRowKeys.value.length === 0) {
-    alert('请先选择要启用的用户')
+    message.warning('请先选择要启用的用户')
     return
   }
   
   console.log('批量启用用户:', selectedRowKeys.value)
-  alert('批量启用功能待实现')
+  
+  batchEnableUsers(selectedRowKeys.value)
+    .then(() => {
+      message.success('批量启用成功')
+      selectedRowKeys.value = [] // 清空选择
+      loadData() // 重新加载数据
+    })
+    .catch((error: any) => {
+      console.error('批量启用失败:', error)
+      message.error('批量启用失败: ' + (error.message || '未知错误'))
+    })
 }
 
 function handleBatchDisable() {
   if (selectedRowKeys.value.length === 0) {
-    alert('请先选择要禁用的用户')
+    message.warning('请先选择要禁用的用户')
     return
   }
   
   console.log('批量禁用用户:', selectedRowKeys.value)
-  alert('批量禁用功能待实现')
+  
+  batchDisableUsers(selectedRowKeys.value)
+    .then(() => {
+      message.success('批量禁用成功')
+      selectedRowKeys.value = [] // 清空选择
+      loadData() // 重新加载数据
+    })
+    .catch((error: any) => {
+      console.error('批量禁用失败:', error)
+      message.error('批量禁用失败: ' + (error.message || '未知错误'))
+    })
 }
 
 function clearSelection() {
@@ -442,15 +620,68 @@ function getRowClassName(record: any) {
 }
 
 function handlePageChange(page: number) {
-  pagination.value.current = page;
-  loadData();
+  console.log('页码变化:', page)
+  pagination.value.current = page || 1
+  loadData()
 }
 
 function handlePageSizeChange(current: number, size: number) {
-  pagination.value.pageSize = size;
-  pagination.value.current = 1;
-  loadData();
+  console.log('每页条数变化:', { current, size })
+  pagination.value.pageSize = size || 10
+  pagination.value.current = 1
+  loadData()
 }
+
+function handleDelete(record: any) {
+  if (confirm(`确定要删除用户 ${record.username} 吗？`)) {
+    console.log('删除用户:', record.id)
+    
+    deleteUser(record.id)
+      .then(() => {
+        message.success('用户删除成功')
+        loadData() // 重新加载数据
+      })
+      .catch((error: any) => {
+        console.error('删除用户失败:', error)
+        message.error('删除用户失败: ' + (error.message || '未知错误'))
+      })
+  }
+}
+
+function handleView(record: any) {
+  drawerMode.value = 'view'
+  currentUser.value = record
+  drawerVisible.value = true
+}
+
+const drawerVisible = ref(false)
+const drawerMode = ref<'create' | 'edit' | 'view'>('edit')
+const currentUser = ref<any | null>(null)
+
+function handleEdit(record: any) {
+  drawerMode.value = 'edit'
+  currentUser.value = record
+  drawerVisible.value = true
+}
+
+function handleDrawerClose() {
+  drawerVisible.value = false
+  currentUser.value = null
+}
+
+const showSortTooltip = ref(true)
+
+// 表格 locale 配置的计算属性
+const tableLocale = computed(() => {
+  if (showSortTooltip.value) {
+    return {
+      triggerDesc: '点击降序',
+      triggerAsc: '点击升序', 
+      cancelSort: '取消排序'
+    }
+  }
+  return undefined // 不显示任何排序提示
+})
 </script>
 
 <style scoped>
@@ -459,7 +690,7 @@ function handlePageSizeChange(current: number, size: number) {
   flex-direction: column;
   height: calc(100vh - 90px);
   background: #f0f2f5;
-  padding: 16px;
+  padding: 0;
 }
 
 .card {
@@ -562,6 +793,11 @@ function handlePageSizeChange(current: number, size: number) {
 .action-icon:hover {
   color: #1890ff;
   background: #f5f5f5;
+}
+
+.action-icon.active {
+  color: #1890ff;
+  background: #e6f7ff;
 }
 
 .draggable-columns {
@@ -678,5 +914,73 @@ function handlePageSizeChange(current: number, size: number) {
 }
 :deep(.ant-table-body::-webkit-scrollbar) {
   display: none;                   /* Chrome/Safari/Edge 隐藏滚动条 */
+}
+
+/* 操作按钮样式 */
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+}
+
+.action-btn {
+  padding: 2px 4px;
+  height: auto;
+  line-height: 1.2;
+  font-size: 12px;
+}
+
+.action-btn:hover {
+  background-color: #f5f5f5;
+  border-radius: 4px;
+}
+
+/* 模态框样式优化 */
+:deep(.ant-modal-header) {
+  border-bottom: 1px solid #f0f0f0;
+  padding: 16px 24px;
+}
+
+:deep(.ant-modal-body) {
+  padding: 24px;
+}
+
+:deep(.ant-modal-footer) {
+  border-top: 1px solid #f0f0f0;
+  padding: 16px 24px;
+}
+
+/* 表单样式优化 */
+:deep(.ant-form-item-label > label) {
+  font-weight: 500;
+  color: #262626;
+}
+
+:deep(.ant-switch) {
+  min-width: 44px;
+}
+
+/* 描述列表样式 */
+:deep(.ant-descriptions-item-label) {
+  font-weight: 500;
+  color: #262626;
+  background-color: #fafafa;
+}
+
+:deep(.ant-descriptions-item-content) {
+  color: #595959;
+}
+
+/* 保证表头永远单行显示，不出现省略号，不换行 */
+:deep(.ant-table-thead > tr > th) {
+  white-space: nowrap; /* 不换行，单行显示 */
+  text-overflow: clip; /* 不显示省略号 */
+  overflow: visible;   /* 超出内容不隐藏 */
+}
+
+.toolbar-switch {
+  margin-left: 8px;
+  vertical-align: middle;
 }
 </style> 

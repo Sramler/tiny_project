@@ -535,23 +535,24 @@ const tableBodyHeight = ref(400)
 
 function updateTableBodyHeight() {
   nextTick(() => {
-    if (tableScrollContainerRef.value) {
-      const tableHeader = tableScrollContainerRef.value.querySelector('.ant-table-header') as HTMLElement;
-      // 动态获取表头高度，如果获取不到则使用一个合理的默认值
-      const headerHeight = tableHeader ? tableHeader.clientHeight : 55; 
-      const containerHeight = tableScrollContainerRef.value.clientHeight;
-      // 表格内容区的可用高度 = 容器高度 - 表头高度
-      const newHeight = containerHeight - headerHeight;
-      // 保证一个最小高度，防止表格被过度压缩
-      tableBodyHeight.value = Math.max(newHeight, 200);
+    if (tableContentRef.value && paginationRef.value) {
+      const tableHeader = tableContentRef.value.querySelector('.ant-table-header') as HTMLElement;
+      
+      const containerHeight = tableContentRef.value.clientHeight;
+      const paginationHeight = paginationRef.value.clientHeight;
+      const tableHeaderHeight = tableHeader ? tableHeader.clientHeight : 55;
+
+      const bodyHeight = containerHeight - paginationHeight - tableHeaderHeight;
+      
+      tableBodyHeight.value = Math.max(bodyHeight, 200);
     }
   });
 }
 
 onMounted(() => {
+  loadData()
   updateTableBodyHeight()
   window.addEventListener('resize', updateTableBodyHeight)
-  loadData()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('resize', updateTableBodyHeight)
@@ -717,7 +718,7 @@ const tableLocale = computed(() => {
 .page-container {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 90px);
+  height: 100%;
   background: #f0f2f5;
   padding: 0;
 }
@@ -753,7 +754,7 @@ const tableLocale = computed(() => {
 }
 
 .table-content {
-  flex: 1 1 0%;
+  flex: 1;
   min-height: 0;
   background: transparent;
   border-radius: 0;
@@ -766,18 +767,20 @@ const tableLocale = computed(() => {
 .table-scroll-container {
   flex: 1;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
 }
 
-:deep(.ant-table-wrapper) {
-  flex: 1;
-  min-height: 0;
+:deep(.ant-table-wrapper),
+:deep(.ant-table-container),
+:deep(.ant-table),
+:deep(.ant-table-body) {
+  flex: none;
+  display: block;
+  min-height: auto;
 }
 
 .table-pagination {
   background: #fff;
-  padding: 0;
+  padding-bottom: 8px;
   text-align: right;
   flex-shrink: 0;
 }
@@ -947,15 +950,6 @@ const tableLocale = computed(() => {
 :deep(.ant-table-tbody > tr:nth-child(even)) {
   /* 偶数行背景色，白色 */
   background-color: #fff;
-}
-
-/* 隐藏表格内容区的滚动条，但保留滚动功能 */
-:deep(.ant-table-body) {
-  scrollbar-width: none;           /* Firefox 隐藏滚动条 */
-  -ms-overflow-style: none;        /* IE 10+ 隐藏滚动条 */
-}
-:deep(.ant-table-body::-webkit-scrollbar) {
-  display: none;                   /* Chrome/Safari/Edge 隐藏滚动条 */
 }
 
 /* 操作按钮样式 */

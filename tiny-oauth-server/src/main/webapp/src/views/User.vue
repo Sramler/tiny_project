@@ -63,7 +63,7 @@
             </a-button>
           </div>
           
-          <a-button type="primary" @click="throttledCreate" class="toolbar-btn">
+          <a-button type="link" @click="throttledCreate" class="toolbar-btn">
             <template #icon>
               <PlusOutlined />
             </template>
@@ -130,80 +130,82 @@
         </div>
       </div>
       <div class="table-content" ref="tableContentRef">
-        <a-table
-          :columns="columns"
-          :data-source="tableData"
-          :pagination="false"
-          :row-key="(record: any) => record?.id || `row_${Math.random()}`"
-          bordered
-          :loading="loading"
-          @change="handleTableChange"
-          :row-selection="rowSelection"
-          :custom-row="onCustomRow"
-          :row-class-name="getRowClassName"
-          :scroll="{ x: 1500, y: tableBodyHeight }"
-          :locale="tableLocale"
-          :show-sorter-tooltip="showSortTooltip"
-        >
-          <template #bodyCell="{ column, record }">
-            <template v-if="['enabled','account_non_expired','account_non_locked','credentials_non_expired'].includes(column.dataIndex)">
-              <a-tag :color="record[column.dataIndex] ? 'green' : 'red'">
-                {{ record[column.dataIndex] ? '是' : '否' }}
-              </a-tag>
+        <div class="table-scroll-container" ref="tableScrollContainerRef">
+          <a-table
+            :columns="columns"
+            :data-source="tableData"
+            :pagination="false"
+            :row-key="(record: any) => record?.id || `row_${Math.random()}`"
+            bordered
+            :loading="loading"
+            @change="handleTableChange"
+            :row-selection="rowSelection"
+            :custom-row="onCustomRow"
+            :row-class-name="getRowClassName"
+            :scroll="{ x: 1500, y: tableBodyHeight }"
+            :locale="tableLocale"
+            :show-sorter-tooltip="showSortTooltip"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="['enabled','account_non_expired','account_non_locked','credentials_non_expired'].includes(column.dataIndex)">
+                <a-tag :color="record[column.dataIndex] ? 'green' : 'red'">
+                  {{ record[column.dataIndex] ? '是' : '否' }}
+                </a-tag>
+              </template>
+              <template v-else-if="column.dataIndex === 'action'">
+                <div class="action-buttons">
+                  <a-button 
+                    type="link" 
+                    size="small" 
+                    @click.stop="throttledEdit(record)"
+                    class="action-btn"
+                  >
+                    <template #icon>
+                      <EditOutlined />
+                    </template>
+                    编辑
+                  </a-button>
+                  <a-button 
+                    type="link" 
+                    size="small" 
+                    danger 
+                    @click.stop="throttledDelete(record)"
+                    class="action-btn"
+                  >
+                    <template #icon>
+                      <DeleteOutlined />
+                    </template>
+                    删除
+                  </a-button>
+                  <a-button 
+                    type="link" 
+                    size="small" 
+                    @click.stop="throttledView(record)"
+                    class="action-btn"
+                  >
+                    <template #icon>
+                      <EyeOutlined />
+                    </template>
+                    查看
+                  </a-button>
+                </div>
+              </template>
             </template>
-            <template v-else-if="column.dataIndex === 'action'">
-              <div class="action-buttons">
-                <a-button 
-                  type="link" 
-                  size="small" 
-                  @click="throttledEdit(record)"
-                  class="action-btn"
-                >
-                  <template #icon>
-                    <EditOutlined />
-                  </template>
-                  编辑
-                </a-button>
-                <a-button 
-                  type="link" 
-                  size="small" 
-                  danger 
-                  @click="throttledDelete(record)"
-                  class="action-btn"
-                >
-                  <template #icon>
-                    <DeleteOutlined />
-                  </template>
-                  删除
-                </a-button>
-                <a-button 
-                  type="link" 
-                  size="small" 
-                  @click="handleView(record)"
-                  class="action-btn"
-                >
-                  <template #icon>
-                    <EyeOutlined />
-                  </template>
-                  查看
-                </a-button>
-              </div>
-            </template>
-          </template>
-        </a-table>
-      </div>
-      <div class="table-pagination" ref="paginationRef">
-        <a-pagination
-          v-model:current="pagination.current"
-          :page-size="pagination.pageSize"
-          :total="pagination.total"
-          :show-size-changer="pagination.showSizeChanger"
-          :page-size-options="paginationConfig.pageSizeOptions"
-          :show-total="pagination.showTotal"
-          @change="handlePageChange"
-          @showSizeChange="handlePageSizeChange"
-          :locale="{ items_per_page: '条/页' }"
-        />
+          </a-table>
+        </div>
+        <div class="table-pagination" ref="paginationRef">
+          <a-pagination
+            v-model:current="pagination.current"
+            :page-size="pagination.pageSize"
+            :total="pagination.total"
+            :show-size-changer="pagination.showSizeChanger"
+            :page-size-options="paginationConfig.pageSizeOptions"
+            :show-total="pagination.showTotal"
+            @change="handlePageChange"
+            @showSizeChange="handlePageSizeChange"
+            :locale="{ items_per_page: '条/页' }"
+          />
+        </div>
       </div>
     </div>
 
@@ -527,17 +529,23 @@ function onCustomRow(record: any) {
 }
 
 const tableContentRef = ref<HTMLElement | null>(null)
+const tableScrollContainerRef = ref<HTMLElement | null>(null)
 const paginationRef = ref<HTMLElement | null>(null)
 const tableBodyHeight = ref(400)
 
 function updateTableBodyHeight() {
   nextTick(() => {
-    if (tableContentRef.value && paginationRef.value) {
-      const paginationHeight = paginationRef.value.clientHeight
-      tableBodyHeight.value = tableContentRef.value.clientHeight - paginationHeight
-      if (tableBodyHeight.value < 200) tableBodyHeight.value = 200
+    if (tableScrollContainerRef.value) {
+      const tableHeader = tableScrollContainerRef.value.querySelector('.ant-table-header') as HTMLElement;
+      // 动态获取表头高度，如果获取不到则使用一个合理的默认值
+      const headerHeight = tableHeader ? tableHeader.clientHeight : 55; 
+      const containerHeight = tableScrollContainerRef.value.clientHeight;
+      // 表格内容区的可用高度 = 容器高度 - 表头高度
+      const newHeight = containerHeight - headerHeight;
+      // 保证一个最小高度，防止表格被过度压缩
+      tableBodyHeight.value = Math.max(newHeight, 200);
     }
-  })
+  });
 }
 
 onMounted(() => {
@@ -671,6 +679,8 @@ function handleView(record: any) {
   drawerVisible.value = true
 }
 
+const throttledView = useThrottleFn(handleView, 500)
+
 const drawerVisible = ref(false)
 const drawerMode = ref<'create' | 'edit' | 'view'>('edit')
 const currentUser = ref<any | null>(null)
@@ -750,13 +760,26 @@ const tableLocale = computed(() => {
   box-shadow: none;
   display: flex;
   flex-direction: column;
-  padding-bottom: 16px;
+  padding-bottom: 0;
+}
+
+.table-scroll-container {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.ant-table-wrapper) {
+  flex: 1;
+  min-height: 0;
 }
 
 .table-pagination {
   background: #fff;
-  padding: 0 0 8px 0;
+  padding: 0;
   text-align: right;
+  flex-shrink: 0;
 }
 
 .ml-2 { margin-left: 8px; }
@@ -912,7 +935,7 @@ const tableLocale = computed(() => {
 
 :deep(.ant-pagination) {
   margin-top: 0 !important;
-  padding-top: 8px;
+  padding-top: 0;
   background: transparent;
 }
 

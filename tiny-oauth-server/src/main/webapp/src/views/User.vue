@@ -10,8 +10,8 @@
             <a-input v-model:value="query.nickname" placeholder="请输入昵称" />
           </a-form-item>
           <a-form-item>
-            <a-button type="primary" @click="handleSearch">搜索</a-button>
-            <a-button class="ml-2" @click="handleReset">重置</a-button>
+            <a-button type="primary" @click="throttledSearch">搜索</a-button>
+            <a-button class="ml-2" @click="throttledReset">重置</a-button>
           </a-form-item>
         </a-form>
       </div>
@@ -25,7 +25,7 @@
             <a-button 
               type="primary" 
               danger 
-              @click="handleBatchDelete" 
+              @click="throttledBatchDelete" 
               class="toolbar-btn"
             >
               <template #icon>
@@ -35,7 +35,7 @@
             </a-button>
             <a-button 
               type="primary" 
-              @click="handleBatchEnable" 
+              @click="throttledBatchEnable" 
               class="toolbar-btn"
             >
               <template #icon>
@@ -44,7 +44,7 @@
               批量启用
             </a-button>
             <a-button 
-              @click="handleBatchDisable" 
+              @click="throttledBatchDisable" 
               class="toolbar-btn"
             >
               <template #icon>
@@ -63,14 +63,14 @@
             </a-button>
           </div>
           
-          <a-button type="primary" @click="handleCreate" class="toolbar-btn">
+          <a-button type="primary" @click="throttledCreate" class="toolbar-btn">
             <template #icon>
               <PlusOutlined />
             </template>
             新建
           </a-button>
           <a-tooltip title="刷新">
-            <ReloadOutlined class="action-icon" @click="handleRefresh" />
+            <ReloadOutlined class="action-icon" @click="throttledRefresh" />
           </a-tooltip>
           <a-tooltip :title="showSortTooltip ? '关闭排序提示' : '开启排序提示'">
             <PoweroffOutlined
@@ -156,7 +156,7 @@
                 <a-button 
                   type="link" 
                   size="small" 
-                  @click="handleEdit(record)"
+                  @click="throttledEdit(record)"
                   class="action-btn"
                 >
                   <template #icon>
@@ -168,7 +168,7 @@
                   type="link" 
                   size="small" 
                   danger 
-                  @click="handleDelete(record)"
+                  @click="throttledDelete(record)"
                   class="action-btn"
                 >
                   <template #icon>
@@ -235,6 +235,7 @@ import UserEditModal from '@/views/Login/UserEditModal.vue'
 import UserViewModal from '@/components/UserViewModal.vue'
 import { message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
+import { useThrottleFn } from '@/utils/throttle'
 
 const query = ref({
   username: '',
@@ -402,12 +403,16 @@ function handleSearch() {
   loadData()
 }
 
+const throttledSearch = useThrottleFn(handleSearch, 1000)
+
 function handleReset() {
   query.value.username = ''
   query.value.nickname = ''
   pagination.value.current = 1
   loadData()
 }
+
+const throttledReset = useThrottleFn(handleReset, 1000)
 
 function handleTableChange(pag: any, filters: any, sorter: any) {
   console.log('表格变化事件:', { pag, filters, sorter })
@@ -442,6 +447,8 @@ function handleCreate() {
   drawerVisible.value = true
 }
 
+const throttledCreate = useThrottleFn(handleCreate, 500)
+
 function handleRefresh() {
   console.log('刷新按钮被点击')
   query.value.username = ''
@@ -454,6 +461,8 @@ function handleRefresh() {
     console.log('刷新完成')
   })
 }
+
+const throttledRefresh = useThrottleFn(handleRefresh, 1000)
 
 function onCheckAllChange(e: any) {
   console.log('全选复选框变化:', e.target.checked)
@@ -566,6 +575,8 @@ function handleBatchDelete() {
   }
 }
 
+const throttledBatchDelete = useThrottleFn(handleBatchDelete, 1000)
+
 function handleBatchEnable() {
   if (selectedRowKeys.value.length === 0) {
     message.warning('请先选择要启用的用户')
@@ -586,6 +597,8 @@ function handleBatchEnable() {
     })
 }
 
+const throttledBatchEnable = useThrottleFn(handleBatchEnable, 1000)
+
 function handleBatchDisable() {
   if (selectedRowKeys.value.length === 0) {
     message.warning('请先选择要禁用的用户')
@@ -605,6 +618,8 @@ function handleBatchDisable() {
       message.error('批量禁用失败: ' + (error.message || '未知错误'))
     })
 }
+
+const throttledBatchDisable = useThrottleFn(handleBatchDisable, 1000)
 
 function clearSelection() {
   selectedRowKeys.value = []
@@ -648,6 +663,8 @@ function handleDelete(record: any) {
   }
 }
 
+const throttledDelete = useThrottleFn(handleDelete, 500)
+
 function handleView(record: any) {
   drawerMode.value = 'view'
   currentUser.value = record
@@ -663,6 +680,8 @@ function handleEdit(record: any) {
   currentUser.value = record
   drawerVisible.value = true
 }
+
+const throttledEdit = useThrottleFn(handleEdit, 500)
 
 function handleDrawerClose() {
   drawerVisible.value = false

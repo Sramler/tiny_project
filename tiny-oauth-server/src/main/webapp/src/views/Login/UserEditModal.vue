@@ -6,7 +6,7 @@
         :rules="rules"
         :label-col="{ span: 6 }"
         :wrapper-col="{ span: 16 }"
-        @finish="onSubmit"
+        @finish="throttledSubmit"
       >
         <a-form-item label="ID" v-if="form.id">
           <a-input v-model:value="form.id" disabled />
@@ -37,7 +37,7 @@
         </a-form-item>
         <a-form-item :wrapper-col="{ offset: 6, span: 16 }">
           <a-button v-if="props.mode !== 'view'" type="primary" html-type="submit">保存</a-button>
-          <a-button style="margin-left: 8px" @click="onCancel">返回</a-button>
+          <a-button style="margin-left: 8px" @click="throttledCancel">返回</a-button>
         </a-form-item>
       </a-form>
     </a-card>
@@ -47,6 +47,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import type { Rule } from 'ant-design-vue/es/form'
+import { useThrottleFn } from '@/utils/throttle'
 
 const form = ref({
   id: '',
@@ -118,6 +119,9 @@ function onSubmit() {
 function onCancel() {
   emit('cancel')
 }
+
+const throttledSubmit = useThrottleFn(onSubmit, 1000)
+const throttledCancel = useThrottleFn(onCancel, 500)
 </script>
 
 <style scoped>

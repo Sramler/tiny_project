@@ -25,7 +25,7 @@ function generateMenuRoutes(menuList: any[]): any[] {
         // 只需要 ../views/xxx.vue
         const compPath = `../views${item.component.replace('/views', '')}`
         console.log('注册路由:', item.path, '组件路径:', compPath) // 调试输出
-        component = defineAsyncComponent(() => import(/* @vite-ignore */ compPath))
+        component = () => import(/* @vite-ignore */ compPath)
       } else {
         // 没有 component 字段时 fallback 到 DefaultView
         component = DefaultView

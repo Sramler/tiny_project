@@ -10,9 +10,13 @@ declare module 'vue' {
   export interface GlobalComponents {
     ABadge: typeof import('ant-design-vue/es')['Badge']
     AButton: typeof import('ant-design-vue/es')['Button']
+    ACard: typeof import('ant-design-vue/es')['Card']
     ACheckbox: typeof import('ant-design-vue/es')['Checkbox']
     ACheckboxGroup: typeof import('ant-design-vue/es')['CheckboxGroup']
+    ADescriptions: typeof import('ant-design-vue/es')['Descriptions']
+    ADescriptionsItem: typeof import('ant-design-vue/es')['DescriptionsItem']
     ADivider: typeof import('ant-design-vue/es')['Divider']
+    ADrawer: typeof import('ant-design-vue/es')['Drawer']
     ADropdown: typeof import('ant-design-vue/es')['Dropdown']
     AForm: typeof import('ant-design-vue/es')['Form']
     AFormItem: typeof import('ant-design-vue/es')['FormItem']
@@ -39,6 +43,8 @@ declare module 'vue' {
     Sider: typeof import('./src/components/Sider.vue')['default']
     TagTabs: typeof import('./src/components/TagTabs.vue')['default']
     TheWelcome: typeof import('./src/components/TheWelcome.vue')['default']
+    UserEditModal: typeof import('./src/components/UserEditModal.vue')['default']
+    UserViewModal: typeof import('./src/components/UserViewModal.vue')['default']
     WelcomeItem: typeof import('./src/components/WelcomeItem.vue')['default']
   }
 }

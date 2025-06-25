@@ -33,6 +33,8 @@ public class DefaultSecurityConfig {
             throws Exception {
         http
                 .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers("/sys/users/test/**").permitAll() // 允许测试接口不需要认证
+                        .requestMatchers("/sys/users/batch/**").permitAll() // 临时允许批量操作接口不需要认证，用于测试
                         .anyRequest().authenticated()
                 )
                 .formLogin(Customizer.withDefaults())

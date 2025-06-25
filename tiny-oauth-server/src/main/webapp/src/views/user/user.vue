@@ -1,7 +1,7 @@
 <template>
-  <div class="page-container" style="position: relative;">
-    <div class="card">
-      <div class="form-card">
+  <div class="content-container" style="position: relative;">
+    <div class="content-card">
+      <div class="form-container">
         <a-form layout="inline" :model="query">
           <a-form-item label="用户名">
             <a-input v-model:value="query.username" placeholder="请输入用户名" />
@@ -16,7 +16,7 @@
         </a-form>
       </div>
       
-      <div class="table-toolbar">
+      <div class="toolbar-container">
         <div class="table-title">
           用户列表
         </div>
@@ -33,20 +33,33 @@
               </template>
               批量删除 ({{ selectedRowKeys.length }})
             </a-button>
-            <a-button 
-              type="primary" 
-              @click="throttledBatchEnable" 
-              class="toolbar-btn"
-            >
+            <a-tooltip v-if="!allDisabled" title="只有全部未启用用户时才可批量启用">
+              <span>
+                <a-button type="primary" class="toolbar-btn" :disabled="!allDisabled">
+                  <template #icon>
+                    <CheckCircleOutlined />
+                  </template>
+                  批量启用
+                </a-button>
+              </span>
+            </a-tooltip>
+            <a-button v-else type="primary" class="toolbar-btn" @click="throttledBatchEnable">
               <template #icon>
                 <CheckCircleOutlined />
               </template>
               批量启用
             </a-button>
-            <a-button 
-              @click="throttledBatchDisable" 
-              class="toolbar-btn"
-            >
+            <a-tooltip v-if="!allEnabled" title="只有全部已启用用户时才可批量禁用">
+              <span>
+                <a-button class="toolbar-btn" :disabled="!allEnabled">
+                  <template #icon>
+                    <StopOutlined />
+                  </template>
+                  批量禁用
+                </a-button>
+              </span>
+            </a-tooltip>
+            <a-button v-else class="toolbar-btn" @click="throttledBatchDisable">
               <template #icon>
                 <StopOutlined />
               </template>
@@ -129,13 +142,13 @@
           </a-popover>
         </div>
       </div>
-      <div class="table-content" ref="tableContentRef">
+      <div class="table-container" ref="tableContentRef">
         <div class="table-scroll-container" ref="tableScrollContainerRef">
           <a-table
             :columns="columns"
             :data-source="tableData"
             :pagination="false"
-            :row-key="(record: any) => record?.id || `row_${Math.random()}`"
+            :row-key="(record: any) => String(record.id)"
             bordered
             :loading="loading"
             @change="handleTableChange"
@@ -147,7 +160,7 @@
             :show-sorter-tooltip="showSortTooltip"
           >
             <template #bodyCell="{ column, record }">
-              <template v-if="['enabled','account_non_expired','account_non_locked','credentials_non_expired'].includes(column.dataIndex)">
+              <template v-if="['enabled','accountNonExpired','accountNonLocked','credentialsNonExpired'].includes(column.dataIndex)">
                 <a-tag :color="record[column.dataIndex] ? 'green' : 'red'">
                   {{ record[column.dataIndex] ? '是' : '否' }}
                 </a-tag>
@@ -193,7 +206,7 @@
             </template>
           </a-table>
         </div>
-        <div class="table-pagination" ref="paginationRef">
+        <div class="pagination-container" ref="paginationRef">
           <a-pagination
             v-model:current="pagination.current"
             :page-size="pagination.pageSize"
@@ -217,11 +230,11 @@
       :style="{ position: 'absolute' }"
       @close="handleDrawerClose"
     >
-      <UserEditModal
+      <UserForm
         v-if="drawerVisible"
         :mode="drawerMode"
         :user-data="currentUser"
-        @submit="handleDrawerClose"
+        @submit="handleFormSubmit"
         @cancel="handleDrawerClose"
       />
     </a-drawer>
@@ -230,12 +243,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, h, onBeforeUnmount, nextTick } from 'vue'
-import { userList, updateUser, deleteUser, batchDeleteUsers, batchEnableUsers, batchDisableUsers } from '@/api/user'
+import { userList, createUser, updateUser, deleteUser, batchDeleteUsers, batchEnableUsers, batchDisableUsers } from '@/api/user'
 import { PlusOutlined, ReloadOutlined, SettingOutlined, HolderOutlined, DeleteOutlined, CheckCircleOutlined, StopOutlined, CloseOutlined, EditOutlined, EyeOutlined, InfoCircleOutlined, QuestionCircleOutlined, PoweroffOutlined } from '@ant-design/icons-vue'
 import VueDraggable from 'vuedraggable'
-import UserEditModal from '@/views/Login/UserEditModal.vue'
-import UserViewModal from '@/components/UserViewModal.vue'
-import { message } from 'ant-design-vue'
+import UserForm from '@/views/user/UserForm.vue'
+import { message, Modal } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import { useThrottleFn } from '@/utils/throttle'
 
@@ -278,14 +290,32 @@ const allColumns = ref([
   { title: '密码', dataIndex: 'password' },
   { title: '昵称', dataIndex: 'nickname', sorter: true },
   { title: '是否启用', dataIndex: 'enabled', sorter: true },
-  { title: '账号未过期', dataIndex: 'account_non_expired', sorter: true },
-  { title: '账号未锁定', dataIndex: 'account_non_locked', sorter: true },
-  { title: '密码未过期', dataIndex: 'credentials_non_expired', sorter: true },
+  { title: '账号未过期', dataIndex: 'accountNonExpired', sorter: true },
+  { title: '账号未锁定', dataIndex: 'accountNonLocked', sorter: true },
+  { title: '密码未过期', dataIndex: 'credentialsNonExpired', sorter: true },
   {
     title: '最后登录时间',
-    dataIndex: 'last_login_at',
+    dataIndex: 'lastLoginAt',
     width: 180,
-    sorter: true
+    sorter: true,
+    customRender: ({ text }: { text: any }) => {
+      if (!text) return '-'
+      try {
+        const date = new Date(text)
+        if (isNaN(date.getTime())) return '-'
+        return date.toLocaleString('zh-CN', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        })
+      } catch (error) {
+        return '-'
+      }
+    }
   },
   {
     title: '操作',
@@ -442,9 +472,9 @@ function handleCreate() {
     username: '',
     nickname: '',
     enabled: true,
-    account_non_expired: true,
-    account_non_locked: true,
-    credentials_non_expired: true
+    accountNonExpired: true,
+    accountNonLocked: true,
+    credentialsNonExpired: true
   }
   drawerVisible.value = true
 }
@@ -512,18 +542,14 @@ function onCustomRow(record: any) {
     onClick: (event: MouseEvent) => {
       if ((event.target as HTMLElement).closest('.ant-checkbox-wrapper')) return;
       
-      const recordId = record.id
+      const recordId = String(record.id)
       const isSelected = selectedRowKeys.value.includes(recordId)
 
       if (isSelected && selectedRowKeys.value.length === 1) {
         selectedRowKeys.value = []
-        console.log('行点击: 取消唯一选中行', recordId)
       } else {
         selectedRowKeys.value = [recordId]
-        console.log('行点击: 仅选中当前行', recordId)
       }
-      
-      console.log('点击行后，当前复选框选中:', selectedRowKeys.value)
     }
   }
 }
@@ -533,17 +559,32 @@ const tableScrollContainerRef = ref<HTMLElement | null>(null)
 const paginationRef = ref<HTMLElement | null>(null)
 const tableBodyHeight = ref(400)
 
+/**
+ * 动态计算表格内容区（body）的高度，确保分页和表头不会被遮挡，且表格内容区能自适应剩余空间。
+ * 计算方式：
+ * 1. 获取表格内容区的总高度（containerHeight）
+ * 2. 获取分页组件的高度（paginationHeight）
+ * 3. 获取表头的高度（tableHeaderHeight，若获取不到则用默认值55px）
+ * 4. 用总高度减去分页和表头高度，得到表格body的可用高度
+ * 5. 设置最小高度为200，防止表格过度压缩
+ *
+ * 该方法会在页面挂载、窗口尺寸变化、每页条数变化时自动调用。
+ */
 function updateTableBodyHeight() {
   nextTick(() => {
+    // 确保DOM已渲染
     if (tableContentRef.value && paginationRef.value) {
+      // 获取表头DOM元素
       const tableHeader = tableContentRef.value.querySelector('.ant-table-header') as HTMLElement;
-      
+      // 获取表格内容区总高度
       const containerHeight = tableContentRef.value.clientHeight;
+      // 获取分页组件高度
       const paginationHeight = paginationRef.value.clientHeight;
+      // 获取表头高度，若获取不到则用默认值
       const tableHeaderHeight = tableHeader ? tableHeader.clientHeight : 55;
-
+      // 计算表格body的可用高度
       const bodyHeight = containerHeight - paginationHeight - tableHeaderHeight;
-      
+      // 设置最小高度，防止表格内容区过小
       tableBodyHeight.value = Math.max(bodyHeight, 200);
     }
   });
@@ -567,21 +608,24 @@ function handleBatchDelete() {
     message.warning('请先选择要删除的用户')
     return
   }
-  
-  if (confirm(`确定要删除选中的 ${selectedRowKeys.value.length} 个用户吗？`)) {
-    console.log('批量删除用户:', selectedRowKeys.value)
-    
-    batchDeleteUsers(selectedRowKeys.value)
-      .then(() => {
-        message.success('批量删除成功')
-        selectedRowKeys.value = [] // 清空选择
-        loadData() // 重新加载数据
-      })
-      .catch((error: any) => {
-        console.error('批量删除失败:', error)
-        message.error('批量删除失败: ' + (error.message || '未知错误'))
-      })
-  }
+  Modal.confirm({
+    title: '确认批量删除',
+    content: `确定要删除选中的 ${selectedRowKeys.value.length} 个用户吗？`,
+    okText: '确认',
+    cancelText: '取消',
+    onOk: () => {
+      return batchDeleteUsers(selectedRowKeys.value)
+        .then(() => {
+          message.success('批量删除成功')
+          selectedRowKeys.value = []
+          loadData()
+        })
+        .catch((error: any) => {
+          message.error('批量删除失败: ' + (error.message || '未知错误'))
+          return Promise.reject(error)
+        })
+    }
+  })
 }
 
 const throttledBatchDelete = useThrottleFn(handleBatchDelete, 1000)
@@ -657,19 +701,23 @@ function handlePageSizeChange(current: number, size: number) {
 }
 
 function handleDelete(record: any) {
-  if (confirm(`确定要删除用户 ${record.username} 吗？`)) {
-    console.log('删除用户:', record.id)
-    
-    deleteUser(record.id)
-      .then(() => {
-        message.success('用户删除成功')
-        loadData() // 重新加载数据
-      })
-      .catch((error: any) => {
-        console.error('删除用户失败:', error)
-        message.error('删除用户失败: ' + (error.message || '未知错误'))
-      })
-  }
+  Modal.confirm({
+    title: '确认删除',
+    content: `确定要删除用户 ${record.username} 吗？`,
+    okText: '确认',
+    cancelText: '取消',
+    onOk: () => {
+      return deleteUser(record.id)
+        .then(() => {
+          message.success('用户删除成功')
+          loadData()
+        })
+        .catch((error: any) => {
+          message.error('删除用户失败: ' + (error.message || '未知错误'))
+          return Promise.reject(error)
+        })
+    }
+  })
 }
 
 const throttledDelete = useThrottleFn(handleDelete, 500)
@@ -694,6 +742,27 @@ function handleEdit(record: any) {
 
 const throttledEdit = useThrottleFn(handleEdit, 500)
 
+// 处理表单提交（创建或更新用户）
+async function handleFormSubmit(formData: any) {
+  try {
+    if (drawerMode.value === 'create') {
+      // 创建用户
+      await createUser(formData)
+      message.success('用户创建成功')
+    } else if (drawerMode.value === 'edit') {
+      // 更新用户
+      await updateUser(formData.id, formData)
+      message.success('用户更新成功')
+    }
+    // 关闭抽屉并刷新数据
+    handleDrawerClose()
+    loadData()
+  } catch (error: any) {
+    console.error('保存用户失败:', error)
+    message.error('保存失败: ' + (error.message || '未知错误'))
+  }
+}
+
 function handleDrawerClose() {
   drawerVisible.value = false
   currentUser.value = null
@@ -712,10 +781,22 @@ const tableLocale = computed(() => {
   }
   return undefined // 不显示任何排序提示
 })
+
+const selectedRows = computed(() => {
+  return tableData.value.filter(row => selectedRowKeys.value.includes(String(row.id)))
+})
+
+const allDisabled = computed(() => {
+  return selectedRows.value.length > 0 && selectedRows.value.every(row => row.enabled === false)
+})
+
+const allEnabled = computed(() => {
+  return selectedRows.value.length > 0 && selectedRows.value.every(row => row.enabled === true)
+})
 </script>
 
 <style scoped>
-.page-container {
+.content-container {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -723,7 +804,7 @@ const tableLocale = computed(() => {
   padding: 0;
 }
 
-.card {
+.content-card {
   background: #fff;
   border-radius: 10px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
@@ -733,7 +814,7 @@ const tableLocale = computed(() => {
   height: 100%;
 }
 
-.form-card {
+.form-container {
   padding: 24px 0 24px 0;
   border-bottom: 1px solid #f0f0f0;
   background: transparent;
@@ -742,7 +823,7 @@ const tableLocale = computed(() => {
   margin-bottom: 0;
 }
 
-.table-toolbar {
+.toolbar-container {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -753,7 +834,7 @@ const tableLocale = computed(() => {
   box-shadow: none;
 }
 
-.table-content {
+.table-container {
   flex: 1;
   min-height: 0;
   background: transparent;
@@ -778,11 +859,12 @@ const tableLocale = computed(() => {
   min-height: auto;
 }
 
-.table-pagination {
+.pagination-container {
+  display: flex;
+  justify-content: flex-end;
   background: #fff;
-  padding-bottom: 8px;
-  text-align: right;
   flex-shrink: 0;
+  padding: 0;
 }
 
 .ml-2 { margin-left: 8px; }
@@ -940,6 +1022,10 @@ const tableLocale = computed(() => {
   margin-top: 0 !important;
   padding-top: 0;
   background: transparent;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 :deep(.ant-table-tbody > tr:nth-child(odd)) {
@@ -950,6 +1036,15 @@ const tableLocale = computed(() => {
 :deep(.ant-table-tbody > tr:nth-child(even)) {
   /* 偶数行背景色，白色 */
   background-color: #fff;
+}
+
+/* 隐藏表格内容区的滚动条，但保留滚动功能 */
+:deep(.ant-table-body) {
+  scrollbar-width: none;           /* Firefox */
+  -ms-overflow-style: none;        /* IE 10+ */
+}
+:deep(.ant-table-body::-webkit-scrollbar) {
+  display: none;                   /* Chrome/Safari/Edge */
 }
 
 /* 操作按钮样式 */
@@ -1018,5 +1113,10 @@ const tableLocale = computed(() => {
 .toolbar-switch {
   margin-left: 8px;
   vertical-align: middle;
+}
+
+:deep(.ant-pagination-item-container) {
+  /* 增加一点右边距，防止和"下一页"按钮重叠 */
+  margin-right: 8px; 
 }
 </style> 

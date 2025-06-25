@@ -43,7 +43,8 @@ import { UserOutlined, SettingOutlined, LogoutOutlined, DownOutlined } from '@an
 
 <style scoped>
 .header-bar {
-  height: 50px; /* 顶部栏高度 */
+  /* 使用 var() 函数从 theme.css 中读取并应用顶部栏高度变量 */
+  height: var(--header-height);
   background: #fff;
   display: flex;
   align-items: center;

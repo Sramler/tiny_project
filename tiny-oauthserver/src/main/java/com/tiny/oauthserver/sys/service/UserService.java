@@ -13,14 +13,11 @@ import java.util.Optional;
 public interface UserService {
     Page<UserResponseDto> users(UserRequestDto query, Pageable pageable);
     Optional<User> findById(Long id);
-    User create(User user);
-    User update(Long id, User user);
     User createFromDto(UserCreateUpdateDto userDto);
     User updateFromDto(UserCreateUpdateDto userDto);
     void delete(Long id);
-    
     // 批量操作方法
     void batchEnable(List<Long> ids);
     void batchDisable(List<Long> ids);
     void batchDelete(List<Long> ids);
-}
+} 

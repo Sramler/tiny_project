@@ -151,7 +151,8 @@ function getIconComponent(iconName: string) {
 
 <style scoped>
 .sider {
-  width: 200px;
+  /* 使用 var() 函数从 theme.css 中读取并应用侧边栏展开宽度变量 */
+  width: var(--sider-width-expanded);
   /* background: #001529; */
   color: #fff;
   height: 100vh;
@@ -160,7 +161,8 @@ function getIconComponent(iconName: string) {
   transition: width 0.2s;
 }
 .sider.collapsed {
-  width: 48px;
+  /* 使用 var() 函数从 theme.css 中读取并应用侧边栏折叠宽度变量 */
+  width: var(--sider-width-collapsed);
 }
 .logo {
   display: flex;

@@ -97,8 +97,8 @@ const route = useRoute()
 const tabScrollRef = ref<HTMLElement | null>(null)
 const moreBtnRef = ref<HTMLElement | null>(null)
 
-// 标签页列表，初始包含首页，类型明确
-const tabs = ref<{ title: string, path: string }[]>([
+// 标签页列表，明确类型以保证数据一致性
+const tabs = ref<{ title: string; path: string }[]>([
   { title: '工作台', path: '/' },
 ])
 // 当前激活标签页路径
@@ -153,8 +153,8 @@ function switchTab(path: string) {
 function closeTab(idx: number) {
   // 关闭后如果是当前页，自动切换到前一个标签
   if (tabs.value[idx].path === activePath.value) {
-    const next = tabs.value[idx - 1] || tabs.value[idx + 1] || { path: '/' }
-    router.push(next.path)
+    const nextTab = tabs.value[idx - 1] || tabs.value[idx + 1] || { title: '工作台', path: '/' }
+    router.push(nextTab.path)
   }
   tabs.value.splice(idx, 1)
 }
@@ -312,7 +312,8 @@ function closeOverflowMenu() {
   align-items: center;
   background: #fafbfc; /* 浅灰背景 */
   padding: 0 12px 0 0; /* 只保留右侧内边距，左侧为0，确保第一个tab紧贴左侧 */
-  height: 40px; /* 稍高，显得更精致 */
+  /* 使用 var() 函数从 theme.css 中读取并应用标签页导航栏高度变量 */
+  height: var(--tag-tabs-height);
   position: relative;  /* 保证子元素定位 */
   min-width: 0;
   overflow: hidden;
@@ -345,8 +346,8 @@ function closeOverflowMenu() {
   justify-content: space-between;
   padding: 0 18px;
   margin-right: 2px; /* 标签间隙 */
-  height: 40px; /* 标签高度与容器一致 */
-  line-height: 40px; /* 让内容垂直居中 */
+  height: var(--tag-tabs-height); /* 标签高度与容器一致 */
+  line-height: var(--tag-tabs-height); /* 让内容垂直居中 */
   background: #f7f8fa; /* 浅灰色背景 */
   color: #222;
   border: none;        /* 去掉所有边框 */

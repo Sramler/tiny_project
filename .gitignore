@@ -13,3 +13,6 @@
 *.iml
 *.iws
 out/
+**/.vscode/
+**/package-lock.json
+**/.DS_Store

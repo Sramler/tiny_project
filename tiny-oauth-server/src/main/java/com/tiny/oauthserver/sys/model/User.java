@@ -1,5 +1,6 @@
 package com.tiny.oauthserver.sys.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 
 import java.io.Serializable;
@@ -39,7 +40,10 @@ public class User implements Serializable {
     @JoinTable(name = "user_role",
         joinColumns = @JoinColumn(name = "user_id"),
         inverseJoinColumns = @JoinColumn(name = "role_id"))
+    @JsonIgnore
     private Set<Role> roles = new HashSet<>();
+    
+    @Column(name = "last_login_at")
     private LocalDateTime lastLoginAt;
 
     // === UserDetails 接口实现 ===

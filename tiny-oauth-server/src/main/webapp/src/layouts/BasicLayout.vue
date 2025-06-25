@@ -59,14 +59,15 @@ function toggleMoreMenu() {
 }
 .main {
   flex: 1;
+  min-width: 0;
+  /* 可选：transition 让内容区宽度变化更平滑 */
+  transition: width 0.2s;
   display: flex;
   flex-direction: column;
-  min-width: 0;
 }
 .content {
   flex: 1;
-  padding: 0;
-  padding: 0; /* 去除内边距 */
+  padding: var(--content-padding);
   overflow: auto;
   background: #f0f2f5;
 }
@@ -102,10 +103,6 @@ function toggleMoreMenu() {
   margin-bottom: 0 !important;
   padding-bottom: 0 !important;
 }
-.content {
-  margin-top: 0 !important;
-  padding-top: 0 !important;
-}
 .sider-header, .header-bar {
   height: 56px; /* 统一高度 */
   color: #fff;         /* 统一字体色 */
@@ -114,5 +111,12 @@ function toggleMoreMenu() {
   font-size: 20px;
   font-weight: bold;
   box-shadow: 0 2px 8px rgba(0,0,0,0.04); /* 如主HeaderBar有阴影 */
+}
+.sider {
+  width: var(--sider-width-expanded);
+  transition: width 0.2s;
+}
+.sider.collapsed {
+  width: var(--sider-width-collapsed);
 }
 </style> 

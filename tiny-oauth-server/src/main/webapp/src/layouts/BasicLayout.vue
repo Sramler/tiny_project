@@ -13,7 +13,7 @@
       </HeaderBar>
       <!-- 内容区，展示当前路由页面 -->
       <div class="content">
-        <router-view v-slot="{ Component }">
+        <router-view :key="$route.fullPath + ($route.query._refresh || '')" v-slot="{ Component }">
           <!-- 使用 keep-alive 缓存页面 -->
           <keep-alive>
             <component :is="Component" />
@@ -70,6 +70,7 @@ function toggleMoreMenu() {
   padding: var(--content-padding);
   overflow: auto;
   background: #f0f2f5;
+  box-sizing: border-box; /* 让padding包含在高度内 */
 }
 .more-menu-btn {
   position: relative;

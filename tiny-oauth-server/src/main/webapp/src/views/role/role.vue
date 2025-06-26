@@ -24,9 +24,16 @@
             </a-button>
             <a-button @click="clearSelection" class="toolbar-btn">取消选择</a-button>
           </div>
-          <a-button type="link" @click="throttledCreate" class="toolbar-btn">新建角色</a-button>
+          <a-button type="link" @click="throttledCreate" class="toolbar-btn">
+            <template #icon>
+              <PlusOutlined />
+            </template>
+            新建
+          </a-button>
           <a-tooltip title="刷新">
-            <ReloadOutlined class="action-icon" @click="throttledRefresh" />
+            <span class="action-icon" @click="throttledRefresh">
+              <ReloadOutlined :spin="refreshing" />
+            </span>
           </a-tooltip>
           <a-popover placement="bottomRight" trigger="click">
             <template #content>
@@ -137,7 +144,7 @@ import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
 import { roleList, createRole, updateRole, deleteRole } from '@/api/role'
 // 引入Antd组件和图标
 import { message, Modal } from 'ant-design-vue'
-import { ReloadOutlined, SettingOutlined, HolderOutlined } from '@ant-design/icons-vue'
+import { ReloadOutlined, SettingOutlined, HolderOutlined, PlusOutlined } from '@ant-design/icons-vue'
 import VueDraggable from 'vuedraggable'
 import RoleForm from './RoleForm.vue'
 
@@ -294,11 +301,19 @@ function handleCreate() {
   drawerVisible.value = true
 }
 const throttledCreate = handleCreate
-// 刷新
-function handleRefresh() {
-  query.value.name = ''
-  pagination.value.current = 1
-  loadData()
+// 刷新动画状态，控制刷新按钮旋转
+const refreshing = ref(false)
+async function handleRefresh() {
+  refreshing.value = true      // 开始旋转刷新按钮
+  loading.value = true         // 显示表格 loading
+  await loadData().catch((error) => {
+    console.error('刷新数据失败:', error)
+  }).finally(() => {
+    setTimeout(() => {
+      refreshing.value = false
+    }, 1000) // 1秒后停止旋转
+    loading.value = false      // 关闭表格 loading
+  })
 }
 const throttledRefresh = handleRefresh
 // 清除选择
@@ -433,71 +448,107 @@ function getRowClassName(record: any) {
 <style scoped>
 /* 复用用户管理页面样式，保证风格一致 */
 .content-container {
+  height: 100%;
   display: flex;
   flex-direction: column;
-  height: 100%;
-  background: #f0f2f5;
-  padding: 0;
+  /* background: #f0f2f5; */
+  background: #fff; /* 与 user.vue 保持一致 */
 }
+
 .content-card {
-  background: #fff;
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  padding: 24px 24px 0 24px;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  height: 100%;
+  min-height: 0; /* 关键，防止撑开 */
 }
+
 .form-container {
-  padding: 24px 0 24px 0;
+  padding: 24px;
   border-bottom: 1px solid #f0f0f0;
   background: transparent;
   border-radius: 0;
   box-shadow: none;
-  margin-bottom: 0;
 }
+
 .toolbar-container {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 0;
   border-bottom: 1px solid #f0f0f0;
   background: transparent;
   border-radius: 0;
   box-shadow: none;
+  padding: 8px 24px 8px 24px;
 }
+
 .table-container {
-  flex: 1;
-  min-height: 0;
-  background: transparent;
-  border-radius: 0;
-  box-shadow: none;
-  display: flex;
-  flex-direction: column;
-  padding-bottom: 0;
+  display: flex;              /* 启用flex布局 */
+  flex-direction: column;     /* 垂直排列子元素 */
+  flex: 1;                    /* 占满父容器剩余空间 */
+  min-height: 0;              /* 关键，防止撑开 */
 }
+
 .table-scroll-container {
-  flex: 1;
-  min-height: 0;
+  /* 不要设置 flex: 1; */
+  min-height: 0; /* 可选，防止撑开 */
+  overflow: auto; /* 内容多时滚动 */
 }
+
 .pagination-container {
-  background: #fff;
-  padding-bottom: 8px;
-  text-align: right;
-  flex-shrink: 0;
+  display: flex;                /* 启用flex布局 */
+  align-items: center;          /* 垂直居中 */
+  justify-content: flex-end;    /* 右对齐 */
+  background: #fff;             /* 可选，分页条背景 */
+/* 不要设置height/line-height/padding-top/padding-bottom */
 }
+
+:deep(.ant-pagination) {
+  min-height: 32px !important;
+  height: 32px !important;
+  line-height: 32px !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+}
+
+:deep(.ant-pagination-item),
+:deep(.ant-pagination-item-link),
+:deep(.ant-pagination-prev),
+:deep(.ant-pagination-next),
+:deep(.ant-pagination-jump-next),
+:deep(.ant-pagination-jump-prev) {
+  height: 32px !important;
+  min-width: 32px !important;
+  line-height: 32px !important;
+  box-sizing: border-box;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+}
+
+:deep(.ant-pagination-item-ellipsis) {
+  line-height: 32px !important;
+  vertical-align: middle !important;
+  display: inline-block !important;
+  font-size: 16px !important;
+}
+
 .ml-2 { margin-left: 8px; }
+
 .table-title {
   font-size: 16px;
   font-weight: bold;
   color: #222;
 }
+
 .table-actions {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
 }
+
 .batch-actions {
   display: flex;
   align-items: center;
@@ -508,6 +559,7 @@ function getRowClassName(record: any) {
   padding: 0;
   margin-right: 0;
 }
+
 .toolbar-btn {
   border-radius: 4px;
   height: 32px;
@@ -517,6 +569,7 @@ function getRowClassName(record: any) {
   justify-content: center;
   gap: 4px;
 }
+
 .action-icon {
   font-size: 18px;
   cursor: pointer;
@@ -530,23 +583,28 @@ function getRowClassName(record: any) {
   min-width: 32px;
   min-height: 32px;
 }
+
 .action-icon:hover {
   color: #1890ff;
   background: #f5f5f5;
 }
+
 .action-icon.active {
   color: #1890ff;
   background: #e6f7ff;
 }
+
 .draggable-columns {
   max-height: 300px;
   overflow-y: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
+
 .draggable-columns::-webkit-scrollbar {
   display: none;
 }
+
 .draggable-column-item {
   display: flex;
   align-items: center;
@@ -557,17 +615,21 @@ function getRowClassName(record: any) {
   transition: background-color 0.2s ease;
   cursor: default;
 }
+
 .draggable-column-item:hover {
   background-color: #f5f5f5;
 }
+
 .draggable-column-item.sortable-ghost {
   opacity: 0.5;
   background: #e6f7ff;
 }
+
 .draggable-column-item.sortable-chosen {
   background: #e6f7ff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
+
 .drag-handle {
   margin-right: 8px;
   color: #bfbfbf;
@@ -575,28 +637,34 @@ function getRowClassName(record: any) {
   cursor: move;
   transition: color 0.2s;
 }
+
 .drag-handle:hover {
   color: #1890ff;
 }
+
 .sortable-ghost .drag-handle {
   color: #1890ff;
 }
+
 .action-buttons {
   display: flex;
   align-items: center;
   gap: 4px;
   justify-content: center;
 }
+
 .action-btn {
   padding: 2px 4px;
   height: auto;
   line-height: 1.2;
   font-size: 12px;
 }
+
 .action-btn:hover {
   background-color: #f5f5f5;
   border-radius: 4px;
 }
+
 /* 复用user/index.vue的隔行换色和高亮样式 */
 :deep(.ant-table-tbody > tr:nth-child(odd)) {
   background-color: #fafbfc;

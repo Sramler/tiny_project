@@ -1,13 +1,15 @@
-import {ref, computed } from 'vue'
+import { ref, computed } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
 import { userManager } from './oidc'
 import type { User } from 'oidc-client-ts'
 import { jwtVerify, createRemoteJWKSet } from 'jose'
-const metadata = await fetch('http://localhost:9000/.well-known/openid-configuration').then(res => res.json());
-const JWKS = createRemoteJWKSet(new URL(metadata.jwks_uri));
+const metadata = await fetch('http://localhost:9000/.well-known/openid-configuration').then((res) =>
+  res.json(),
+)
+const JWKS = createRemoteJWKSet(new URL(metadata.jwks_uri))
 export async function verifyAccessToken(token: string) {
   try {
-    console.log(JWKS);
+    console.log(JWKS)
     const { payload, protectedHeader } = await jwtVerify(token, JWKS, {
       algorithms: ['RS256'],
     })
@@ -84,7 +86,6 @@ export async function initAuth() {
 
 // 提供 Vue 组件中使用的 Auth API
 export function useAuth(): AuthContext {
-
   const getAccessToken = async () => {
     if (!user.value || user.value.expired) {
       const renewed = await safeSilentRenew()
@@ -142,7 +143,7 @@ userManager.events.addUserLoaded((u) => {
   console.debug('[OIDC] User loaded:', u)
   user.value = u
   //console.log(u.access_token);
-  verifyAccessToken(u.access_token);
+  verifyAccessToken(u.access_token)
 })
 
 userManager.events.addUserUnloaded(() => {

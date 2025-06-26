@@ -83,7 +83,9 @@
             新建
           </a-button>
           <a-tooltip title="刷新">
-            <ReloadOutlined class="action-icon" @click="throttledRefresh" />
+            <span class="action-icon" @click="throttledRefresh">
+              <ReloadOutlined :spin="refreshing" />
+            </span>
           </a-tooltip>
           <a-tooltip :title="showSortTooltip ? '关闭排序提示' : '开启排序提示'">
             <PoweroffOutlined
@@ -481,16 +483,17 @@ function handleCreate() {
 
 const throttledCreate = useThrottleFn(handleCreate, 500)
 
-function handleRefresh() {
-  console.log('刷新按钮被点击')
-  query.value.username = ''
-  query.value.nickname = ''
-  pagination.value.current = 1
-  loading.value = true
-  loadData().catch((error) => {
+const refreshing = ref(false)
+async function handleRefresh() {
+  refreshing.value = true      // 开始旋转刷新按钮
+  loading.value = true         // 显示表格 loading
+  await loadData().catch((error) => {
     console.error('刷新数据失败:', error)
   }).finally(() => {
-    console.log('刷新完成')
+    setTimeout(() => {
+      refreshing.value = false
+    }, 1000) // 1秒后停止旋转
+    loading.value = false      // 关闭表格 loading
   })
 }
 
@@ -797,74 +800,64 @@ const allEnabled = computed(() => {
 
 <style scoped>
 .content-container {
+  height: 100%;
   display: flex;
   flex-direction: column;
-  height: 100%;
-  background: #f0f2f5;
-  padding: 0;
+  /* background: #f0f2f5; */
+  background: #fff; 
 }
 
 .content-card {
-  background: #fff;
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  padding: 24px 24px 0 24px;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  height: 100%;
+  min-height: 0; /* 关键，防止撑开 */
 }
 
 .form-container {
-  padding: 24px 0 24px 0;
+  padding: 24px;
   border-bottom: 1px solid #f0f0f0;
   background: transparent;
   border-radius: 0;
   box-shadow: none;
-  margin-bottom: 0;
 }
 
 .toolbar-container {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 0;
   border-bottom: 1px solid #f0f0f0;
   background: transparent;
   border-radius: 0;
   box-shadow: none;
+  padding: 8px 24px 8px 24px;
 }
 
 .table-container {
-  flex: 1;
-  min-height: 0;
-  background: transparent;
-  border-radius: 0;
-  box-shadow: none;
-  display: flex;
-  flex-direction: column;
-  padding-bottom: 0;
+  display: flex;              /* 启用flex布局 */
+  flex-direction: column;     /* 垂直排列子元素 */
+  flex: 1;                    /* 占满父容器剩余空间 */
+  min-height: 0;              /* 关键，防止撑开 */
 }
 
 .table-scroll-container {
-  flex: 1;
-  min-height: 0;
-}
-
-:deep(.ant-table-wrapper),
-:deep(.ant-table-container),
-:deep(.ant-table),
-:deep(.ant-table-body) {
-  flex: none;
-  display: block;
-  min-height: auto;
+  /* 不要设置 flex: 1; */
+  min-height: 0; /* 可选，防止撑开 */
+  overflow: auto; /* 内容多时滚动 */
 }
 
 .pagination-container {
-  display: flex;
-  justify-content: flex-end;
-  background: #fff;
-  flex-shrink: 0;
-  padding: 0;
+  display: flex;                /* 启用flex布局 */
+  align-items: center;          /* 垂直居中 */
+  justify-content: flex-end;    /* 右对齐 */
+  background: #fff;             /* 可选，分页条背景 */
+  /* padding-right: 0px;          可选，右侧留白 */
+}
+
+:deep(.ant-pagination) {
+  display: flex !important;
+  flex-direction: row !important; /* 强制横向排列 */
+  align-items: center !important;
 }
 
 .ml-2 { margin-left: 8px; }
@@ -1018,14 +1011,14 @@ const allEnabled = computed(() => {
   border-radius: 4px;
 }
 
-:deep(.ant-pagination) {
-  margin-top: 0 !important;
-  padding-top: 0;
-  background: transparent;
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
+:deep(.ant-pagination),
+:deep(.ant-pagination-item),
+:deep(.ant-pagination-item-link) {
+  height: 32px !important;         /* 保证高度一致 */
+  line-height: 32px !important;    /* 保证内容垂直居中 */
+  min-width: 32px;                 /* 保证宽度一致 */
+  box-sizing: border-box;
+  vertical-align: middle;
 }
 
 :deep(.ant-table-tbody > tr:nth-child(odd)) {
@@ -1118,5 +1111,45 @@ const allEnabled = computed(() => {
 :deep(.ant-pagination-item-container) {
   /* 增加一点右边距，防止和"下一页"按钮重叠 */
   margin-right: 8px; 
+}
+
+/* 修正省略号垂直居中 */
+:deep(.ant-pagination-item-ellipsis) {
+  line-height: 32px !important;   /* AntD 默认高度 */
+  vertical-align: middle !important;
+  display: inline-block !important;
+  font-size: 16px !important;
+}
+
+/* 保证分页条整体高度和内容一致 */
+:deep(.ant-pagination) {
+  min-height: 32px !important;
+  height: 32px !important;
+  line-height: 32px !important;
+}
+
+/* 保证每个分页项高度一致 */
+:deep(.ant-pagination-item),
+:deep(.ant-pagination-item-link),
+:deep(.ant-pagination-prev),
+:deep(.ant-pagination-next),
+:deep(.ant-pagination-jump-next),
+:deep(.ant-pagination-jump-prev) {
+  height: 32px !important;
+  min-width: 32px !important;
+  line-height: 32px !important;
+  box-sizing: border-box;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+}
+
+/* 修正省略号垂直居中 */
+:deep(.ant-pagination-item-ellipsis) {
+  line-height: 32px !important;
+  vertical-align: middle !important;
+  display: inline-block !important;
+  font-size: 16px !important;
 }
 </style> 

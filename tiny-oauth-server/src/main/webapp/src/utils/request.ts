@@ -8,6 +8,7 @@ import type {
 } from 'axios'
 // 引入 auth.ts 中的认证方法
 import { useAuth, logout } from '@/auth/auth'
+import router from '@/router' // 引入路由实例
 
 // 创建axios实例
 const service: AxiosInstance = axios.create({
@@ -59,14 +60,19 @@ service.interceptors.response.use(
     // 如果响应失败，抛出错误
     return Promise.reject(new Error(data.message || '请求失败'))
   },
-  (error) => {
+  async (error) => {
     // 对响应错误做点什么
     console.error('响应错误:', error)
 
     // 处理401未授权错误
     if (error.response?.status === 401) {
       // 调用统一的 logout 方法，处理认证失败后的逻辑
-      logout()
+      await logout()
+      // 只在当前路由不是 /login 或 /callback 时跳转，避免死循环
+      const currentPath = router.currentRoute.value.path
+      if (currentPath !== '/login' && currentPath !== '/callback') {
+        router.replace('/login')
+      }
     }
 
     // 处理其他错误

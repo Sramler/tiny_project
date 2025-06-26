@@ -87,8 +87,13 @@ const router = createRouter({
 // 路由守卫，处理鉴权
 router.beforeEach(async (to, from, next) => {
   const { isAuthenticated, login } = useAuth()
-  if (to.meta.requiresAuth && !isAuthenticated.value) {
-    await login() // 会自动重定向到授权页
+  // 不在 /login、/callback 路由下才处理
+  if (
+    to.meta.requiresAuth &&
+    !isAuthenticated.value &&
+    !['/login', '/callback'].includes(to.path)
+  ) {
+    await login()
   } else {
     next()
   }

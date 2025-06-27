@@ -14,6 +14,7 @@
     "redirect": "/system/role",
     "children": [
       { "title": "角色管理", "path": "/system/role", "showIcon": false, "component": "/views/role/role.vue" },
+      { "title": "菜单管理", "path": "/system/menu", "showIcon": false, "component": "/views/menu/menu.vue" },
       { "title": "权限管理", "path": "/system/resource", "showIcon": false, "component": "/views/resource/resource.vue" },
       { "title": "用户管理", "path": "/system/user", "showIcon": false, "component": "/views/user/user.vue" }
     ]

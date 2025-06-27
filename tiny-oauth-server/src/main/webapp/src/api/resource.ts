@@ -4,62 +4,176 @@ import request from '@/utils/request'
 export interface ResourceItem {
   id?: number
   name: string
-  title: string
-  path: string
-  uri: string
-  method: string
-  icon: string
-  showIcon: boolean
-  sort: number
-  component: string
-  redirect: string
-  hidden: boolean
-  keepAlive: boolean
-  permission: string
+  title?: string
+  path?: string
+  uri?: string
+  method?: string
+  icon?: string
+  showIcon?: boolean
+  sort?: number
+  component?: string
+  redirect?: string
+  hidden?: boolean
+  keepAlive?: boolean
+  permission?: string
   type: number
+  typeName?: string
   parentId?: number | null
+  children?: ResourceItem[]
+  createdAt?: string
+  updatedAt?: string
 }
 
 // 查询参数类型
 export interface ResourceQuery {
   name?: string
+  title?: string
+  path?: string
   uri?: string
   permission?: string
+  type?: number
+  parentId?: number
+  hidden?: boolean
   page?: number
   size?: number
 }
 
-// 获取资源列表
-export function resourceList(params?: ResourceQuery): Promise<any> {
-  return request.get('/api/resources', { params })
+// 创建/更新资源参数
+export interface ResourceCreateUpdateDto {
+  id?: number
+  name: string
+  title: string
+  path?: string
+  uri?: string
+  method?: string
+  icon?: string
+  showIcon?: boolean
+  sort?: number
+  component?: string
+  redirect?: string
+  hidden?: boolean
+  keepAlive?: boolean
+  permission?: string
+  type: number
+  parentId?: number | null
+}
+
+// 资源排序参数
+export interface ResourceSortDto {
+  id: number
+  sort: number
+  parentId?: number | null
+}
+
+// 分页响应类型
+export interface PageResponse<T> {
+  content: T[]
+  totalElements: number
+  totalPages: number
+  size: number
+  number: number
+  first: boolean
+  last: boolean
+  numberOfElements: number
+}
+
+// 资源类型枚举
+export enum ResourceType {
+  MENU = 0,
+  BUTTON = 1,
+  API = 2,
+}
+
+// 获取资源列表（分页）
+export function resourceList(params?: ResourceQuery): Promise<PageResponse<ResourceItem>> {
+  return request.get('/sys/resources', { params })
 }
 
 // 创建资源
-export function createResource(data: ResourceItem): Promise<any> {
-  return request.post('/api/resources', data)
+export function createResource(data: ResourceCreateUpdateDto): Promise<ResourceItem> {
+  return request.post('/sys/resources', data)
 }
 
 // 更新资源
-export function updateResource(id: number | string, data: ResourceItem): Promise<any> {
-  return request.put(`/api/resources/${id}`, data)
+export function updateResource(
+  id: number | string,
+  data: ResourceCreateUpdateDto,
+): Promise<ResourceItem> {
+  return request.put(`/sys/resources/${id}`, data)
 }
 
 // 删除资源
-export function deleteResource(id: number | string): Promise<any> {
-  return request.delete(`/api/resources/${id}`)
+export function deleteResource(id: number | string): Promise<void> {
+  return request.delete(`/sys/resources/${id}`)
 }
 
 // 获取资源详情
 export function getResourceDetail(id: number | string): Promise<ResourceItem> {
-  return request.get(`/api/resources/${id}`)
+  return request.get(`/sys/resources/${id}`)
 }
 
 // 批量删除资源
-export function batchDeleteResources(ids: (number | string)[]): Promise<any> {
-  return request.post('/api/resources/batch/delete', ids)
+export function batchDeleteResources(
+  ids: (number | string)[],
+): Promise<{ success: boolean; message: string }> {
+  return request.post('/sys/resources/batch/delete', ids)
 }
 
 // 更新资源排序
-export function updateResourceSort(data: { id: number; sort: number }[]): Promise<any> {
-  return request.put('/api/resources/sort', data)
+export function updateResourceSort(id: number | string, sort: number): Promise<ResourceItem> {
+  return request.put(`/sys/resources/${id}/sort`, null, { params: { sort } })
+}
+
+// 获取资源树
+export function getResourceTree(): Promise<ResourceItem[]> {
+  return request.get('/sys/resources/tree')
+}
+
+// 根据资源类型获取资源列表
+export function getResourcesByType(type: ResourceType): Promise<ResourceItem[]> {
+  return request.get(`/sys/resources/type/${type}`)
+}
+
+// 根据父级ID获取子资源列表
+export function getResourcesByParentId(parentId: number): Promise<ResourceItem[]> {
+  return request.get(`/sys/resources/parent/${parentId}`)
+}
+
+// 获取顶级资源列表
+export function getTopLevelResources(): Promise<ResourceItem[]> {
+  return request.get('/sys/resources/top-level')
+}
+
+// 根据权限标识获取资源列表
+export function getResourcesByPermission(permission: string): Promise<ResourceItem[]> {
+  return request.get(`/sys/resources/permission/${permission}`)
+}
+
+// 获取资源类型列表
+export function getResourceTypes(): Promise<ResourceType[]> {
+  return request.get('/sys/resources/types')
+}
+
+// 检查资源名称是否存在
+export function checkResourceNameExists(
+  name: string,
+  excludeId?: number,
+): Promise<{ exists: boolean }> {
+  return request.get('/sys/resources/check-name', { params: { name, excludeId } })
+}
+
+// 检查资源路径是否存在
+export function checkResourcePathExists(
+  path: string,
+  excludeId?: number,
+): Promise<{ exists: boolean }> {
+  return request.get('/sys/resources/check-path', { params: { path, excludeId } })
+}
+
+// 检查资源URI是否存在
+export function checkResourceUriExists(
+  uri: string,
+  excludeId?: number,
+): Promise<{ exists: boolean }> {
+  return request.get('/sys/resources/check-uri', { params: { uri, excludeId } })
 }

@@ -20,10 +20,10 @@
         />
       </a-form-item>
       
-      <a-form-item label="显示标题" name="title">
+      <a-form-item label="资源标题" name="title">
         <a-input 
           v-model:value="formData.title" 
-          placeholder="请输入显示标题"
+          placeholder="请输入资源标题"
           maxlength="100"
           show-count
         />
@@ -31,10 +31,21 @@
       
       <a-form-item label="资源类型" name="type">
         <a-select v-model:value="formData.type" placeholder="请选择资源类型">
-          <a-select-option :value="0">目录</a-select-option>
-          <a-select-option :value="1">菜单</a-select-option>
-          <a-select-option :value="2">按钮</a-select-option>
+          <a-select-option :value="ResourceType.MENU">菜单</a-select-option>
+          <a-select-option :value="ResourceType.BUTTON">按钮</a-select-option>
+          <a-select-option :value="ResourceType.API">API</a-select-option>
         </a-select>
+      </a-form-item>
+      
+      <a-form-item label="父级资源" name="parentId">
+        <a-tree-select
+          v-model:value="formData.parentId"
+          :tree-data="resourceTreeData"
+          placeholder="请选择父级资源"
+          allow-clear
+          tree-default-expand-all
+          :field-names="{ children: 'children', label: 'title', value: 'id' }"
+        />
       </a-form-item>
       
       <a-form-item label="排序权重" name="sort">
@@ -146,16 +157,20 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch } from 'vue'
 import type { FormInstance } from 'ant-design-vue'
+// 引入资源API
+import { getResourceTree, type ResourceItem, ResourceType } from '@/api/resource'
 
-// 定义props
+// 定义组件属性
 interface Props {
   mode: 'create' | 'edit'
-  resourceData: any
+  resourceData?: ResourceItem | null
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  resourceData: null
+})
 
-// 定义emits
+// 定义事件
 const emit = defineEmits<{
   submit: [data: any]
   cancel: []
@@ -180,50 +195,69 @@ const formData = reactive({
   hidden: false,
   keepAlive: false,
   permission: '',
-  type: 2,
-  parentId: null
+  type: ResourceType.API,
+  parentId: null as number | null
 })
 
 // 提交状态
 const submitting = ref(false)
 
+// 资源树数据
+const resourceTreeData = ref<ResourceItem[]>([])
+
 // 表单验证规则
 const rules = {
   name: [
     { required: true, message: '请输入资源名称', trigger: 'blur' },
-    { max: 100, message: '资源名称不能超过100个字符', trigger: 'blur' }
+    { min: 2, max: 100, message: '长度在 2 到 100 个字符', trigger: 'blur' }
   ],
   title: [
-    { required: true, message: '请输入显示标题', trigger: 'blur' },
-    { max: 100, message: '显示标题不能超过100个字符', trigger: 'blur' }
+    { required: true, message: '请输入资源标题', trigger: 'blur' },
+    { min: 2, max: 100, message: '长度在 2 到 100 个字符', trigger: 'blur' }
   ],
   type: [
     { required: true, message: '请选择资源类型', trigger: 'change' }
   ],
-  uri: [
-    { max: 200, message: 'API路径不能超过200个字符', trigger: 'blur' }
-  ],
-  permission: [
-    { max: 100, message: '权限标识不能超过100个字符', trigger: 'blur' }
-  ],
-  path: [
-    { max: 200, message: '前端路径不能超过200个字符', trigger: 'blur' }
-  ],
-  component: [
-    { max: 200, message: '组件路径不能超过200个字符', trigger: 'blur' }
-  ],
-  redirect: [
-    { max: 200, message: '重定向地址不能超过200个字符', trigger: 'blur' }
-  ],
-  icon: [
-    { max: 200, message: '图标名称不能超过200个字符', trigger: 'blur' }
+  sort: [
+    { required: true, message: '请输入排序权重', trigger: 'blur' },
+    { type: 'number', min: 0, max: 9999, message: '排序权重必须在 0-9999 之间', trigger: 'blur' }
   ]
+}
+
+// 加载资源树数据
+async function loadResourceTree() {
+  try {
+    const data = await getResourceTree()
+    resourceTreeData.value = data || []
+  } catch (error) {
+    console.error('加载资源树失败:', error)
+  }
 }
 
 // 初始化表单数据
 function initFormData() {
   if (props.resourceData) {
     Object.assign(formData, props.resourceData)
+  } else {
+    // 重置表单数据
+    Object.assign(formData, {
+      id: '',
+      name: '',
+      title: '',
+      path: '',
+      uri: '',
+      method: 'GET',
+      icon: '',
+      showIcon: true,
+      sort: 0,
+      component: '',
+      redirect: '',
+      hidden: false,
+      keepAlive: false,
+      permission: '',
+      type: ResourceType.API,
+      parentId: null
+    })
   }
 }
 
@@ -242,19 +276,19 @@ async function handleSubmit() {
   }
 }
 
-// 取消
+// 取消操作
 function handleCancel() {
   emit('cancel')
 }
 
-// 监听props变化
+// 监听资源数据变化
 watch(() => props.resourceData, () => {
   initFormData()
 }, { immediate: true })
 
-// 组件挂载
+// 组件挂载时加载资源树
 onMounted(() => {
-  initFormData()
+  loadResourceTree()
 })
 </script>
 
@@ -272,13 +306,13 @@ onMounted(() => {
   border-top: 1px solid #f0f0f0;
 }
 
-:deep(.ant-divider) {
-  margin: 16px 0;
-  font-weight: 500;
-  color: #1890ff;
-}
-
 :deep(.ant-form-item-label > label) {
   font-weight: 500;
+}
+
+:deep(.ant-divider) {
+  margin: 24px 0 16px 0;
+  font-weight: 500;
+  color: #1890ff;
 }
 </style> 

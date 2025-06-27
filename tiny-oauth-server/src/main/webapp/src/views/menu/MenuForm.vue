@@ -11,30 +11,22 @@
       <!-- 基本信息 -->
       <a-divider>基本信息</a-divider>
       
-      <a-form-item label="菜单名称" name="title">
-        <a-input 
-          v-model:value="formData.title" 
-          placeholder="请输入菜单显示名称"
-          maxlength="100"
-          show-count
-        />
-      </a-form-item>
-      
-      <a-form-item label="权限资源名" name="name">
+      <a-form-item label="菜单名称" name="name">
         <a-input 
           v-model:value="formData.name" 
-          placeholder="请输入后端内部识别名"
+          placeholder="请输入菜单名称"
           maxlength="100"
           show-count
         />
       </a-form-item>
       
-      <a-form-item label="菜单类型" name="type">
-        <a-select v-model:value="formData.type" placeholder="请选择菜单类型">
-          <a-select-option :value="0">目录</a-select-option>
-          <a-select-option :value="1">菜单</a-select-option>
-          <a-select-option :value="2">按钮</a-select-option>
-        </a-select>
+      <a-form-item label="菜单标题" name="title">
+        <a-input 
+          v-model:value="formData.title" 
+          placeholder="请输入菜单显示标题"
+          maxlength="100"
+          show-count
+        />
       </a-form-item>
       
       <a-form-item label="父级菜单" name="parentId">
@@ -86,28 +78,6 @@
           maxlength="200"
           show-count
         />
-      </a-form-item>
-      
-      <!-- API配置 -->
-      <a-divider>API配置</a-divider>
-      
-      <a-form-item label="API路径" name="uri">
-        <a-input 
-          v-model:value="formData.uri" 
-          placeholder="请输入后端API路径，如：/api/user"
-          maxlength="200"
-          show-count
-        />
-      </a-form-item>
-      
-      <a-form-item label="HTTP方法" name="method">
-        <a-select v-model:value="formData.method" placeholder="请选择HTTP方法">
-          <a-select-option value="GET">GET</a-select-option>
-          <a-select-option value="POST">POST</a-select-option>
-          <a-select-option value="PUT">PUT</a-select-option>
-          <a-select-option value="DELETE">DELETE</a-select-option>
-          <a-select-option value="PATCH">PATCH</a-select-option>
-        </a-select>
       </a-form-item>
       
       <a-form-item label="权限标识" name="permission">
@@ -199,40 +169,29 @@ import {
   FolderOutlined,
   AppstoreOutlined,
   MenuOutlined,
-  TableOutlined,
-  FormOutlined,
-  SearchOutlined,
+  ApiOutlined,
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
-  EyeOutlined,
-  KeyOutlined,
-  LockOutlined,
-  SafetyOutlined,
-  ToolOutlined,
-  ApiOutlined,
-  DatabaseOutlined,
-  CloudOutlined,
-  BarChartOutlined,
-  PieChartOutlined,
-  LineChartOutlined,
-  CalendarOutlined,
-  ClockCircleOutlined,
-  BellOutlined,
-  MailOutlined,
-  MessageOutlined
+  SearchOutlined,
+  ReloadOutlined
 } from '@ant-design/icons-vue'
+// 引入菜单API
+import { getMenuTree, type MenuItem } from '@/api/menu'
 
-// 定义props
+// 定义组件属性
 interface Props {
   mode: 'create' | 'edit'
-  menuData: any
-  parentMenu?: any
+  menuData?: MenuItem | null
+  parentMenu?: MenuItem | null
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  menuData: null,
+  parentMenu: null
+})
 
-// 定义emits
+// 定义事件
 const emit = defineEmits<{
   submit: [data: any]
   cancel: []
@@ -247,8 +206,6 @@ const formData = reactive({
   name: '',
   title: '',
   path: '',
-  uri: '',
-  method: 'GET',
   icon: '',
   showIcon: true,
   sort: 0,
@@ -257,18 +214,33 @@ const formData = reactive({
   hidden: false,
   keepAlive: false,
   permission: '',
-  type: 1,
-  parentId: null
+  parentId: null as number | null
 })
 
-// 提交状态
-const submitting = ref(false)
+// 表单验证规则
+const rules = {
+  name: [
+    { required: true, message: '请输入菜单名称', trigger: 'blur' },
+    { min: 2, max: 100, message: '长度在 2 到 100 个字符', trigger: 'blur' }
+  ],
+  title: [
+    { required: true, message: '请输入菜单标题', trigger: 'blur' },
+    { min: 2, max: 100, message: '长度在 2 到 100 个字符', trigger: 'blur' }
+  ],
+  sort: [
+    { required: true, message: '请输入排序权重', trigger: 'blur' },
+    { type: 'number', min: 0, max: 9999, message: '排序权重必须在 0-9999 之间', trigger: 'blur' }
+  ]
+}
+
+// 菜单树数据
+const menuTreeData = ref<MenuItem[]>([])
 
 // 图标选择器
 const showIconSelector = ref(false)
 
-// 菜单树数据（用于父菜单选择）
-const menuTreeData = ref<any[]>([])
+// 提交状态
+const submitting = ref(false)
 
 // 图标列表
 const iconList = [
@@ -281,28 +253,12 @@ const iconList = [
   { name: 'FolderOutlined', component: FolderOutlined },
   { name: 'AppstoreOutlined', component: AppstoreOutlined },
   { name: 'MenuOutlined', component: MenuOutlined },
-  { name: 'TableOutlined', component: TableOutlined },
-  { name: 'FormOutlined', component: FormOutlined },
-  { name: 'SearchOutlined', component: SearchOutlined },
+  { name: 'ApiOutlined', component: ApiOutlined },
   { name: 'PlusOutlined', component: PlusOutlined },
   { name: 'EditOutlined', component: EditOutlined },
   { name: 'DeleteOutlined', component: DeleteOutlined },
-  { name: 'EyeOutlined', component: EyeOutlined },
-  { name: 'KeyOutlined', component: KeyOutlined },
-  { name: 'LockOutlined', component: LockOutlined },
-  { name: 'SafetyOutlined', component: SafetyOutlined },
-  { name: 'ToolOutlined', component: ToolOutlined },
-  { name: 'ApiOutlined', component: ApiOutlined },
-  { name: 'DatabaseOutlined', component: DatabaseOutlined },
-  { name: 'CloudOutlined', component: CloudOutlined },
-  { name: 'BarChartOutlined', component: BarChartOutlined },
-  { name: 'PieChartOutlined', component: PieChartOutlined },
-  { name: 'LineChartOutlined', component: LineChartOutlined },
-  { name: 'CalendarOutlined', component: CalendarOutlined },
-  { name: 'ClockCircleOutlined', component: ClockCircleOutlined },
-  { name: 'BellOutlined', component: BellOutlined },
-  { name: 'MailOutlined', component: MailOutlined },
-  { name: 'MessageOutlined', component: MessageOutlined }
+  { name: 'SearchOutlined', component: SearchOutlined },
+  { name: 'ReloadOutlined', component: ReloadOutlined }
 ]
 
 // 图标组件映射
@@ -316,66 +272,17 @@ const iconMap: Record<string, any> = {
   'FolderOutlined': FolderOutlined,
   'AppstoreOutlined': AppstoreOutlined,
   'MenuOutlined': MenuOutlined,
-  'TableOutlined': TableOutlined,
-  'FormOutlined': FormOutlined,
-  'SearchOutlined': SearchOutlined,
+  'ApiOutlined': ApiOutlined,
   'PlusOutlined': PlusOutlined,
   'EditOutlined': EditOutlined,
   'DeleteOutlined': DeleteOutlined,
-  'EyeOutlined': EyeOutlined,
-  'KeyOutlined': KeyOutlined,
-  'LockOutlined': LockOutlined,
-  'SafetyOutlined': SafetyOutlined,
-  'ToolOutlined': ToolOutlined,
-  'ApiOutlined': ApiOutlined,
-  'DatabaseOutlined': DatabaseOutlined,
-  'CloudOutlined': CloudOutlined,
-  'BarChartOutlined': BarChartOutlined,
-  'PieChartOutlined': PieChartOutlined,
-  'LineChartOutlined': LineChartOutlined,
-  'CalendarOutlined': CalendarOutlined,
-  'ClockCircleOutlined': ClockCircleOutlined,
-  'BellOutlined': BellOutlined,
-  'MailOutlined': MailOutlined,
-  'MessageOutlined': MessageOutlined
+  'SearchOutlined': SearchOutlined,
+  'ReloadOutlined': ReloadOutlined
 }
 
 // 获取图标组件
 function getIconComponent(iconName: string) {
-  return iconMap[iconName] || AppstoreOutlined
-}
-
-// 表单验证规则
-const rules = {
-  title: [
-    { required: true, message: '请输入菜单名称', trigger: 'blur' },
-    { max: 100, message: '菜单名称不能超过100个字符', trigger: 'blur' }
-  ],
-  name: [
-    { required: true, message: '请输入权限资源名', trigger: 'blur' },
-    { max: 100, message: '权限资源名不能超过100个字符', trigger: 'blur' }
-  ],
-  type: [
-    { required: true, message: '请选择菜单类型', trigger: 'change' }
-  ],
-  path: [
-    { max: 200, message: '前端路径不能超过200个字符', trigger: 'blur' }
-  ],
-  component: [
-    { max: 200, message: '组件路径不能超过200个字符', trigger: 'blur' }
-  ],
-  redirect: [
-    { max: 200, message: '重定向地址不能超过200个字符', trigger: 'blur' }
-  ],
-  uri: [
-    { max: 200, message: 'API路径不能超过200个字符', trigger: 'blur' }
-  ],
-  permission: [
-    { max: 100, message: '权限标识不能超过100个字符', trigger: 'blur' }
-  ],
-  icon: [
-    { max: 200, message: '图标名称不能超过200个字符', trigger: 'blur' }
-  ]
+  return iconMap[iconName] || MenuOutlined
 }
 
 // 选择图标
@@ -387,23 +294,11 @@ function selectIcon(iconName: string) {
 // 加载菜单树数据
 async function loadMenuTree() {
   try {
-    // 这里需要调用API获取菜单树数据
-    // const res = await getMenuTree()
-    // menuTreeData.value = res || []
-    
-    // 临时模拟数据
-    menuTreeData.value = [
-      {
-        id: 1,
-        title: '系统管理',
-        children: [
-          { id: 2, title: '用户管理' },
-          { id: 3, title: '角色管理' }
-        ]
-      }
-    ]
+    const data = await getMenuTree()
+    menuTreeData.value = data || []
   } catch (error) {
     console.error('加载菜单树失败:', error)
+    message.error('加载菜单树失败')
   }
 }
 
@@ -411,11 +306,28 @@ async function loadMenuTree() {
 function initFormData() {
   if (props.menuData) {
     Object.assign(formData, props.menuData)
+  } else {
+    // 重置表单数据
+    Object.assign(formData, {
+      id: '',
+      name: '',
+      title: '',
+      path: '',
+      icon: '',
+      showIcon: true,
+      sort: 0,
+      component: '',
+      redirect: '',
+      hidden: false,
+      keepAlive: false,
+      permission: '',
+      parentId: null
+    })
   }
   
-  // 如果是添加子菜单，设置父菜单ID
+  // 如果是添加子菜单，设置父级菜单ID
   if (props.parentMenu) {
-    formData.parentId = props.parentMenu.id
+    formData.parentId = props.parentMenu.id || null
   }
 }
 
@@ -434,20 +346,26 @@ async function handleSubmit() {
   }
 }
 
-// 取消
+// 取消操作
 function handleCancel() {
   emit('cancel')
 }
 
-// 监听props变化
+// 监听菜单数据变化
 watch(() => props.menuData, () => {
   initFormData()
 }, { immediate: true })
 
-// 组件挂载
+// 监听父级菜单变化
+watch(() => props.parentMenu, () => {
+  if (props.parentMenu) {
+    formData.parentId = props.parentMenu.id || null
+  }
+}, { immediate: true })
+
+// 组件挂载时加载菜单树
 onMounted(() => {
   loadMenuTree()
-  initFormData()
 })
 </script>
 
@@ -459,11 +377,13 @@ onMounted(() => {
 .icon-selector {
   display: flex;
   align-items: center;
+  gap: 8px;
 }
 
 .icon-preview {
   display: flex;
   align-items: center;
+  gap: 8px;
   margin-top: 8px;
   padding: 8px;
   background: #f5f5f5;
@@ -473,7 +393,6 @@ onMounted(() => {
 .preview-icon {
   font-size: 16px;
   color: #1890ff;
-  margin-right: 8px;
 }
 
 .icon-grid {
@@ -488,7 +407,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 12px 8px;
+  padding: 12px;
   border: 1px solid #d9d9d9;
   border-radius: 6px;
   cursor: pointer;
@@ -506,9 +425,9 @@ onMounted(() => {
 }
 
 .grid-icon {
-  font-size: 20px;
+  font-size: 24px;
   color: #1890ff;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
 }
 
 .icon-name {
@@ -527,13 +446,13 @@ onMounted(() => {
   border-top: 1px solid #f0f0f0;
 }
 
-:deep(.ant-divider) {
-  margin: 16px 0;
-  font-weight: 500;
-  color: #1890ff;
-}
-
 :deep(.ant-form-item-label > label) {
   font-weight: 500;
+}
+
+:deep(.ant-divider) {
+  margin: 24px 0 16px 0;
+  font-weight: 500;
+  color: #1890ff;
 }
 </style> 

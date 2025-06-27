@@ -46,7 +46,12 @@
                   />
                   <span style="font-weight: bold; margin-left: 8px;">列展示/排序</span>
                 </div>
-                <span style="font-weight: bold; color: #1677ff; cursor: pointer;" @click="resetColumnOrder">重置</span>
+                <span
+                  style="font-weight: bold; color: #1677ff; cursor: pointer;"
+                  @click="resetColumnOrder"
+                >
+                  重置
+                </span>
               </div>
               <VueDraggable
                 v-model="draggableColumns"
@@ -174,17 +179,18 @@ const paginationConfig = computed(() => ({
   showTotal: pagination.value.showTotal
 }))
 // 所有列定义
-const allColumns = ref([
+const INITIAL_COLUMNS = [
   { title: 'ID', dataIndex: 'id' },
   { title: '角色名', dataIndex: 'name' },
   { title: '描述', dataIndex: 'description' },
   { title: '操作', dataIndex: 'action', width: 160, fixed: 'right', align: 'center' }
-])
+]
+const allColumns = ref([...INITIAL_COLUMNS])
 // 可拖拽列
-const draggableColumns = ref([...allColumns.value])
+const draggableColumns = ref([...INITIAL_COLUMNS])
 // 当前显示的列
 const showColumnKeys = ref(
-  allColumns.value.map(col => col.dataIndex).filter(key => typeof key === 'string' && key)
+  INITIAL_COLUMNS.map(col => col.dataIndex).filter(key => typeof key === 'string' && key)
 )
 // 列变化时同步
 watch(allColumns, (val) => {
@@ -206,15 +212,19 @@ function onCheckboxChange(dataIndex: string, checked: boolean) {
 // 列全选
 function onCheckAllChange(e: any) {
   if (e.target.checked) {
-    showColumnKeys.value = allColumns.value.map(col => col.dataIndex)
+    showColumnKeys.value = INITIAL_COLUMNS.map(col => col.dataIndex)
   } else {
     showColumnKeys.value = []
   }
 }
-// 重置列顺序
+const DEFAULT_COLUMN_KEYS = INITIAL_COLUMNS
+  .filter(col => typeof col.dataIndex === 'string' && col.dataIndex)
+  .map(col => col.dataIndex)
+
 function resetColumnOrder() {
-  draggableColumns.value = [...allColumns.value]
-  showColumnKeys.value = allColumns.value.map(col => col.dataIndex)
+  allColumns.value = [...INITIAL_COLUMNS]
+  draggableColumns.value = [...INITIAL_COLUMNS]
+  showColumnKeys.value = [...DEFAULT_COLUMN_KEYS]
 }
 // 拖拽结束
 function onDragEnd() {}
@@ -232,7 +242,7 @@ const columns = computed(() => [
       return (current - 1) * pageSize + (typeof index === 'number' ? index : 0) + 1
     }
   },
-  ...allColumns.value.filter(col => showColumnKeys.value.includes(col.dataIndex))
+  ...INITIAL_COLUMNS.filter(col => showColumnKeys.value.includes(col.dataIndex))
 ])
 // 多选配置，所有 id 强制转字符串，保证类型一致
 const rowSelection = computed(() => ({

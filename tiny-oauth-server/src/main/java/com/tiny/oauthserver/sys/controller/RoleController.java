@@ -15,8 +15,8 @@ public class RoleController {
     public RoleController(RoleService roleService) { this.roleService = roleService; }
 
     @GetMapping
-    public ResponseEntity<Page<RoleResponseDto>> list(RoleRequestDto query, @PageableDefault Pageable pageable) {
-        return ResponseEntity.ok(roleService.roles(query, pageable));
+    public ResponseEntity<PageResponse<RoleResponseDto>> list(RoleRequestDto query, @PageableDefault Pageable pageable) {
+        return ResponseEntity.ok(new PageResponse<>(roleService.roles(query, pageable)));
     }
 
     @GetMapping("/{id}")

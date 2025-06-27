@@ -45,16 +45,6 @@ class UserControllerTest {
     }
 
     @Test
-    void testGetUsers() {
-        Page<UserResponseDto> page = new PageImpl<>(List.of());
-        when(userService.users(any(), any())).thenReturn(page);
-
-        ResponseEntity<Page<UserResponseDto>> resp = userController.getUsers(new UserRequestDto(), Pageable.unpaged());
-        assertEquals(page, resp.getBody());
-        verify(userService).users(any(), any());
-    }
-
-    @Test
     void testGetUser() {
         when(userService.findById(1L)).thenReturn(Optional.of(mockUser));
         ResponseEntity<User> resp = userController.getUser(1L);

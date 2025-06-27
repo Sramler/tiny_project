@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping
 public class IndexController {
     @RequestMapping("/")
-    public ResponseEntity<?> IndexController() {
+    public ResponseEntity<?> Index() {
         return ResponseEntity.ok().build();
     }
 }

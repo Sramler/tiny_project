@@ -1,11 +1,7 @@
 package com.tiny.oauthserver.sys.controller;
 
-import com.tiny.oauthserver.sys.model.User;
-import com.tiny.oauthserver.sys.model.UserRequestDto;
-import com.tiny.oauthserver.sys.model.UserResponseDto;
-import com.tiny.oauthserver.sys.model.UserCreateUpdateDto;
+import com.tiny.oauthserver.sys.model.*;
 import com.tiny.oauthserver.sys.service.UserService;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -27,11 +23,11 @@ public class UserController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<UserResponseDto>> getUsers(
+    public ResponseEntity<PageResponse<UserResponseDto>> getUsers(
             @Valid UserRequestDto query,
             @PageableDefault(size = 10, sort = "id", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        return ResponseEntity.ok(userService.users(query, pageable));
+        return ResponseEntity.ok(new PageResponse<>(userService.users(query, pageable)));
     }
 
     @GetMapping("/{id}")
@@ -99,16 +95,5 @@ public class UserController {
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("success", false, "message", e.getMessage()));
         }
-    }
-    
-    /**
-     * 测试接口 - 验证懒加载问题是否已解决
-     * 仅用于测试，生产环境应该移除
-     */
-    @GetMapping("/test/{id}")
-    public ResponseEntity<User> testUser(@PathVariable("id") Long id) {
-        return userService.findById(id)
-            .map(ResponseEntity::ok)
-            .orElse(ResponseEntity.notFound().build());
     }
 }

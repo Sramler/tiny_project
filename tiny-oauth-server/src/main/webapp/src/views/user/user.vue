@@ -286,7 +286,8 @@ const paginationConfig = computed(() => {
   return config
 })
 
-const allColumns = ref([
+// 定义初始列顺序常量
+const INITIAL_COLUMNS = [
   { title: 'ID', dataIndex: 'id', sorter: true },
   { title: '用户名', dataIndex: 'username', sorter: true },
   { title: '密码', dataIndex: 'password' },
@@ -326,15 +327,14 @@ const allColumns = ref([
     fixed: 'right',
     align: 'center'
   }
-]);
+]
 
-const draggableColumns = ref([...allColumns.value])
-
+// 用初始列顺序初始化
+const allColumns = ref([...INITIAL_COLUMNS])
+const draggableColumns = ref([...INITIAL_COLUMNS])
 const showColumnKeys = ref(
-  allColumns.value
-    .map(col => col.dataIndex)
-    .filter(key => typeof key === 'string' && key !== undefined && key !== null)
-);
+  INITIAL_COLUMNS.map(col => col.dataIndex).filter(key => typeof key === 'string' && key)
+)
 
 watch(allColumns, (val) => {
   showColumnKeys.value = showColumnKeys.value.filter(key =>
@@ -500,21 +500,18 @@ async function handleRefresh() {
 const throttledRefresh = useThrottleFn(handleRefresh, 1000)
 
 function onCheckAllChange(e: any) {
-  console.log('全选复选框变化:', e.target.checked)
   if (e.target.checked) {
-    showColumnKeys.value = allColumns.value
-      .filter(col => col && typeof col.dataIndex === 'string' && col.dataIndex)
-      .map(col => col.dataIndex)
+    showColumnKeys.value = INITIAL_COLUMNS.map(col => col.dataIndex)
   } else {
     showColumnKeys.value = []
   }
-  console.log('当前显示的列:', showColumnKeys.value)
 }
 
 function resetColumnOrder() {
-  draggableColumns.value = [...allColumns.value]
-  showColumnKeys.value = allColumns.value
-    .filter(col => col && typeof col.dataIndex === 'string' && col.dataIndex)
+  allColumns.value = [...INITIAL_COLUMNS]
+  draggableColumns.value = [...INITIAL_COLUMNS]
+  showColumnKeys.value = INITIAL_COLUMNS
+    .filter(col => typeof col.dataIndex === 'string' && col.dataIndex)
     .map(col => col.dataIndex)
 }
 

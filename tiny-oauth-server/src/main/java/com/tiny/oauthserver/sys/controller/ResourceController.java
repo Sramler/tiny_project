@@ -15,7 +15,7 @@ import java.util.Map;
 
 /**
  * 资源管理控制器
- * 提供资源管理的REST API接口
+ * 提供资源管理和菜单管理的REST API接口
  */
 @RestController
 @RequestMapping("/sys/resources")
@@ -26,6 +26,8 @@ public class ResourceController {
     public ResourceController(ResourceService resourceService) {
         this.resourceService = resourceService;
     }
+
+    // ==================== 资源管理API ====================
 
     /**
      * 分页查询资源
@@ -72,9 +74,7 @@ public class ResourceController {
      */
     @PutMapping("/{id}")
     public ResponseEntity<Resource> update(@PathVariable("id") Long id, @Valid @RequestBody ResourceCreateUpdateDto resourceDto) {
-        // 设置ID
         resourceDto.setId(id);
-        
         Resource resource = resourceService.updateFromDto(resourceDto);
         return ResponseEntity.ok(resource);
     }
@@ -104,6 +104,119 @@ public class ResourceController {
             return ResponseEntity.badRequest().body(Map.of("success", false, "message", e.getMessage()));
         }
     }
+
+    // ==================== 菜单管理API ====================
+
+    /**
+     * 分页查询菜单（type为0-目录，1-菜单）
+     * @param name 菜单名称
+     * @param title 菜单标题
+     * @param permission 权限标识
+     * @param pageable 分页参数
+     * @return 分页结果
+     */
+    @GetMapping("/menus")
+    public ResponseEntity<PageResponse<ResourceResponseDto>> getMenus(
+            @RequestParam(value = "name", required = false) String name,
+            @RequestParam(value = "title", required = false) String title,
+            @RequestParam(value = "permission", required = false) String permission,
+            @PageableDefault(size = 10, sort = "sort", direction = Sort.Direction.ASC) Pageable pageable
+    ) {
+        ResourceRequestDto query = new ResourceRequestDto();
+        query.setName(name);
+        query.setTitle(title);
+        query.setPermission(permission);
+        query.setType(ResourceType.MENU.getCode()); // 只查询菜单类型
+        
+        return ResponseEntity.ok(new PageResponse<>(resourceService.resources(query, pageable)));
+    }
+
+    /**
+     * 获取菜单树结构（type为0-目录，1-菜单）
+     * @return 菜单树
+     */
+    @GetMapping("/menus/tree")
+    public ResponseEntity<List<ResourceResponseDto>> getMenuTree() {
+        List<Resource> menuResources = resourceService.findByTypeIn(List.of(ResourceType.DIRECTORY, ResourceType.MENU));
+        List<ResourceResponseDto> tree = resourceService.buildResourceTree(menuResources);
+        return ResponseEntity.ok(tree);
+    }
+
+    /**
+     * 创建菜单
+     * @param resourceDto 菜单创建DTO
+     * @return 创建的菜单
+     */
+    @PostMapping("/menus")
+    public ResponseEntity<Resource> createMenu(@Valid @RequestBody ResourceCreateUpdateDto resourceDto) {
+        // 确保类型为目录或菜单
+        if (resourceDto.getType() == null || (resourceDto.getType() != ResourceType.DIRECTORY.getCode() && resourceDto.getType() != ResourceType.MENU.getCode())) {
+            resourceDto.setType(ResourceType.MENU.getCode());
+        }
+        
+        Resource resource = resourceService.createFromDto(resourceDto);
+        return ResponseEntity.ok(resource);
+    }
+
+    /**
+     * 更新菜单
+     * @param id 菜单ID
+     * @param resourceDto 菜单更新DTO
+     * @return 更新后的菜单
+     */
+    @PutMapping("/menus/{id}")
+    public ResponseEntity<Resource> updateMenu(@PathVariable("id") Long id, @Valid @RequestBody ResourceCreateUpdateDto resourceDto) {
+        // 设置ID
+        resourceDto.setId(id);
+        
+        // 确保类型为目录或菜单
+        if (resourceDto.getType() == null || (resourceDto.getType() != ResourceType.DIRECTORY.getCode() && resourceDto.getType() != ResourceType.MENU.getCode())) {
+            resourceDto.setType(ResourceType.MENU.getCode());
+        }
+        
+        Resource resource = resourceService.updateFromDto(resourceDto);
+        return ResponseEntity.ok(resource);
+    }
+
+    /**
+     * 删除菜单
+     * @param id 菜单ID
+     * @return 删除结果
+     */
+    @DeleteMapping("/menus/{id}")
+    public ResponseEntity<Void> deleteMenu(@PathVariable("id") Long id) {
+        resourceService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * 批量删除菜单
+     * @param ids 菜单ID列表
+     * @return 删除结果
+     */
+    @PostMapping("/menus/batch/delete")
+    public ResponseEntity<Map<String, Object>> batchDeleteMenus(@RequestBody List<Long> ids) {
+        try {
+            resourceService.batchDelete(ids);
+            return ResponseEntity.ok(Map.of("success", true, "message", "批量删除成功"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", e.getMessage()));
+        }
+    }
+
+    /**
+     * 更新菜单排序
+     * @param id 菜单ID
+     * @param sort 新的排序值
+     * @return 更新后的菜单
+     */
+    @PutMapping("/menus/{id}/sort")
+    public ResponseEntity<Resource> updateMenuSort(@PathVariable("id") Long id, @RequestParam("sort") Integer sort) {
+        Resource resource = resourceService.updateSort(id, sort);
+        return ResponseEntity.ok(resource);
+    }
+
+    // ==================== 通用资源API ====================
     
     /**
      * 根据资源类型获取资源列表
@@ -199,16 +312,16 @@ public class ResourceController {
     }
     
     /**
-     * 检查资源路径是否存在
-     * @param path 资源路径
+     * 检查资源URL是否存在
+     * @param url 资源URL
      * @param excludeId 要排除的资源ID
      * @return 是否存在
      */
-    @GetMapping("/check-path")
-    public ResponseEntity<Map<String, Boolean>> checkPathExists(
-            @RequestParam("path") String path,
+    @GetMapping("/check-url")
+    public ResponseEntity<Map<String, Boolean>> checkUrlExists(
+            @RequestParam("url") String url,
             @RequestParam(value = "excludeId", required = false) Long excludeId) {
-        boolean exists = resourceService.existsByPath(path, excludeId);
+        boolean exists = resourceService.existsByUrl(url, excludeId);
         return ResponseEntity.ok(Map.of("exists", exists));
     }
     
@@ -229,7 +342,7 @@ public class ResourceController {
     /**
      * 递归获取所有子资源
      * @param resources 资源列表
-     * @return 包含所有子资源的完整列表
+     * @return 包含子资源的完整列表
      */
     private List<Resource> getAllResourcesRecursively(List<Resource> resources) {
         List<Resource> allResources = new java.util.ArrayList<>(resources);

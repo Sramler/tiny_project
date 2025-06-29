@@ -78,6 +78,13 @@ public interface ResourceService {
     List<Resource> findByType(ResourceType type);
     
     /**
+     * 根据多个资源类型查找资源
+     * @param types 资源类型列表
+     * @return 资源列表
+     */
+    List<Resource> findByTypeIn(List<ResourceType> types);
+    
+    /**
      * 根据父级ID查找子资源
      * @param parentId 父级资源ID
      * @return 子资源列表
@@ -105,11 +112,11 @@ public interface ResourceService {
     Optional<Resource> findByName(String name);
     
     /**
-     * 根据路径查找资源
-     * @param path 前端路径
+     * 根据URL查找资源
+     * @param url 前端路径
      * @return 资源对象
      */
-    Optional<Resource> findByPath(String path);
+    Optional<Resource> findByUrl(String url);
     
     /**
      * 根据URI查找资源
@@ -134,12 +141,12 @@ public interface ResourceService {
     boolean existsByName(String name, Long excludeId);
     
     /**
-     * 检查资源路径是否存在
-     * @param path 前端路径
+     * 检查资源URL是否存在
+     * @param url 前端路径
      * @param excludeId 要排除的资源ID
      * @return 是否存在
      */
-    boolean existsByPath(String path, Long excludeId);
+    boolean existsByUrl(String url, Long excludeId);
     
     /**
      * 检查资源URI是否存在

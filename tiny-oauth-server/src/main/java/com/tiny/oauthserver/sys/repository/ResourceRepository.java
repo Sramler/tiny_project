@@ -2,6 +2,8 @@ package com.tiny.oauthserver.sys.repository;
 
 import com.tiny.oauthserver.sys.enums.ResourceType;
 import com.tiny.oauthserver.sys.model.Resource;
+import com.tiny.oauthserver.sys.model.ResourceProjection;
+import com.tiny.oauthserver.sys.model.ResourceResponseDto;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -27,6 +29,13 @@ public interface ResourceRepository extends JpaRepository<Resource, Long> {
     List<Resource> findByTypeOrderBySortAsc(ResourceType type);
     
     /**
+     * 根据多个资源类型查找资源
+     * @param types 资源类型列表
+     * @return 资源列表
+     */
+    List<Resource> findByTypeInOrderBySortAsc(List<ResourceType> types);
+    
+    /**
      * 根据父级ID查找子资源
      * @param parentId 父级资源ID
      * @return 子资源列表
@@ -47,11 +56,11 @@ public interface ResourceRepository extends JpaRepository<Resource, Long> {
     Optional<Resource> findByName(String name);
     
     /**
-     * 根据路径查找资源
-     * @param path 前端路径
+     * 根据URL查找资源
+     * @param url 前端路径
      * @return 资源对象
      */
-    Optional<Resource> findByPath(String path);
+    Optional<Resource> findByUrl(String url);
     
     /**
      * 根据URI查找资源
@@ -98,12 +107,12 @@ public interface ResourceRepository extends JpaRepository<Resource, Long> {
     Page<Resource> findByTitleContainingIgnoreCaseOrderBySortAsc(String title, Pageable pageable);
     
     /**
-     * 根据路径模糊查询资源
-     * @param path 前端路径（模糊匹配）
+     * 根据URL模糊查询资源
+     * @param url 前端路径（模糊匹配）
      * @param pageable 分页参数
      * @return 分页结果
      */
-    Page<Resource> findByPathContainingIgnoreCaseOrderBySortAsc(String path, Pageable pageable);
+    Page<Resource> findByUrlContainingIgnoreCaseOrderBySortAsc(String url, Pageable pageable);
     
     /**
      * 根据URI模糊查询资源
@@ -146,12 +155,12 @@ public interface ResourceRepository extends JpaRepository<Resource, Long> {
     boolean existsByNameAndIdNot(String name, Long id);
     
     /**
-     * 检查是否存在指定路径的资源（排除指定ID）
-     * @param path 前端路径
+     * 检查是否存在指定URL的资源（排除指定ID）
+     * @param url 前端路径
      * @param id 要排除的资源ID
      * @return 是否存在
      */
-    boolean existsByPathAndIdNot(String path, Long id);
+    boolean existsByUrlAndIdNot(String url, Long id);
     
     /**
      * 检查是否存在指定URI的资源（排除指定ID）
@@ -187,7 +196,7 @@ public interface ResourceRepository extends JpaRepository<Resource, Long> {
     /**
      * 复合查询：根据多个条件查询资源
      * @param name 资源名称（可选）
-     * @param path 前端路径（可选）
+     * @param url 前端路径（可选）
      * @param uri 后端API路径（可选）
      * @param permission 权限标识（可选）
      * @param title 显示标题（可选）
@@ -198,18 +207,18 @@ public interface ResourceRepository extends JpaRepository<Resource, Long> {
      * @return 分页结果
      */
     @Query("SELECT r FROM Resource r WHERE " +
-           "(:name IS NULL OR r.name LIKE %:name%) AND " +
-           "(:path IS NULL OR r.path LIKE %:path%) AND " +
-           "(:uri IS NULL OR r.uri LIKE %:uri%) AND " +
-           "(:permission IS NULL OR r.permission LIKE %:permission%) AND " +
-           "(:title IS NULL OR r.title LIKE %:title%) AND " +
-           "(:type IS NULL OR r.type = :type) AND " +
-           "(:parentId IS NULL OR r.parentId = :parentId) AND " +
-           "(:hidden IS NULL OR r.hidden = :hidden) " +
+           //"(:name IS NULL OR r.name LIKE %:name%) AND " +
+           //"(:url IS NULL OR r.url LIKE %:url%) AND " +
+           //"(:uri IS NULL OR r.uri LIKE %:uri%) AND " +
+           //"(:permission IS NULL OR r.permission LIKE %:permission%) AND " +
+           //"(:title IS NULL OR r.title LIKE %:title%) AND " +
+           //"(:hidden IS NULL OR r.hidden = :hidden) AND " +
+            "(:type IS NULL OR r.type = :type) AND " +
+           "r.parentId = :parentId " +
            "ORDER BY r.sort ASC")
     Page<Resource> findByConditions(
             @Param("name") String name,
-            @Param("path") String path,
+            @Param("url") String url,
             @Param("uri") String uri,
             @Param("permission") String permission,
             @Param("title") String title,
@@ -218,4 +227,160 @@ public interface ResourceRepository extends JpaRepository<Resource, Long> {
             @Param("hidden") Boolean hidden,
             Pageable pageable
     );
+    
+    /**
+     * 根据资源类型列表删除资源
+     * @param types 资源类型列表
+     */
+    void deleteByTypeIn(List<ResourceType> types);
+
+    /**
+     * 根据类型列表和父级ID分页查询资源（用于菜单分页，type=0/1）
+     * @param types 资源类型列表
+     * @param parentId 父级ID
+     * @param pageable 分页参数
+     * @return 分页结果
+     */
+    Page<Resource> findByTypeInAndParentId(List<ResourceType> types, Long parentId, Pageable pageable);
+
+    /**
+     * 多条件分页查询菜单（type IN、parentId、title、name、permission、enabled）
+     * @param types 菜单类型列表（0/1）
+     * @param parentId 父级ID
+     * @param title 菜单标题（模糊）
+     * @param name 菜单名称（模糊）
+     * @param permission 权限标识（模糊）
+     * @param enabled 是否启用
+     * @param pageable 分页参数
+     * @return 分页结果
+     */
+    @Query("""
+    SELECT r FROM Resource r
+    WHERE (:parentId IS NULL OR r.parentId = :parentId)
+      AND (COALESCE(:types, NULL) IS NULL OR r.type IN :types)
+      AND (:title IS NULL OR r.title LIKE %:title%)
+      AND (:name IS NULL OR r.name LIKE %:name%)
+      AND (:permission IS NULL OR r.permission LIKE %:permission%)
+      AND (:enabled IS NULL OR r.enabled = :enabled)
+    ORDER BY r.sort ASC
+    """)
+    Page<Resource> findMenusByConditions(
+        @Param("types") List<ResourceType> types,
+        @Param("parentId") Long parentId,
+        @Param("title") String title,
+        @Param("name") String name,
+        @Param("permission") String permission,
+        @Param("enabled") Boolean enabled,
+        Pageable pageable
+    );
+
+    /**
+     * 判断是否存在指定父ID的资源（用于判断是否叶子节点）
+     * @param parentId 父级资源ID
+     * @return 是否存在
+     */
+    boolean existsByParentId(Long parentId);
+
+    /**
+     * 原生SQL方式分页查询菜单，直接返回leaf字段
+     */
+    @Query(value = """
+    SELECT r.id,
+           r.name,
+           r.title,
+           r.url,
+           r.icon,
+           r.show_icon AS showIcon,
+           r.sort,
+           r.component,
+           r.redirect,
+           r.hidden,
+           r.keep_alive AS keepAlive,
+           r.permission,
+           r.type,
+           r.parent_id AS parentId,
+           NOT EXISTS (
+               SELECT 1 FROM resource c WHERE c.parent_id = r.id
+           ) AS leaf
+    FROM resource r
+    WHERE (:parentId IS NULL OR r.parent_id = :parentId)
+      AND (:title IS NULL OR r.title LIKE CONCAT('%', :title, '%'))
+      AND (:name IS NULL OR r.name LIKE CONCAT('%', :name, '%'))
+      AND (:permission IS NULL OR r.permission LIKE CONCAT('%', :permission, '%'))
+      AND (:enabled IS NULL OR r.enabled = :enabled)
+      AND (:typesSize = 0 OR r.type IN (:types))
+    ORDER BY r.sort ASC
+    """,
+            countQuery = """
+    SELECT COUNT(*) FROM resource r
+    WHERE (:parentId IS NULL OR r.parent_id = :parentId)
+      AND (:title IS NULL OR r.title LIKE CONCAT('%', :title, '%'))
+      AND (:name IS NULL OR r.name LIKE CONCAT('%', :name, '%'))
+      AND (:permission IS NULL OR r.permission LIKE CONCAT('%', :permission, '%'))
+      AND (:enabled IS NULL OR r.enabled = :enabled)
+      AND (:typesSize = 0 OR r.type IN (:types))
+    """,
+            nativeQuery = true
+    )
+    Page<ResourceProjection> findMenusByNativeSql(
+            @Param("types") List<Integer> types,
+            @Param("typesSize") int typesSize,
+            @Param("parentId") Long parentId,
+            @Param("title") String title,
+            @Param("name") String name,
+            @Param("permission") String permission,
+            @Param("enabled") Boolean enabled,
+            Pageable pageable
+    );
+
+    /**
+     * JPQL DTO投影方式分页查询菜单，leaf字段用子查询
+     */
+    @Query("""
+    SELECT new com.tiny.oauthserver.sys.model.ResourceResponseDto(
+        r.id, r.name, r.title, r.url, r.icon, r.showIcon, r.sort,
+        r.component, r.redirect, r.hidden, r.keepAlive, r.permission,
+        r.type, r.parentId,
+        (SELECT COUNT(c) FROM Resource c WHERE c.parentId = r.id) = 0
+    )
+    FROM Resource r
+    WHERE (:parentId IS NULL OR r.parentId = :parentId)
+      AND (:title IS NULL OR r.title LIKE %:title%)
+      AND (:name IS NULL OR r.name LIKE %:name%)
+      AND (:permission IS NULL OR r.permission LIKE %:permission%)
+      AND (:enabled IS NULL OR r.enabled = :enabled)
+      AND (COALESCE(:types, NULL) IS NULL OR r.type IN :types)
+    ORDER BY r.sort ASC
+""")
+    Page<ResourceResponseDto> findMenusByJpqlDto(
+            @Param("types") List<Integer> types,
+            @Param("parentId") Long parentId,
+            @Param("title") String title,
+            @Param("name") String name,
+            @Param("permission") String permission,
+            @Param("enabled") Boolean enabled,
+            Pageable pageable
+    );
+
+    /**
+     * 根据类型列表和父级ID查询菜单（用于按层级加载）
+     * @param types 资源类型列表
+     * @param parentId 父级ID
+     * @return 菜单列表
+     */
+    List<Resource> findByTypeInAndParentIdOrderBySortAsc(List<ResourceType> types, Long parentId);
+    
+    /**
+     * 根据类型列表查询顶级菜单（parentId为null）
+     * @param types 资源类型列表
+     * @return 顶级菜单列表
+     */
+    List<Resource> findByTypeInAndParentIdIsNullOrderBySortAsc(List<ResourceType> types);
+    
+    /**
+     * 根据父级ID列表查询资源（用于批量判断叶子节点）
+     * @param parentIds 父级ID列表
+     * @return 资源列表
+     */
+    List<Resource> findByParentIdIn(List<Long> parentIds);
 }

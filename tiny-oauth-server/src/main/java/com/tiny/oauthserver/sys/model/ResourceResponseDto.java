@@ -9,7 +9,7 @@ import java.util.Set;
  * 用于返回给前端的数据
  */
 public class ResourceResponseDto {
-    
+
     /**
      * 资源ID
      */
@@ -28,7 +28,7 @@ public class ResourceResponseDto {
     /**
      * 前端路由路径
      */
-    private String path;
+    private String url;
     
     /**
      * 后端API路径
@@ -99,7 +99,15 @@ public class ResourceResponseDto {
      * 子资源列表
      */
     private Set<ResourceResponseDto> children;
-    
+    /**
+     * 是否叶子节点
+     */
+    private boolean leaf;
+
+    public ResourceResponseDto() {
+
+    }
+
     // Getters and Setters
     public Long getId() {
         return id;
@@ -125,12 +133,12 @@ public class ResourceResponseDto {
         this.title = title;
     }
     
-    public String getPath() {
-        return path;
+    public String getUrl() {
+        return url;
     }
     
-    public void setPath(String path) {
-        this.path = path;
+    public void setUrl(String url) {
+        this.url = url;
     }
     
     public String getUri() {
@@ -236,12 +244,47 @@ public class ResourceResponseDto {
     public void setParentId(Long parentId) {
         this.parentId = parentId;
     }
-    
+
+    public boolean isLeaf() {
+        return leaf;
+    }
+
+    public void setLeaf(boolean leaf) {
+        this.leaf = leaf;
+    }
+
     public Set<ResourceResponseDto> getChildren() {
         return children;
     }
     
     public void setChildren(Set<ResourceResponseDto> children) {
         this.children = children;
+    }
+
+
+
+    // 新增构造方法，便于SQL/JPQL投影
+// 注意 type 用 ResourceType 枚举
+    public ResourceResponseDto(
+            Long id, String name, String title, String url, String icon,
+            Boolean showIcon, Integer sort, String component, String redirect,
+            Boolean hidden, Boolean keepAlive, String permission,
+            ResourceType type, Long parentId, boolean leaf
+    ) {
+        this.id = id;
+        this.name = name;
+        this.title = title;
+        this.url = url;
+        this.icon = icon;
+        this.showIcon = showIcon != null && showIcon;
+        this.sort = sort;
+        this.component = component;
+        this.redirect = redirect;
+        this.hidden = hidden != null && hidden;
+        this.keepAlive = keepAlive != null && keepAlive;
+        this.permission = permission;
+        this.type = type != null ? type.getCode() : null;
+        this.parentId = parentId;
+        this.leaf = leaf;
     }
 } 

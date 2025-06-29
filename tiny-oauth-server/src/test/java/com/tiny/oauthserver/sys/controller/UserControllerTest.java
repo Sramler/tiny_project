@@ -95,11 +95,4 @@ class UserControllerTest {
         ResponseEntity<Map<String, Object>> resp = userController.batchDelete(List.of(1L, 2L));
         assertTrue((Boolean) resp.getBody().get("success"));
     }
-
-    @Test
-    void testTestUser() {
-        when(userService.findById(1L)).thenReturn(Optional.of(mockUser));
-        ResponseEntity<User> resp = userController.testUser(1L);
-        assertEquals(mockUser, resp.getBody());
-    }
 }

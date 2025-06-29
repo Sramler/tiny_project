@@ -18,20 +18,20 @@ function generateMenuRoutes(menuList: any[]): any[] {
   const routes: any[] = []
   for (const item of menuList) {
     // 跳过特殊错误页，避免 DefaultView 覆盖
-    if (['/403', '/404', '/500'].includes(item.path)) continue
-    if (item.path) {
+    if (['/403', '/404', '/500'].includes(item.url)) continue
+    if (item.url) {
       let component
       if (item.component) {
         // 只需要 ../views/xxx.vue
         const compPath = `../views${item.component.replace('/views', '')}`
-        console.log('注册路由:', item.path, '组件路径:', compPath) // 调试输出
+        console.log('注册路由:', item.url, '组件路径:', compPath) // 调试输出
         component = () => import(/* @vite-ignore */ compPath)
       } else {
         // 没有 component 字段时 fallback 到 DefaultView
         component = DefaultView
       }
       routes.push({
-        path: item.path, // 保持和菜单 path 完全一致
+        path: item.url, // 使用 url 字段作为路由路径
         component,
         meta: { menuInfo: item },
       })

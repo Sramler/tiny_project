@@ -32,7 +32,7 @@ public class ResourceCreateUpdateDto {
      * 前端路由路径
      */
     @Size(max = 200, message = "前端路径长度不能超过200个字符")
-    private String path;
+    private String url;
     
     /**
      * 后端API路径
@@ -128,12 +128,12 @@ public class ResourceCreateUpdateDto {
         this.title = title;
     }
     
-    public String getPath() {
-        return path;
+    public String getUrl() {
+        return url;
     }
     
-    public void setPath(String path) {
-        this.path = path;
+    public void setUrl(String url) {
+        this.url = url;
     }
     
     public String getUri() {

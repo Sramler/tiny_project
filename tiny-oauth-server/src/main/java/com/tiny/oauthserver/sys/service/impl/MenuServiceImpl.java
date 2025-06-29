@@ -1,340 +1,576 @@
 package com.tiny.oauthserver.sys.service.impl;
 
+import com.tiny.oauthserver.sys.enums.ResourceType;
 import com.tiny.oauthserver.sys.model.*;
-import com.tiny.oauthserver.sys.repository.MenuRepository;
+import com.tiny.oauthserver.sys.repository.ResourceRepository;
 import com.tiny.oauthserver.sys.service.MenuService;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.util.*;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.Query;
+import jakarta.persistence.TypedQuery;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
+import java.util.HashSet;
+import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.Set;
+import java.util.Objects;
 
 /**
- * 菜单服务实现类
+ * 菜单业务实现类，专注于 type=0/1 的菜单和目录
  */
 @Service
 public class MenuServiceImpl implements MenuService {
+    private final ResourceRepository resourceRepository;
+    
+    @PersistenceContext
+    private EntityManager entityManager; // 注入 EntityManager 用于原生 Hibernate 查询
 
-    private final MenuRepository menuRepository;
-
-    public MenuServiceImpl(MenuRepository menuRepository) {
-        this.menuRepository = menuRepository;
-    }
-
-    @Override
-    public Page<MenuResponseDto> menus(MenuRequestDto query, Pageable pageable) {
-        // 构建查询条件
-        String name = StringUtils.hasText(query.getName()) ? query.getName() : null;
-        String title = StringUtils.hasText(query.getTitle()) ? query.getTitle() : null;
-        String path = StringUtils.hasText(query.getPath()) ? query.getPath() : null;
-        String permission = StringUtils.hasText(query.getPermission()) ? query.getPermission() : null;
-        Long parentId = query.getParentId();
-        Boolean hidden = query.getHidden();
-
-        // 根据条件查询
-        Page<Menu> menus;
-        if (name != null) {
-            menus = menuRepository.findByNameContainingIgnoreCaseOrderBySortAsc(name, pageable);
-        } else if (title != null) {
-            menus = menuRepository.findByTitleContainingIgnoreCaseOrderBySortAsc(title, pageable);
-        } else if (path != null) {
-            menus = menuRepository.findByPathContainingIgnoreCaseOrderBySortAsc(path, pageable);
-        } else if (permission != null) {
-            menus = menuRepository.findByPermissionContainingIgnoreCaseOrderBySortAsc(permission, pageable);
-        } else if (parentId != null) {
-            menus = menuRepository.findByParentIdOrderBySortAsc(parentId, pageable);
-        } else if (hidden != null) {
-            // 由于findByHiddenOrderBySortAsc返回List，需要手动分页
-            List<Menu> allMenus = menuRepository.findByHiddenOrderBySortAsc(hidden);
-            int start = (int) pageable.getOffset();
-            int end = Math.min((start + pageable.getPageSize()), allMenus.size());
-            List<Menu> pageContent = allMenus.subList(start, end);
-            menus = new org.springframework.data.domain.PageImpl<>(pageContent, pageable, allMenus.size());
-        } else {
-            // 默认查询所有菜单
-            menus = menuRepository.findAll(pageable);
-        }
-
-        // 转换为DTO
-        return menus.map(this::toDto);
-    }
-
-    @Override
-    public Optional<Menu> findById(Long id) {
-        return menuRepository.findById(id);
-    }
-
-    @Override
-    public Menu create(Menu menu) {
-        return menuRepository.save(menu);
-    }
-
-    @Override
-    public Menu update(Long id, Menu menu) {
-        Menu existingMenu = menuRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("菜单不存在"));
-        
-        // 更新字段
-        existingMenu.setName(menu.getName());
-        existingMenu.setTitle(menu.getTitle());
-        existingMenu.setPath(menu.getPath());
-        existingMenu.setIcon(menu.getIcon());
-        existingMenu.setShowIcon(menu.isShowIcon());
-        existingMenu.setSort(menu.getSort());
-        existingMenu.setComponent(menu.getComponent());
-        existingMenu.setRedirect(menu.getRedirect());
-        existingMenu.setHidden(menu.isHidden());
-        existingMenu.setKeepAlive(menu.isKeepAlive());
-        existingMenu.setPermission(menu.getPermission());
-        existingMenu.setParentId(menu.getParentId());
-        
-        return menuRepository.save(existingMenu);
-    }
-
-    @Override
-    public Menu createFromDto(MenuCreateUpdateDto menuDto) {
-        // 检查名称是否已存在
-        if (menuRepository.findByName(menuDto.getName()).isPresent()) {
-            throw new RuntimeException("菜单名称已存在");
-        }
-        
-        // 检查路径是否已存在（如果提供了路径）
-        if (StringUtils.hasText(menuDto.getPath()) && 
-            menuRepository.findByPath(menuDto.getPath()).isPresent()) {
-            throw new RuntimeException("菜单路径已存在");
-        }
-        
-        // 创建菜单对象
-        Menu menu = new Menu();
-        menu.setName(menuDto.getName());
-        menu.setTitle(menuDto.getTitle());
-        menu.setPath(menuDto.getPath());
-        menu.setIcon(menuDto.getIcon());
-        menu.setShowIcon(menuDto.isShowIcon());
-        menu.setSort(menuDto.getSort());
-        menu.setComponent(menuDto.getComponent());
-        menu.setRedirect(menuDto.getRedirect());
-        menu.setHidden(menuDto.isHidden());
-        menu.setKeepAlive(menuDto.isKeepAlive());
-        menu.setPermission(menuDto.getPermission());
-        menu.setParentId(menuDto.getParentId());
-        
-        return menuRepository.save(menu);
-    }
-
-    @Override
-    public Menu updateFromDto(MenuCreateUpdateDto menuDto) {
-        Menu existingMenu = menuRepository.findById(menuDto.getId())
-                .orElseThrow(() -> new RuntimeException("菜单不存在"));
-        
-        // 检查名称是否已被其他菜单使用
-        Optional<Menu> menuWithSameName = menuRepository.findByName(menuDto.getName());
-        if (menuWithSameName.isPresent() && !menuWithSameName.get().getId().equals(menuDto.getId())) {
-            throw new RuntimeException("菜单名称已被其他菜单使用");
-        }
-        
-        // 检查路径是否已被其他菜单使用（如果提供了路径）
-        if (StringUtils.hasText(menuDto.getPath())) {
-            Optional<Menu> menuWithSamePath = menuRepository.findByPath(menuDto.getPath());
-            if (menuWithSamePath.isPresent() && !menuWithSamePath.get().getId().equals(menuDto.getId())) {
-                throw new RuntimeException("菜单路径已被其他菜单使用");
-            }
-        }
-        
-        // 更新字段
-        existingMenu.setName(menuDto.getName());
-        existingMenu.setTitle(menuDto.getTitle());
-        existingMenu.setPath(menuDto.getPath());
-        existingMenu.setIcon(menuDto.getIcon());
-        existingMenu.setShowIcon(menuDto.isShowIcon());
-        existingMenu.setSort(menuDto.getSort());
-        existingMenu.setComponent(menuDto.getComponent());
-        existingMenu.setRedirect(menuDto.getRedirect());
-        existingMenu.setHidden(menuDto.isHidden());
-        existingMenu.setKeepAlive(menuDto.isKeepAlive());
-        existingMenu.setPermission(menuDto.getPermission());
-        existingMenu.setParentId(menuDto.getParentId());
-        
-        return menuRepository.save(existingMenu);
-    }
-
-    @Override
-    @Transactional
-    public void delete(Long id) {
-        // 检查是否有子菜单
-        List<Menu> children = menuRepository.findByParentIdOrderBySortAsc(id);
-        if (!children.isEmpty()) {
-            throw new RuntimeException("无法删除有子菜单的菜单，请先删除子菜单");
-        }
-        
-        menuRepository.deleteById(id);
-    }
-
-    @Override
-    @Transactional
-    public void batchDelete(List<Long> ids) {
-        // 检查是否有菜单包含子菜单
-        for (Long id : ids) {
-            List<Menu> children = menuRepository.findByParentIdOrderBySortAsc(id);
-            if (!children.isEmpty()) {
-                throw new RuntimeException("无法删除有子菜单的菜单，请先删除子菜单");
-            }
-        }
-        
-        menuRepository.deleteAllById(ids);
-    }
-
-    @Override
-    public List<Menu> findByParentId(Long parentId) {
-        return menuRepository.findByParentIdOrderBySortAsc(parentId);
-    }
-
-    @Override
-    public List<Menu> findTopLevel() {
-        return menuRepository.findByParentIdIsNullOrderBySortAsc();
-    }
-
-    @Override
-    public List<MenuResponseDto> buildMenuTree(List<Menu> menus) {
-        // 构建ID到菜单的映射
-        Map<Long, MenuResponseDto> menuMap = new HashMap<>();
-        List<MenuResponseDto> rootMenus = new ArrayList<>();
-        
-        // 转换为DTO并建立映射
-        for (Menu menu : menus) {
-            MenuResponseDto dto = toDto(menu);
-            menuMap.put(menu.getId(), dto);
-        }
-        
-        // 构建树形结构
-        for (Menu menu : menus) {
-            MenuResponseDto dto = menuMap.get(menu.getId());
-            if (menu.getParentId() == null) {
-                // 顶级菜单
-                rootMenus.add(dto);
-            } else {
-                // 子菜单
-                MenuResponseDto parent = menuMap.get(menu.getParentId());
-                if (parent != null) {
-                    if (parent.getChildren() == null) {
-                        parent.setChildren(new HashSet<>());
-                    }
-                    parent.getChildren().add(dto);
-                }
-            }
-        }
-        
-        return rootMenus;
-    }
-
-    @Override
-    public Optional<Menu> findByName(String name) {
-        return menuRepository.findByName(name);
-    }
-
-    @Override
-    public Optional<Menu> findByPath(String path) {
-        return menuRepository.findByPath(path);
-    }
-
-    @Override
-    public List<Menu> findByPermission(String permission) {
-        return menuRepository.findByPermission(permission);
-    }
-
-    @Override
-    public List<Menu> findByHidden(boolean hidden) {
-        return menuRepository.findByHiddenOrderBySortAsc(hidden);
-    }
-
-    @Override
-    public boolean existsByName(String name, Long excludeId) {
-        if (excludeId == null) {
-            return menuRepository.findByName(name).isPresent();
-        }
-        return menuRepository.existsByNameAndIdNot(name, excludeId);
-    }
-
-    @Override
-    public boolean existsByPath(String path, Long excludeId) {
-        if (excludeId == null) {
-            return menuRepository.findByPath(path).isPresent();
-        }
-        return menuRepository.existsByPathAndIdNot(path, excludeId);
-    }
-
-    @Override
-    public Menu updateSort(Long id, Integer sort) {
-        Menu menu = menuRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("菜单不存在"));
-        menu.setSort(sort);
-        return menuRepository.save(menu);
-    }
-
-    @Override
-    @Transactional
-    public void batchUpdateSort(List<MenuSortDto> sortData) {
-        for (MenuSortDto sortDto : sortData) {
-            Menu menu = menuRepository.findById(sortDto.getId())
-                    .orElseThrow(() -> new RuntimeException("菜单不存在: " + sortDto.getId()));
-            menu.setSort(sortDto.getSort());
-            if (sortDto.getParentId() != null) {
-                menu.setParentId(sortDto.getParentId());
-            }
-            menuRepository.save(menu);
-        }
-    }
-
-    @Override
-    public List<MenuResponseDto> getAllMenuTree() {
-        List<Menu> allMenus = menuRepository.findAll();
-        return buildMenuTree(allMenus);
-    }
-
-    @Override
-    public List<Menu> findByRoleId(Long roleId) {
-        // TODO: 实现根据角色ID查找菜单的逻辑
-        // 这需要关联查询用户-角色-菜单表
-        return new ArrayList<>();
-    }
-
-    @Override
-    public List<Menu> findByUserId(Long userId) {
-        // TODO: 实现根据用户ID查找菜单的逻辑
-        // 这需要关联查询用户-角色-菜单表
-        return new ArrayList<>();
-    }
-
-    @Override
-    public List<MenuResponseDto> getUserMenuTree(Long userId) {
-        // TODO: 实现获取用户可见菜单树的逻辑
-        // 这需要关联查询用户-角色-菜单表，并过滤掉隐藏的菜单
-        return new ArrayList<>();
+    public MenuServiceImpl(ResourceRepository resourceRepository) {
+        this.resourceRepository = resourceRepository;
     }
 
     /**
-     * 将Menu实体转换为MenuResponseDto
+     * 分页查询菜单（支持type、parentId、title、enabled多条件）
      */
-    private MenuResponseDto toDto(Menu menu) {
-        MenuResponseDto dto = new MenuResponseDto();
-        dto.setId(menu.getId());
-        dto.setName(menu.getName());
-        dto.setTitle(menu.getTitle());
-        dto.setPath(menu.getPath());
-        dto.setIcon(menu.getIcon());
-        dto.setShowIcon(menu.isShowIcon());
-        dto.setSort(menu.getSort());
-        dto.setComponent(menu.getComponent());
-        dto.setRedirect(menu.getRedirect());
-        dto.setHidden(menu.isHidden());
-        dto.setKeepAlive(menu.isKeepAlive());
-        dto.setPermission(menu.getPermission());
-        dto.setParentId(menu.getParentId());
-        dto.setChildren(new HashSet<>());
+    @Override
+    public Page<ResourceResponseDto> menus(ResourceRequestDto query, Pageable pageable) {
+        // 查询 type=0/1（目录和菜单）
+        List<ResourceType> types = List.of(ResourceType.DIRECTORY, ResourceType.MENU); // 目录和菜单
+        List<Integer> typeCodes = types.stream().map(ResourceType::getCode).toList();
+        
+        // 原生 Hibernate 方式（推荐使用）
+        return findMenusByNativeHibernate(query, typeCodes, pageable);
+        
+        // 原生SQL方式，直接返回leaf字段（如需切换，取消注释即可）
+        // return findMenusByNativeSql(query, typeCodes, pageable);
+        
+        // JPQL DTO投影方式（如需切换，取消注释即可）
+        // return findMenusByJpqlDto(query, typeCodes, pageable);
+    }
+    
+    /**
+     * 原生 Hibernate 方式分页查询菜单
+     * 使用 EntityManager 和原生 SQL，性能最优
+     */
+    private Page<ResourceResponseDto> findMenusByNativeHibernate(ResourceRequestDto query, List<Integer> typeCodes, Pageable pageable) {
+        // 构建动态 SQL 查询条件
+        StringBuilder sqlBuilder = new StringBuilder();
+        StringBuilder countSqlBuilder = new StringBuilder();
+        
+        // 主查询 SQL
+        sqlBuilder.append("""
+            SELECT r.id,
+                   r.name,
+                   r.title,
+                   r.url,
+                   r.icon,
+                   r.show_icon AS showIcon,
+                   r.sort,
+                   r.component,
+                   r.redirect,
+                   r.hidden,
+                   r.keep_alive AS keepAlive,
+                   r.permission,
+                   r.type,
+                   r.parent_id AS parentId,
+                   CASE WHEN EXISTS (
+                       SELECT 1 FROM resource c WHERE c.parent_id = r.id
+                   ) THEN 0 ELSE 1 END AS leaf
+            FROM resource r
+            WHERE 1=1
+            """);
+        
+        // 计数查询 SQL
+        countSqlBuilder.append("""
+            SELECT COUNT(*) FROM resource r WHERE 1=1
+            """);
+        
+        // 动态添加查询条件
+        if (query.getParentId() != null) {
+            sqlBuilder.append(" AND r.parent_id = :parentId");
+            countSqlBuilder.append(" AND r.parent_id = :parentId");
+        }
+        
+        if (StringUtils.hasText(query.getTitle())) {
+            sqlBuilder.append(" AND r.title LIKE :title");
+            countSqlBuilder.append(" AND r.title LIKE :title");
+        }
+        
+        if (StringUtils.hasText(query.getName())) {
+            sqlBuilder.append(" AND r.name LIKE :name");
+            countSqlBuilder.append(" AND r.name LIKE :name");
+        }
+        
+        if (StringUtils.hasText(query.getPermission())) {
+            sqlBuilder.append(" AND r.permission LIKE :permission");
+            countSqlBuilder.append(" AND r.permission LIKE :permission");
+        }
+        
+        if (query.getEnabled() != null) {
+            sqlBuilder.append(" AND r.enabled = :enabled");
+            countSqlBuilder.append(" AND r.enabled = :enabled");
+        }
+        
+        // 添加类型过滤条件
+        sqlBuilder.append(" AND r.type IN (:types)");
+        countSqlBuilder.append(" AND r.type IN (:types)");
+        
+        // 添加排序
+        sqlBuilder.append(" ORDER BY r.sort ASC");
+        
+        // 创建查询对象
+        Query sqlQuery = entityManager.createNativeQuery(sqlBuilder.toString());
+        Query countQuery = entityManager.createNativeQuery(countSqlBuilder.toString());
+        
+        // 设置查询参数
+        if (query.getParentId() != null) {
+            sqlQuery.setParameter("parentId", query.getParentId());
+            countQuery.setParameter("parentId", query.getParentId());
+        }
+        
+        if (StringUtils.hasText(query.getTitle())) {
+            sqlQuery.setParameter("title", "%" + query.getTitle() + "%");
+            countQuery.setParameter("title", "%" + query.getTitle() + "%");
+        }
+        
+        if (StringUtils.hasText(query.getName())) {
+            sqlQuery.setParameter("name", "%" + query.getName() + "%");
+            countQuery.setParameter("name", "%" + query.getName() + "%");
+        }
+        
+        if (StringUtils.hasText(query.getPermission())) {
+            sqlQuery.setParameter("permission", "%" + query.getPermission() + "%");
+            countQuery.setParameter("permission", "%" + query.getPermission() + "%");
+        }
+        
+        if (query.getEnabled() != null) {
+            sqlQuery.setParameter("enabled", query.getEnabled());
+            countQuery.setParameter("enabled", query.getEnabled());
+        }
+        
+        sqlQuery.setParameter("types", typeCodes);
+        countQuery.setParameter("types", typeCodes);
+        
+        // 设置分页参数
+        sqlQuery.setFirstResult((int) pageable.getOffset());
+        sqlQuery.setMaxResults(pageable.getPageSize());
+        
+        // 执行查询
+        List<Object[]> results = sqlQuery.getResultList();
+        Long total = ((Number) countQuery.getSingleResult()).longValue();
+        
+        // 转换结果
+        List<ResourceResponseDto> dtos = results.stream()
+            .map(this::mapToResourceResponseDto)
+            .collect(Collectors.toList());
+        
+        return new PageImpl<>(dtos, pageable, total);
+    }
+    
+    /**
+     * 将查询结果映射为 ResourceResponseDto
+     */
+    private ResourceResponseDto mapToResourceResponseDto(Object[] row) {
+        ResourceResponseDto dto = new ResourceResponseDto();
+        
+        // 按查询字段顺序映射（与 SQL SELECT 字段顺序一致）
+        dto.setId(((Number) row[0]).longValue()); // id
+        dto.setName((String) row[1]); // name
+        dto.setTitle((String) row[2]); // title
+        dto.setUrl((String) row[3]); // url
+        dto.setIcon((String) row[4]); // icon
+        dto.setShowIcon(Boolean.TRUE.equals(row[5])); // showIcon
+        dto.setSort(safeToInteger(row[6])); // sort - 安全转换为 Integer
+        dto.setComponent((String) row[7]); // component
+        dto.setRedirect((String) row[8]); // redirect
+        dto.setHidden(Boolean.TRUE.equals(row[9])); // hidden
+        dto.setKeepAlive(Boolean.TRUE.equals(row[10])); // keepAlive
+        dto.setPermission((String) row[11]); // permission
+        dto.setType(safeToInteger(row[12])); // type - 安全转换为 Integer
+        dto.setParentId(row[13] != null ? ((Number) row[13]).longValue() : null); // parentId
+        dto.setLeaf(safeToBoolean(row[14])); // leaf - 安全转换为 Boolean
+        
         return dto;
+    }
+    
+    /**
+     * 安全地将对象转换为 Integer
+     * 处理 Byte、Short、Integer 等数字类型
+     */
+    private Integer safeToInteger(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Integer) {
+            return (Integer) value;
+        }
+        if (value instanceof Byte) {
+            return ((Byte) value).intValue();
+        }
+        if (value instanceof Short) {
+            return ((Short) value).intValue();
+        }
+        if (value instanceof Long) {
+            return ((Long) value).intValue();
+        }
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        // 如果是字符串，尝试解析
+        if (value instanceof String) {
+            try {
+                return Integer.parseInt((String) value);
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 安全地将对象转换为 Boolean
+     * 处理 Long、Integer、Boolean 等类型
+     */
+    private Boolean safeToBoolean(Object value) {
+        if (value == null) {
+            return false;
+        }
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+        if (value instanceof Number) {
+            // 数字类型：1 表示 true，0 表示 false
+            return ((Number) value).longValue() == 1L;
+        }
+        if (value instanceof String) {
+            // 字符串类型：尝试解析为布尔值
+            String str = ((String) value).trim().toLowerCase();
+            return "true".equals(str) || "1".equals(str) || "yes".equals(str);
+        }
+        return false;
+    }
+
+    /**
+     * 获取菜单树结构（只查 type=0/1）
+     */
+    @Override
+    public List<ResourceResponseDto> menuTree() {
+        List<Resource> menus = resourceRepository.findByTypeInOrderBySortAsc(List.of(ResourceType.DIRECTORY, ResourceType.MENU));
+        return buildResourceTree(menus);
+    }
+
+    /**
+     * 根据父级ID查询子菜单（只查 type=0/1）
+     */
+    @Override
+    public List<ResourceResponseDto> getMenusByParentId(Long parentId) {
+        List<Resource> menus;
+        if (parentId == null || parentId == 0) {
+            // 查询顶级菜单（parentId为null或0）
+            menus = resourceRepository.findByTypeInAndParentIdIsNullOrderBySortAsc(List.of(ResourceType.DIRECTORY, ResourceType.MENU));
+        } else {
+            // 查询指定父级ID的子菜单
+            menus = resourceRepository.findByTypeInAndParentIdOrderBySortAsc(List.of(ResourceType.DIRECTORY, ResourceType.MENU), parentId);
+        }
+        return menus.stream().map(this::toDto).collect(Collectors.toList());
+    }
+
+    /**
+     * 创建菜单
+     */
+    @Override
+    public Resource createMenu(ResourceCreateUpdateDto resourceDto) {
+        // 只允许 type=0/1
+        if (resourceDto.getType() == null || (resourceDto.getType() != ResourceType.DIRECTORY.getCode() && resourceDto.getType() != ResourceType.MENU.getCode())) {
+            resourceDto.setType(ResourceType.MENU.getCode());
+        }
+        Resource resource = new Resource();
+        resource.setName(resourceDto.getName());
+        resource.setTitle(resourceDto.getTitle());
+        resource.setUrl(resourceDto.getUrl());
+        resource.setUri(StringUtils.hasText(resourceDto.getUri()) ? resourceDto.getUri() : "");
+        resource.setMethod(StringUtils.hasText(resourceDto.getMethod()) ? resourceDto.getMethod() : "");
+        resource.setIcon(resourceDto.getIcon());
+        resource.setShowIcon(resourceDto.isShowIcon());
+        resource.setSort(resourceDto.getSort());
+        resource.setComponent(resourceDto.getComponent());
+        resource.setRedirect(resourceDto.getRedirect());
+        resource.setHidden(resourceDto.isHidden());
+        resource.setKeepAlive(resourceDto.isKeepAlive());
+        resource.setPermission(resourceDto.getPermission());
+        resource.setType(ResourceType.fromCode(resourceDto.getType()));
+        resource.setParentId(resourceDto.getParentId());
+        return resourceRepository.save(resource);
+    }
+
+    /**
+     * 更新菜单
+     */
+    @Override
+    public Resource updateMenu(ResourceCreateUpdateDto resourceDto) {
+        Resource resource = resourceRepository.findById(resourceDto.getId())
+                .orElseThrow(() -> new RuntimeException("菜单不存在"));
+        resource.setName(resourceDto.getName());
+        resource.setTitle(resourceDto.getTitle());
+        resource.setUrl(resourceDto.getUrl());
+        resource.setUri(StringUtils.hasText(resourceDto.getUri()) ? resourceDto.getUri() : "");
+        resource.setMethod(StringUtils.hasText(resourceDto.getMethod()) ? resourceDto.getMethod() : "");
+        resource.setIcon(resourceDto.getIcon());
+        resource.setShowIcon(resourceDto.isShowIcon());
+        resource.setSort(resourceDto.getSort());
+        resource.setComponent(resourceDto.getComponent());
+        resource.setRedirect(resourceDto.getRedirect());
+        resource.setHidden(resourceDto.isHidden());
+        resource.setKeepAlive(resourceDto.isKeepAlive());
+        resource.setPermission(resourceDto.getPermission());
+        resource.setType(ResourceType.fromCode(resourceDto.getType()));
+        resource.setParentId(resourceDto.getParentId());
+        return resourceRepository.save(resource);
+    }
+
+    /**
+     * 删除菜单
+     */
+    @Override
+    public void deleteMenu(Long id) {
+        resourceRepository.deleteById(id);
+    }
+
+    /**
+     * 批量删除菜单
+     */
+    @Override
+    public void batchDeleteMenus(List<Long> ids) {
+        resourceRepository.deleteAllById(ids);
+    }
+
+    /**
+     * 构建菜单树结构
+     */
+    private List<ResourceResponseDto> buildResourceTree(List<Resource> resources) {
+        try {
+            // 构建ID到资源的映射
+            Map<Long, ResourceResponseDto> resourceMap = new HashMap<>();
+            List<ResourceResponseDto> rootResources = new ArrayList<>();
+            
+            // 转换为DTO并建立映射
+            for (Resource resource : resources) {
+                ResourceResponseDto dto = toDto(resource);
+                resourceMap.put(resource.getId(), dto);
+            }
+            
+            // 构建树形结构
+            for (Resource resource : resources) {
+                ResourceResponseDto dto = resourceMap.get(resource.getId());
+                if (resource.getParentId() == null) {
+                    // 顶级资源
+                    rootResources.add(dto);
+                } else {
+                    // 子资源
+                    ResourceResponseDto parent = resourceMap.get(resource.getParentId());
+                    if (parent != null) {
+                        if (parent.getChildren() == null) {
+                            parent.setChildren(new HashSet<>());
+                        }
+                        parent.getChildren().add(dto);
+                    }
+                }
+            }
+            
+            return rootResources;
+        } catch (Exception e) {
+            // 如果构建树形结构失败，返回平铺列表
+            return resources.stream().map(this::toDto).collect(Collectors.toList());
+        }
+    }
+
+    /**
+     * 实体转DTO
+     */
+    private ResourceResponseDto toDto(Resource resource) {
+        try {
+            if (resource == null) {
+                return null;
+            }
+            
+            ResourceResponseDto dto = new ResourceResponseDto();
+            dto.setId(resource.getId());
+            dto.setName(resource.getName());
+            dto.setTitle(resource.getTitle());
+            dto.setUrl(resource.getUrl());
+            dto.setUri(resource.getUri());
+            dto.setMethod(resource.getMethod());
+            dto.setIcon(resource.getIcon());
+            dto.setShowIcon(Boolean.TRUE.equals(resource.getShowIcon()));
+            dto.setSort(resource.getSort());
+            dto.setComponent(resource.getComponent());
+            dto.setRedirect(resource.getRedirect());
+            dto.setHidden(Boolean.TRUE.equals(resource.getHidden()));
+            dto.setKeepAlive(Boolean.TRUE.equals(resource.getKeepAlive()));
+            dto.setPermission(resource.getPermission());
+            dto.setType(resource.getType() != null ? resource.getType().getCode() : null);
+            dto.setTypeName(resource.getType() != null ? resource.getType().getDescription() : null);
+            dto.setParentId(resource.getParentId());
+            
+            // 判断是否为叶子节点（没有子资源）
+            Boolean isLeaf = !resourceRepository.existsByParentId(resource.getId());
+            dto.setLeaf(Boolean.TRUE.equals(isLeaf));
+            
+            // 初始化children为空集合，避免null指针异常
+            dto.setChildren(new HashSet<>());
+            
+            return dto;
+        } catch (Exception e) {
+            // 如果转换失败，返回一个基本的DTO
+            ResourceResponseDto dto = new ResourceResponseDto();
+            dto.setId(resource.getId());
+            dto.setName(resource.getName());
+            dto.setTitle(resource.getTitle());
+            dto.setType(resource.getType() != null ? resource.getType().getCode() : null);
+            dto.setParentId(resource.getParentId());
+            dto.setChildren(new HashSet<>());
+            return dto;
+        }
+    }
+
+    /**
+     * 原生 SQL 方式分页查询菜单
+     * 使用 Repository 的 @Query 注解，直接返回 leaf 字段
+     */
+    private Page<ResourceResponseDto> findMenusByNativeSql(ResourceRequestDto query, List<Integer> typeCodes, Pageable pageable) {
+        Page<ResourceProjection> page = resourceRepository.findMenusByNativeSql(
+            typeCodes,
+            typeCodes.size(),
+            query.getParentId(),
+            StringUtils.hasText(query.getTitle()) ? query.getTitle() : null,
+            StringUtils.hasText(query.getName()) ? query.getName() : null,
+            StringUtils.hasText(query.getPermission()) ? query.getPermission() : null,
+            query.getEnabled(),
+            pageable
+        );
+        
+        return page.map(proj -> {
+            ResourceResponseDto dto = new ResourceResponseDto();
+            dto.setId(proj.getId());
+            dto.setName(proj.getName());
+            dto.setTitle(proj.getTitle());
+            dto.setUrl(proj.getUrl());
+            dto.setIcon(proj.getIcon());
+            dto.setShowIcon(Boolean.TRUE.equals(proj.getShowIcon()));
+            dto.setSort(safeToInteger(proj.getSort()));
+            dto.setComponent(proj.getComponent());
+            dto.setRedirect(proj.getRedirect());
+            dto.setHidden(Boolean.TRUE.equals(proj.getHidden()));
+            dto.setKeepAlive(Boolean.TRUE.equals(proj.getKeepAlive()));
+            dto.setPermission(proj.getPermission());
+            dto.setType(safeToInteger(proj.getType()));
+            dto.setParentId(proj.getParentId());
+            dto.setLeaf(proj.getLeaf() != null && proj.getLeaf() == 1);
+            return dto;
+        });
+    }
+    
+    /**
+     * JPQL DTO 投影方式分页查询菜单
+     * 使用 Repository 的 JPQL 查询，直接返回 DTO 对象
+     */
+    private Page<ResourceResponseDto> findMenusByJpqlDto(ResourceRequestDto query, List<Integer> typeCodes, Pageable pageable) {
+        return resourceRepository.findMenusByJpqlDto(
+            typeCodes,
+            query.getParentId(),
+            StringUtils.hasText(query.getTitle()) ? query.getTitle() : null,
+            StringUtils.hasText(query.getName()) ? query.getName() : null,
+            StringUtils.hasText(query.getPermission()) ? query.getPermission() : null,
+            query.getEnabled(),
+            pageable
+        );
+    }
+
+    /**
+     * 按条件查询菜单（type=0/1），返回list结构
+     */
+    @Override
+    public List<ResourceResponseDto> list(ResourceRequestDto query) {
+        // 查询 type=0/1（目录和菜单）
+        List<ResourceType> types = List.of(ResourceType.DIRECTORY, ResourceType.MENU); // 目录和菜单
+        List<Integer> typeCodes = types.stream().map(ResourceType::getCode).toList();
+        StringBuilder sqlBuilder = new StringBuilder();
+
+        sqlBuilder.append("""
+        SELECT r.id,
+               r.name,
+               r.title,
+               r.url,
+               r.icon,
+               r.show_icon AS showIcon,
+               r.sort,
+               r.component,
+               r.redirect,
+               r.hidden,
+               r.keep_alive AS keepAlive,
+               r.permission,
+               r.type,
+               r.parent_id AS parentId,
+               CASE WHEN EXISTS (
+                   SELECT 1 FROM resource c WHERE c.parent_id = r.id
+               ) THEN 0 ELSE 1 END AS leaf
+        FROM resource r
+        WHERE 1=1
+        """);
+
+        // 动态条件拼接
+        if (query.getParentId() != null) {
+            sqlBuilder.append(" AND r.parent_id = :parentId");
+        }
+        if (StringUtils.hasText(query.getTitle())) {
+            sqlBuilder.append(" AND r.title LIKE :title");
+        }
+        if (StringUtils.hasText(query.getName())) {
+            sqlBuilder.append(" AND r.name LIKE :name");
+        }
+        if (StringUtils.hasText(query.getPermission())) {
+            sqlBuilder.append(" AND r.permission LIKE :permission");
+        }
+        if (query.getEnabled() != null) {
+            sqlBuilder.append(" AND r.enabled = :enabled");
+        }
+
+        sqlBuilder.append(" AND r.type IN (:types)");
+        sqlBuilder.append(" ORDER BY r.sort ASC");
+
+        Query sqlQuery = entityManager.createNativeQuery(sqlBuilder.toString());
+
+        // 设置参数
+        if (query.getParentId() != null) {
+            sqlQuery.setParameter("parentId", query.getParentId());
+        }
+        if (StringUtils.hasText(query.getTitle())) {
+            sqlQuery.setParameter("title", "%" + query.getTitle() + "%");
+        }
+        if (StringUtils.hasText(query.getName())) {
+            sqlQuery.setParameter("name", "%" + query.getName() + "%");
+        }
+        if (StringUtils.hasText(query.getPermission())) {
+            sqlQuery.setParameter("permission", "%" + query.getPermission() + "%");
+        }
+        if (query.getEnabled() != null) {
+            sqlQuery.setParameter("enabled", query.getEnabled());
+        }
+        sqlQuery.setParameter("types", typeCodes);
+
+        List<Object[]> results = sqlQuery.getResultList();
+        return results.stream()
+                .map(this::mapToResourceResponseDto)
+                .collect(Collectors.toList());
     }
 } 

@@ -17,7 +17,7 @@ public class ResourceRequestDto {
     /**
      * 前端路由路径
      */
-    private String path;
+    private String url;
     
     /**
      * 后端API路径
@@ -50,6 +50,11 @@ public class ResourceRequestDto {
     private Boolean hidden;
     
     /**
+     * 是否启用
+     */
+    private Boolean enabled;
+    
+    /**
      * 页码（从0开始）
      */
     @Min(value = 0, message = "页码不能小于0")
@@ -71,12 +76,12 @@ public class ResourceRequestDto {
         this.name = name;
     }
     
-    public String getPath() {
-        return path;
+    public String getUrl() {
+        return url;
     }
     
-    public void setPath(String path) {
-        this.path = path;
+    public void setUrl(String url) {
+        this.url = url;
     }
     
     public String getUri() {
@@ -141,5 +146,13 @@ public class ResourceRequestDto {
     
     public void setSize(Integer size) {
         this.size = size;
+    }
+    
+    public Boolean getEnabled() {
+        return enabled;
+    }
+    
+    public void setEnabled(Boolean enabled) {
+        this.enabled = enabled;
     }
 } 

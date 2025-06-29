@@ -53,9 +53,9 @@
       <!-- 路由配置 -->
       <a-divider>路由配置</a-divider>
       
-      <a-form-item label="前端路径" name="path">
+      <a-form-item label="前端路径" name="url">
         <a-input 
-          v-model:value="formData.path" 
+          v-model:value="formData.url" 
           placeholder="请输入前端路由路径，如：/user"
           maxlength="200"
           show-count
@@ -93,22 +93,34 @@
       <a-divider>显示配置</a-divider>
       
       <a-form-item label="菜单图标" name="icon">
-        <div class="icon-selector">
-          <a-input 
-            v-model:value="formData.icon" 
+        <div class="icon-selector-row">
+          <a-input
+            v-model:value="formData.icon"
             placeholder="请输入图标名称"
             maxlength="200"
-            style="flex: 1; margin-right: 8px;"
-          />
-          <a-button @click="showIconSelector = true" type="primary">
+            style="flex: 1;"
+          >
+            <template #suffix>
+              <Icon
+                v-if="formData.icon"
+                :icon="formData.icon"
+                className="input-suffix-icon"
+              />
+            </template>
+          </a-input>
+          <a-button @click="showIconSelector = true" type="primary" style="margin-left: 8px;">
             选择图标
           </a-button>
         </div>
-        <div v-if="formData.icon" class="icon-preview">
-          <component :is="getIconComponent(formData.icon)" class="preview-icon" />
-          <span>{{ formData.icon }}</span>
-        </div>
       </a-form-item>
+      <a-modal
+        v-model:open="showIconSelector"
+        title="选择图标"
+        width="800px"
+        :footer="null"
+      >
+        <IconSelect v-model="formData.icon" />
+      </a-modal>
       
       <a-form-item label="显示图标" name="showIcon">
         <a-switch v-model:checked="formData.showIcon" />
@@ -123,27 +135,6 @@
       </a-form-item>
     </a-form>
     
-    <!-- 图标选择器弹窗 -->
-    <a-modal
-      v-model:open="showIconSelector"
-      title="选择图标"
-      width="800px"
-      :footer="null"
-    >
-      <div class="icon-grid">
-        <div
-          v-for="icon in iconList"
-          :key="icon.name"
-          class="icon-item"
-          :class="{ active: formData.icon === icon.name }"
-          @click="selectIcon(icon.name)"
-        >
-          <component :is="icon.component" class="grid-icon" />
-          <span class="icon-name">{{ icon.name }}</span>
-        </div>
-      </div>
-    </a-modal>
-    
     <!-- 表单操作按钮 -->
     <div class="form-actions">
       <a-button @click="handleCancel">取消</a-button>
@@ -155,29 +146,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 import { message } from 'ant-design-vue'
 import type { FormInstance } from 'ant-design-vue'
-// 引入图标
-import {
-  HomeOutlined,
-  UserOutlined,
-  SettingOutlined,
-  DashboardOutlined,
-  TeamOutlined,
-  FileOutlined,
-  FolderOutlined,
-  AppstoreOutlined,
-  MenuOutlined,
-  ApiOutlined,
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  SearchOutlined,
-  ReloadOutlined
-} from '@ant-design/icons-vue'
 // 引入菜单API
-import { getMenuTree, type MenuItem } from '@/api/menu'
+import { menuTree, type MenuItem } from '@/api/menu'
+import IconSelect from '../../components/IconSelect.vue' // 新增
+import * as allIcons from '@ant-design/icons-vue' // 新增
+import Icon from '@/components/Icon.vue' // 通用图标回显组件
 
 // 定义组件属性
 interface Props {
@@ -205,7 +181,7 @@ const formData = reactive({
   id: '',
   name: '',
   title: '',
-  path: '',
+  url: '',
   icon: '',
   showIcon: true,
   sort: 0,
@@ -214,7 +190,7 @@ const formData = reactive({
   hidden: false,
   keepAlive: false,
   permission: '',
-  parentId: null as number | null
+  parentId: null as number | null,
 })
 
 // 表单验证规则
@@ -241,48 +217,9 @@ const showIconSelector = ref(false)
 
 // 提交状态
 const submitting = ref(false)
-
-// 图标列表
-const iconList = [
-  { name: 'HomeOutlined', component: HomeOutlined },
-  { name: 'UserOutlined', component: UserOutlined },
-  { name: 'SettingOutlined', component: SettingOutlined },
-  { name: 'DashboardOutlined', component: DashboardOutlined },
-  { name: 'TeamOutlined', component: TeamOutlined },
-  { name: 'FileOutlined', component: FileOutlined },
-  { name: 'FolderOutlined', component: FolderOutlined },
-  { name: 'AppstoreOutlined', component: AppstoreOutlined },
-  { name: 'MenuOutlined', component: MenuOutlined },
-  { name: 'ApiOutlined', component: ApiOutlined },
-  { name: 'PlusOutlined', component: PlusOutlined },
-  { name: 'EditOutlined', component: EditOutlined },
-  { name: 'DeleteOutlined', component: DeleteOutlined },
-  { name: 'SearchOutlined', component: SearchOutlined },
-  { name: 'ReloadOutlined', component: ReloadOutlined }
-]
-
-// 图标组件映射
-const iconMap: Record<string, any> = {
-  'HomeOutlined': HomeOutlined,
-  'UserOutlined': UserOutlined,
-  'SettingOutlined': SettingOutlined,
-  'DashboardOutlined': DashboardOutlined,
-  'TeamOutlined': TeamOutlined,
-  'FileOutlined': FileOutlined,
-  'FolderOutlined': FolderOutlined,
-  'AppstoreOutlined': AppstoreOutlined,
-  'MenuOutlined': MenuOutlined,
-  'ApiOutlined': ApiOutlined,
-  'PlusOutlined': PlusOutlined,
-  'EditOutlined': EditOutlined,
-  'DeleteOutlined': DeleteOutlined,
-  'SearchOutlined': SearchOutlined,
-  'ReloadOutlined': ReloadOutlined
-}
-
-// 获取图标组件
+// 获取图标组件（支持所有官方风格，找不到时兜底）
 function getIconComponent(iconName: string) {
-  return iconMap[iconName] || MenuOutlined
+  return (allIcons as any)[iconName] || allIcons.MenuOutlined
 }
 
 // 选择图标
@@ -294,53 +231,123 @@ function selectIcon(iconName: string) {
 // 加载菜单树数据
 async function loadMenuTree() {
   try {
-    const data = await getMenuTree()
-    menuTreeData.value = data || []
+    const data = await menuTree()
+    
+    // 验证返回的数据
+    if (Array.isArray(data)) {
+      menuTreeData.value = data
+    } else if (data && typeof data === 'object' && Array.isArray(data.content)) {
+      // 如果返回的是分页格式，取 content
+      menuTreeData.value = data.content
+    } else {
+      console.warn('菜单树数据格式异常:', data)
+      menuTreeData.value = []
+    }
   } catch (error) {
     console.error('加载菜单树失败:', error)
     message.error('加载菜单树失败')
+    menuTreeData.value = []
   }
 }
 
 // 初始化表单数据
 function initFormData() {
-  if (props.menuData) {
-    Object.assign(formData, props.menuData)
-  } else {
-    // 重置表单数据
+  try {
+    if (props.menuData && typeof props.menuData === 'object') {
+      // 安全地复制数据，避免直接引用
+      Object.assign(formData, {
+        id: props.menuData.id || '',
+        name: props.menuData.name || '',
+        title: props.menuData.title || '',
+        url: props.menuData.url || '',
+        icon: props.menuData.icon || '',
+        showIcon: Boolean(props.menuData.showIcon),
+        sort: Number(props.menuData.sort) || 0,
+        component: props.menuData.component || '',
+        redirect: props.menuData.redirect || '',
+        hidden: Boolean(props.menuData.hidden),
+        keepAlive: Boolean(props.menuData.keepAlive),
+        permission: props.menuData.permission || '',
+        parentId: props.menuData.parentId || null,
+      })
+    } else {
+      // 重置表单数据
+      Object.assign(formData, {
+        id: '',
+        name: '',
+        title: '',
+        url: '',
+        icon: '',
+        showIcon: true,
+        sort: 0,
+        component: '',
+        redirect: '',
+        hidden: false,
+        keepAlive: false,
+        permission: '',
+        parentId: null,
+      })
+    }
+    
+    // 如果是添加子菜单，设置父级菜单ID
+    if (props.parentMenu && typeof props.parentMenu === 'object') {
+      formData.parentId = props.parentMenu.id || null
+    }
+  } catch (error) {
+    console.warn('initFormData error:', error)
+    // 重置为默认值
     Object.assign(formData, {
-      id: '',
-      name: '',
-      title: '',
-      path: '',
-      icon: '',
-      showIcon: true,
-      sort: 0,
-      component: '',
-      redirect: '',
-      hidden: false,
-      keepAlive: false,
-      permission: '',
-      parentId: null
+      id: '', name: '', title: '', url: '', icon: '',
+      showIcon: true, sort: 0, component: '', redirect: '',
+      hidden: false, keepAlive: false, permission: '', parentId: null,
     })
-  }
-  
-  // 如果是添加子菜单，设置父级菜单ID
-  if (props.parentMenu) {
-    formData.parentId = props.parentMenu.id || null
   }
 }
 
 // 提交表单
 async function handleSubmit() {
   try {
+    // 验证表单
     await formRef.value?.validate()
+    
+    // 验证必填字段
+    if (!formData.name || !formData.name.trim()) {
+      message.error('请输入菜单名称')
+      return
+    }
+    
+    if (!formData.title || !formData.title.trim()) {
+      message.error('请输入菜单标题')
+      return
+    }
+    
     submitting.value = true
     
-    const submitData = { ...formData }
+    // 深拷贝表单数据，避免直接引用
+    const submitData = {
+      id: formData.id,
+      name: formData.name.trim(),
+      title: formData.title.trim(),
+      url: formData.url || '',
+      icon: formData.icon || '',
+      showIcon: Boolean(formData.showIcon),
+      sort: Number(formData.sort) || 0,
+      component: formData.component || '',
+      redirect: formData.redirect || '',
+      hidden: Boolean(formData.hidden),
+      keepAlive: Boolean(formData.keepAlive),
+      permission: formData.permission || '',
+      parentId: formData.parentId || null,
+    }
+    
     emit('submit', submitData)
   } catch (error) {
     console.error('表单验证失败:', error)
+    if (error && typeof error === 'object' && 'errorFields' in error) {
+      message.error('请检查表单填写是否正确')
+    } else {
+      message.error('表单验证失败')
+    }
   } finally {
     submitting.value = false
   }
@@ -353,19 +360,50 @@ function handleCancel() {
 
 // 监听菜单数据变化
 watch(() => props.menuData, () => {
-  initFormData()
+  try {
+    initFormData()
+  } catch (error) {
+    console.warn('MenuForm watch menuData error:', error)
+  }
 }, { immediate: true })
 
 // 监听父级菜单变化
 watch(() => props.parentMenu, () => {
-  if (props.parentMenu) {
-    formData.parentId = props.parentMenu.id || null
+  try {
+    if (props.parentMenu) {
+      formData.parentId = props.parentMenu.id || null
+    }
+  } catch (error) {
+    console.warn('MenuForm watch parentMenu error:', error)
   }
 }, { immediate: true })
 
 // 组件挂载时加载菜单树
 onMounted(() => {
-  loadMenuTree()
+  try {
+    loadMenuTree()
+  } catch (error) {
+    console.warn('MenuForm onMounted error:', error)
+  }
+})
+
+// 组件卸载时清理数据
+onBeforeUnmount(() => {
+  try {
+    // 清理表单数据
+    Object.assign(formData, {
+      id: '', name: '', title: '', url: '', icon: '',
+      showIcon: true, sort: 0, component: '', redirect: '',
+      hidden: false, keepAlive: false, permission: '', parentId: null,
+    })
+    
+    // 清理其他响应式数据
+    menuTreeData.value = []
+    showIconSelector.value = false
+    submitting.value = false
+  } catch (error) {
+    console.warn('MenuForm onBeforeUnmount error:', error)
+  }
 })
 </script>
 
@@ -374,25 +412,10 @@ onMounted(() => {
   padding: 0;
 }
 
-.icon-selector {
+.icon-selector-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-}
-
-.icon-preview {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  padding: 8px;
-  background: #f5f5f5;
-  border-radius: 4px;
-}
-
-.preview-icon {
-  font-size: 16px;
-  color: #1890ff;
+  width: 100%;
 }
 
 .icon-grid {
@@ -425,7 +448,7 @@ onMounted(() => {
 }
 
 .grid-icon {
-  font-size: 24px;
+  font-size: 18px;
   color: #1890ff;
   margin-bottom: 8px;
 }
@@ -454,5 +477,11 @@ onMounted(() => {
   margin: 24px 0 16px 0;
   font-weight: 500;
   color: #1890ff;
+}
+
+.input-suffix-icon {
+  font-size: 18px;
+  color: #1890ff;
+  vertical-align: middle;
 }
 </style> 

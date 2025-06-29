@@ -8,11 +8,22 @@
           <a-form-item label="资源名称">
             <a-input v-model:value="query.name" placeholder="请输入资源名称" />
           </a-form-item>
+          <a-form-item label="资源标题">
+            <a-input v-model:value="query.title" placeholder="请输入资源标题" />
+          </a-form-item>
           <a-form-item label="API路径">
             <a-input v-model:value="query.uri" placeholder="请输入API路径" />
           </a-form-item>
           <a-form-item label="权限标识">
             <a-input v-model:value="query.permission" placeholder="请输入权限标识" />
+          </a-form-item>
+          <a-form-item label="资源类型">
+            <a-select v-model:value="query.type" placeholder="请选择资源类型" style="width: 120px;">
+              <a-select-option :value="undefined">全部</a-select-option>
+              <a-select-option :value="ResourceType.MENU">菜单</a-select-option>
+              <a-select-option :value="ResourceType.BUTTON">按钮</a-select-option>
+              <a-select-option :value="ResourceType.API">API</a-select-option>
+            </a-select>
           </a-form-item>
           <a-form-item>
             <a-button type="primary" @click="throttledSearch">搜索</a-button>
@@ -175,7 +186,7 @@
 // 引入Vue相关API
 import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
 // 引入资源API
-import { resourceList, createResource, updateResource, deleteResource, batchDeleteResources } from '@/api/resource'
+import { resourceList, createResource, updateResource, deleteResource, batchDeleteResources, type ResourceItem, type ResourceQuery, ResourceType } from '@/api/resource'
 // 引入Antd组件和图标
 import { message, Modal } from 'ant-design-vue'
 import { 
@@ -190,14 +201,15 @@ import VueDraggable from 'vuedraggable'
 import ResourceForm from './ResourceForm.vue'
 
 // 查询条件
-const query = ref({ 
+const query = ref<ResourceQuery>({ 
   name: '', 
   uri: '',
-  permission: '' 
+  permission: '',
+  type: undefined
 })
 
 // 表格数据
-const tableData = ref<any[]>([])
+const tableData = ref<ResourceItem[]>([])
 
 // 加载状态
 const loading = ref(false)
@@ -230,14 +242,14 @@ const paginationConfig = computed(() => ({
 // 初始列定义
 const INITIAL_COLUMNS = [
   { title: '资源名称', dataIndex: 'name', width: 150 },
-  { title: 'API路径', dataIndex: 'uri', width: 200 },
-  { title: 'HTTP方法', dataIndex: 'method', width: 100, align: 'center' },
+  { title: '资源标题', dataIndex: 'title', width: 150 },
+  { title: '路径', dataIndex: 'path', width: 200 },
+  { title: 'URI', dataIndex: 'uri', width: 200 },
+  { title: '请求方法', dataIndex: 'method', width: 100, align: 'center' },
   { title: '权限标识', dataIndex: 'permission', width: 200 },
-  { title: '类型', dataIndex: 'type', width: 100, align: 'center' },
+  { title: '资源类型', dataIndex: 'type', width: 100, align: 'center' },
   { title: '排序', dataIndex: 'sort', width: 80, align: 'center' },
-  { title: '前端路径', dataIndex: 'path', width: 150 },
-  { title: '组件路径', dataIndex: 'component', width: 200 },
-  { title: '操作', dataIndex: 'action', width: 150, fixed: 'right', align: 'center' }
+  { title: '操作', dataIndex: 'action', width: 160, fixed: 'right', align: 'center' }
 ]
 
 // 所有列定义
@@ -339,46 +351,16 @@ function updateTableBodyHeight() {
   })
 }
 
-// 获取方法颜色
-function getMethodColor(method: string) {
-  const colorMap: Record<string, string> = {
-    'GET': 'green',
-    'POST': 'blue',
-    'PUT': 'orange',
-    'DELETE': 'red',
-    'PATCH': 'purple'
-  }
-  return colorMap[method] || 'default'
-}
-
-// 获取类型颜色
-function getTypeColor(type: number) {
-  const colorMap: Record<number, string> = {
-    0: 'blue',    // 目录
-    1: 'green',   // 菜单
-    2: 'orange'   // 按钮
-  }
-  return colorMap[type] || 'default'
-}
-
-// 获取类型文本
-function getTypeText(type: number) {
-  const textMap: Record<number, string> = {
-    0: '目录',
-    1: '菜单', 
-    2: '按钮'
-  }
-  return textMap[type] || '未知'
-}
-
 // 加载数据
 async function loadData() {
   loading.value = true
   try {
     const params = {
-      name: query.value.name.trim(),
-      uri: query.value.uri.trim(),
-      permission: query.value.permission.trim(),
+      name: query.value.name?.trim(),
+      title: query.value.title?.trim(),
+      uri: query.value.uri?.trim(),
+      permission: query.value.permission?.trim(),
+      type: query.value.type,
       page: (Number(pagination.value.current) || 1) - 1,
       size: Number(pagination.value.pageSize) || 10
     }
@@ -403,9 +385,7 @@ const throttledSearch = handleSearch
 
 // 重置
 function handleReset() {
-  query.value.name = ''
-  query.value.uri = ''
-  query.value.permission = ''
+  query.value = { name: '', title: '', uri: '', permission: '', type: undefined }
   pagination.value.current = 1
   loadData()
 }
@@ -429,23 +409,7 @@ const throttledRefresh = handleRefresh
 // 新建
 function handleCreate() {
   drawerMode.value = 'create'
-  currentResource.value = {
-    name: '',
-    title: '',
-    path: '',
-    uri: '',
-    method: 'GET',
-    icon: '',
-    showIcon: true,
-    sort: 0,
-    component: '',
-    redirect: '',
-    hidden: false,
-    keepAlive: false,
-    permission: '',
-    type: 2,
-    parentId: null
-  }
+  currentResource.value = { name: '', title: '', type: ResourceType.API, sort: 0 }
   drawerVisible.value = true
 }
 const throttledCreate = handleCreate
@@ -462,7 +426,7 @@ const throttledEdit = handleEdit
 function handleDelete(record: any) {
   Modal.confirm({
     title: '确认删除',
-    content: `确定要删除资源 "${record.name}" 吗？`,
+    content: `确定要删除资源 ${record.title} 吗？`,
     okText: '确认',
     cancelText: '取消',
     onOk: () => {
@@ -470,7 +434,7 @@ function handleDelete(record: any) {
         message.success('删除成功')
         loadData()
       }).catch((error: any) => {
-        message.error('删除失败: ' + (error.message || '未知错误'))
+        message.error('删除资源失败: ' + (error.message || '未知错误'))
         return Promise.reject(error)
       })
     }
@@ -548,7 +512,7 @@ function getRowClassName(record: any) {
 // 抽屉相关
 const drawerVisible = ref(false)
 const drawerMode = ref<'create' | 'edit'>('create')
-const currentResource = ref<any | null>(null)
+const currentResource = ref<ResourceItem | null>(null)
 
 // 抽屉关闭
 function handleDrawerClose() {
@@ -587,6 +551,38 @@ onBeforeUnmount(() => {
 watch(() => pagination.value.pageSize, () => {
   updateTableBodyHeight()
 })
+
+// 获取请求方法颜色
+function getMethodColor(method: string) {
+  const colorMap: Record<string, string> = {
+    'GET': 'green',
+    'POST': 'blue',
+    'PUT': 'orange',
+    'DELETE': 'red',
+    'PATCH': 'purple'
+  }
+  return colorMap[method?.toUpperCase()] || 'default'
+}
+
+// 获取资源类型颜色
+function getTypeColor(type: number) {
+  const colorMap: Record<number, string> = {
+    [ResourceType.MENU]: 'blue',
+    [ResourceType.BUTTON]: 'green',
+    [ResourceType.API]: 'orange'
+  }
+  return colorMap[type] || 'default'
+}
+
+// 获取资源类型文本
+function getTypeText(type: number) {
+  const textMap: Record<number, string> = {
+    [ResourceType.MENU]: '菜单',
+    [ResourceType.BUTTON]: '按钮',
+    [ResourceType.API]: 'API'
+  }
+  return textMap[type] || '未知'
+}
 </script>
 
 <style scoped>
@@ -641,8 +637,38 @@ watch(() => pagination.value.pageSize, () => {
   align-items: center;
   justify-content: flex-end;
   background: #fff;
-  padding: 0 16px 8px 0;
-  flex-shrink: 0;
+}
+
+:deep(.ant-pagination) {
+  min-height: 32px !important;
+  height: 32px !important;
+  line-height: 32px !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+}
+
+:deep(.ant-pagination-item),
+:deep(.ant-pagination-item-link),
+:deep(.ant-pagination-prev),
+:deep(.ant-pagination-next),
+:deep(.ant-pagination-jump-next),
+:deep(.ant-pagination-jump-prev) {
+  height: 32px !important;
+  min-width: 32px !important;
+  line-height: 32px !important;
+  box-sizing: border-box;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+}
+
+:deep(.ant-pagination-item-ellipsis) {
+  line-height: 32px !important;
+  vertical-align: middle !important;
+  display: inline-block !important;
+  font-size: 16px !important;
 }
 
 .ml-2 { margin-left: 8px; }
@@ -700,23 +726,9 @@ watch(() => pagination.value.pageSize, () => {
   background: #f5f5f5;
 }
 
-.action-buttons {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  justify-content: center;
-}
-
-.action-btn {
-  padding: 2px 4px;
-  height: auto;
-  line-height: 1.2;
-  font-size: 12px;
-}
-
-.action-btn:hover {
-  background-color: #f5f5f5;
-  border-radius: 4px;
+.action-icon.active {
+  color: #1890ff;
+  background: #e6f7ff;
 }
 
 .draggable-columns {
@@ -771,57 +783,36 @@ watch(() => pagination.value.pageSize, () => {
   color: #1890ff;
 }
 
-/* 表格样式 */
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+}
+
+.action-btn {
+  padding: 2px 4px;
+  height: auto;
+  line-height: 1.2;
+  font-size: 12px;
+}
+
+.action-btn:hover {
+  background-color: #f5f5f5;
+  border-radius: 4px;
+}
+
+/* 复用user/index.vue的隔行换色和高亮样式 */
 :deep(.ant-table-tbody > tr:nth-child(odd)) {
   background-color: #fafbfc;
 }
-
 :deep(.ant-table-tbody > tr:nth-child(even)) {
   background-color: #fff;
 }
-
-:deep(.ant-table-tbody > tr:hover) {
-  background-color: #f5f5f5 !important;
-}
-
 :deep(.ant-table-tbody > tr.checkbox-selected-row) {
   background-color: #e6f7ff !important;
 }
-
 :deep(.ant-table-tbody > tr.checkbox-selected-row:hover) {
   background-color: #bae7ff !important;
-}
-
-/* 分页样式 */
-:deep(.ant-pagination) {
-  min-height: 32px !important;
-  height: 32px !important;
-  line-height: 32px !important;
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: center !important;
-}
-
-:deep(.ant-pagination-item),
-:deep(.ant-pagination-item-link),
-:deep(.ant-pagination-prev),
-:deep(.ant-pagination-next),
-:deep(.ant-pagination-jump-next),
-:deep(.ant-pagination-jump-prev) {
-  height: 32px !important;
-  min-width: 32px !important;
-  line-height: 32px !important;
-  box-sizing: border-box;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding: 0 !important;
-}
-
-:deep(.ant-pagination-item-ellipsis) {
-  line-height: 32px !important;
-  vertical-align: middle !important;
-  display: inline-block !important;
-  font-size: 16px !important;
 }
 </style> 

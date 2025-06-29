@@ -14,13 +14,19 @@
           <a-form-item label="权限标识">
             <a-input v-model:value="query.permission" placeholder="请输入权限标识" />
           </a-form-item>
+          <a-form-item label="是否启用">
+            <a-select v-model:value="query.enabled" allow-clear placeholder="全部">
+              <a-select-option :value="true">启用</a-select-option>
+              <a-select-option :value="false">禁用</a-select-option>
+            </a-select>
+          </a-form-item>
           <a-form-item>
             <a-button type="primary" @click="throttledSearch">搜索</a-button>
             <a-button class="ml-2" @click="throttledReset">重置</a-button>
           </a-form-item>
         </a-form>
       </div>
-      
+
       <!-- 工具栏，包含批量操作、新建、刷新、列设置等 -->
       <div class="toolbar-container">
         <div class="table-title">菜单列表</div>
@@ -89,31 +95,37 @@
           </a-popover>
         </div>
       </div>
-      
-      <!-- 表格区域，支持多选、动态列、分页 -->
+
+      <!-- 表格区域，支持多选、动态列 -->
       <div class="table-container" ref="tableContentRef">
         <div class="table-scroll-container" ref="tableScrollContainerRef">
           <a-table
             :columns="columns"
             :data-source="tableData"
-            :pagination="false"
             :row-key="(record: any) => String(record.id)"
             bordered
             :loading="loading"
             :row-selection="rowSelection"
             :custom-row="onCustomRow"
             :row-class-name="getRowClassName"
-            :scroll="{ x: 1200, y: tableBodyHeight }"
+            :scroll="{ x: 'max-content', y: tableBodyHeight }"
             :expandable="expandableConfig"
+            :pagination="false"
           >
+            <template #expandIcon="{ record }">
+              <span
+                v-if="!record.leaf"
+                style="cursor:pointer; color:#1890ff; margin-right:4px;"
+                @click.stop="() => onExpandIconClick(record)"
+              >
+                <MinusOutlined v-if="expandedRowKeys.includes(String(record.id))" />
+                <PlusOutlined v-else />
+              </span>
+            </template>
             <template #bodyCell="{ column, record }">
               <template v-if="column.dataIndex === 'icon'">
                 <div class="icon-cell">
-                  <component 
-                    v-if="record.icon && record.showIcon" 
-                    :is="getIconComponent(record.icon)" 
-                    class="menu-icon"
-                  />
+                  <Icon v-if="record.icon && record.showIcon" :icon="record.icon" className="menu-icon" />
                   <span v-else class="no-icon">-</span>
                 </div>
               </template>
@@ -132,6 +144,14 @@
                   {{ getTypeText(record.type) }}
                 </a-tag>
               </template>
+              <template v-else-if="column.dataIndex === 'enabled'">
+                <a-tag :color="record.enabled ? 'green' : 'red'">
+                  {{ record.enabled ? '启用' : '禁用' }}
+                </a-tag>
+              </template>
+              <template v-else-if="column.dataIndex === 'title'">
+                {{ record.title }}
+              </template>
               <template v-else-if="column.dataIndex === 'action'">
                 <div class="action-buttons">
                   <a-button type="link" size="small" @click.stop="throttledEdit(record)" class="action-btn">
@@ -140,11 +160,30 @@
                     </template>
                     编辑
                   </a-button>
-                  <a-button type="link" size="small" @click.stop="throttledAddChild(record)" class="action-btn">
+                  <a-tooltip v-if="record.leaf" title="叶子节点不可添加子菜单">
+                    <a-button
+                      type="link"
+                      size="small"
+                      :disabled="true"
+                      class="action-btn"
+                    >
+                      <template #icon>
+                        <PlusOutlined />
+                      </template>
+                      子菜单
+                    </a-button>
+                  </a-tooltip>
+                  <a-button
+                    v-else
+                    type="link"
+                    size="small"
+                    @click.stop="throttledAddChild(record)"
+                    class="action-btn"
+                  >
                     <template #icon>
                       <PlusOutlined />
                     </template>
-                    添加子菜单
+                    子菜单
                   </a-button>
                   <a-button type="link" size="small" danger @click.stop="throttledDelete(record)" class="action-btn">
                     <template #icon>
@@ -157,22 +196,9 @@
             </template>
           </a-table>
         </div>
-        <div class="pagination-container" ref="paginationRef">
-          <a-pagination
-            v-model:current="pagination.current"
-            :page-size="pagination.pageSize"
-            :total="pagination.total"
-            :show-size-changer="pagination.showSizeChanger"
-            :page-size-options="paginationConfig.pageSizeOptions"
-            :show-total="pagination.showTotal"
-            @change="handlePageChange"
-            @showSizeChange="handlePageSizeChange"
-            :locale="{ items_per_page: '条/页' }"
-          />
-        </div>
       </div>
     </div>
-    
+
     <!-- 抽屉表单，编辑/新建菜单 -->
     <a-drawer
       v-model:open="drawerVisible"
@@ -198,39 +224,41 @@
 // 引入Vue相关API
 import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
 // 引入菜单API
-import { menuList, createMenu, updateMenu, deleteMenu, batchDeleteMenus, type MenuItem, type MenuQuery } from '@/api/menu'
+import { getMenusByParentId, createMenu, updateMenu, deleteMenu, batchDeleteMenus, type MenuItem, type MenuQuery, menuList } from '@/api/menu'
 // 引入Antd组件和图标
 import { message, Modal } from 'ant-design-vue'
-import { 
-  ReloadOutlined, 
-  PlusOutlined, 
-  EditOutlined, 
+import {
+  ReloadOutlined,
+  PlusOutlined,
+  EditOutlined,
   DeleteOutlined,
   SettingOutlined,
   HolderOutlined,
-  // 常用菜单图标
-  HomeOutlined,
-  UserOutlined,
-  DashboardOutlined,
-  TeamOutlined,
-  FileOutlined,
-  FolderOutlined,
-  AppstoreOutlined,
-  MenuOutlined,
-  ApiOutlined
+  MinusOutlined
 } from '@ant-design/icons-vue'
 import VueDraggable from 'vuedraggable'
 import MenuForm from './MenuForm.vue'
+import Icon from '@/components/Icon.vue' // 通用图标回显组件
 
-// 查询条件
-const query = ref<MenuQuery>({ 
-  name: '', 
-  title: '', 
-  permission: '' 
+// MenuItem 类型补充 expanded 和 _childrenLoaded 字段，消除TS报错
+type MenuItemEx = MenuItem & { 
+  expanded?: boolean; 
+  _childrenLoaded?: boolean;
+  leaf?: boolean | number; // 添加 leaf 属性，支持 boolean 或 number 类型
+  _loading?: boolean; // 添加加载状态属性
+}
+
+// 查询条件，包含parentId用于按层级查询
+const query = ref<MenuQuery>({
+  name: '',
+  title: '',
+  permission: '',
+  enabled: undefined,
+  parentId: 0 // 默认查询顶级菜单
 })
 
 // 表格数据
-const tableData = ref<MenuItem[]>([])
+const tableData = ref<MenuItemEx[]>([])
 
 // 加载状态
 const loading = ref(false)
@@ -238,36 +266,19 @@ const loading = ref(false)
 // 选中行key
 const selectedRowKeys = ref<string[]>([])
 
-// 分页配置
-const pagination = ref({
-  current: 1,
-  pageSize: 10,
-  showSizeChanger: true,
-  pageSizeOptions: ['10', '20', '30', '40', '50'],
-  total: 0,
-  showTotal: (total: number) => `共 ${total} 条`
-})
-
-const paginationConfig = computed(() => ({
-  current: Number(pagination.value.current) || 1,
-  pageSize: Number(pagination.value.pageSize) || 10,
-  showSizeChanger: pagination.value.showSizeChanger,
-  pageSizeOptions: pagination.value.pageSizeOptions,
-  total: Number(pagination.value.total) || 0,
-  showTotal: pagination.value.showTotal
-}))
-
 // 所有列定义
 const INITIAL_COLUMNS = [
-  { title: '菜单名称', dataIndex: 'name', width: 150 },
-  { title: '菜单标题', dataIndex: 'title', width: 150 },
-  { title: '图标', dataIndex: 'icon', width: 80, align: 'center' },
-  { title: '路径', dataIndex: 'path', width: 200 },
-  { title: '权限标识', dataIndex: 'permission', width: 200 },
-  { title: '排序', dataIndex: 'sort', width: 80, align: 'center' },
-  { title: '显示', dataIndex: 'hidden', width: 80, align: 'center' },
-  { title: '缓存', dataIndex: 'keepAlive', width: 80, align: 'center' },
-  { title: '操作', dataIndex: 'action', width: 200, fixed: 'right', align: 'center' }
+  { title: '菜单名称', dataIndex: 'name'},
+  { title: '菜单标题', dataIndex: 'title'},
+  { title: '图标', dataIndex: 'icon', align: 'center' },
+  { title: '路径', dataIndex: 'url' },
+  { title: '权限标识', dataIndex: 'permission'},
+  { title: '排序', dataIndex: 'sort', align: 'center' },
+  { title: '菜单类型', dataIndex: 'type', align: 'center' },
+  { title: '是否启用', dataIndex: 'enabled', align: 'center' },
+  { title: '显示', dataIndex: 'hidden', align: 'center' },
+  { title: '缓存', dataIndex: 'keepAlive', align: 'center' },
+  { title: '操作', dataIndex: 'action',width: 200, fixed: 'right', align: 'center' }
 ]
 
 const allColumns = ref([...INITIAL_COLUMNS])
@@ -277,30 +288,46 @@ const showColumnKeys = ref(
 )
 
 watch(allColumns, (val) => {
-  showColumnKeys.value = showColumnKeys.value.filter(key => val.some(col => col.dataIndex === key))
+  try {
+    showColumnKeys.value = showColumnKeys.value.filter(key => val.some(col => col.dataIndex === key))
+  } catch (error) {
+    console.warn('watch allColumns error:', error)
+  }
 })
 
 watch(draggableColumns, (val) => {
-  allColumns.value = val.filter(col => typeof col.dataIndex === 'string')
-  showColumnKeys.value = showColumnKeys.value.filter(key => allColumns.value.some(col => col.dataIndex === key))
+  try {
+    allColumns.value = val.filter(col => typeof col.dataIndex === 'string')
+    showColumnKeys.value = showColumnKeys.value.filter(key => allColumns.value.some(col => col.dataIndex === key))
+  } catch (error) {
+    console.warn('watch draggableColumns error:', error)
+  }
 })
 
 // 列复选框变化
 function onCheckboxChange(dataIndex: string, checked: boolean) {
-  if (!dataIndex) return
-  if (checked) {
-    if (!showColumnKeys.value.includes(dataIndex)) showColumnKeys.value.push(dataIndex)
-  } else {
-    showColumnKeys.value = showColumnKeys.value.filter(key => key !== dataIndex)
+  try {
+    if (!dataIndex) return
+    if (checked) {
+      if (!showColumnKeys.value.includes(dataIndex)) showColumnKeys.value.push(dataIndex)
+    } else {
+      showColumnKeys.value = showColumnKeys.value.filter(key => key !== dataIndex)
+    }
+  } catch (error) {
+    console.warn('onCheckboxChange error:', error)
   }
 }
 
 // 列全选
 function onCheckAllChange(e: any) {
-  if (e.target.checked) {
-    showColumnKeys.value = INITIAL_COLUMNS.map(col => col.dataIndex)
-  } else {
-    showColumnKeys.value = []
+  try {
+    if (e.target.checked) {
+      showColumnKeys.value = INITIAL_COLUMNS.map(col => col.dataIndex)
+    } else {
+      showColumnKeys.value = []
+    }
+  } catch (error) {
+    console.warn('onCheckAllChange error:', error)
   }
 }
 
@@ -309,93 +336,193 @@ const DEFAULT_COLUMN_KEYS = INITIAL_COLUMNS
   .map(col => col.dataIndex)
 
 function resetColumnOrder() {
-  allColumns.value = [...INITIAL_COLUMNS]
-  draggableColumns.value = [...INITIAL_COLUMNS]
-  showColumnKeys.value = [...DEFAULT_COLUMN_KEYS]
+  try {
+    allColumns.value = [...INITIAL_COLUMNS]
+    draggableColumns.value = [...INITIAL_COLUMNS]
+    showColumnKeys.value = [...DEFAULT_COLUMN_KEYS]
+  } catch (error) {
+    console.warn('resetColumnOrder error:', error)
+  }
 }
 
 // 拖拽结束
-function onDragEnd() {}
+function onDragEnd() {
+  try {
+    // 拖拽结束后的处理逻辑
+  } catch (error) {
+    console.warn('onDragEnd error:', error)
+  }
+}
 
 // 计算最终表格列
-const columns = computed(() => [
-  {
-    title: '序号',
-    dataIndex: 'index',
-    width: 80,
-    align: 'center',
-    fixed: 'left',
-    customRender: ({ index }: { index?: number }) => {
-      const current = Number(pagination.value.current) || 1
-      const pageSize = Number(pagination.value.pageSize) || 10
-      return (current - 1) * pageSize + (typeof index === 'number' ? index : 0) + 1
-    }
-  },
-  ...INITIAL_COLUMNS.filter(col => showColumnKeys.value.includes(col.dataIndex))
-])
+const columns = computed(() => {
+  try {
+    return [
+      {
+        title: '序号',
+        dataIndex: 'index',
+        width: 80,
+        align: 'center',
+        fixed: 'left',
+        customRender: ({ index }: { index?: number }) => {
+          try {
+            return (typeof index === 'number' ? index : 0) + 1
+          } catch (error) {
+            console.warn('columns customRender error:', error)
+            return 0
+          }
+        }
+      },
+      ...INITIAL_COLUMNS.filter(col => showColumnKeys.value.includes(col.dataIndex))
+    ]
+  } catch (error) {
+    console.warn('columns computed error:', error)
+    return []
+  }
+})
 
 // 多选配置
-const rowSelection = computed(() => ({
-  selectedRowKeys: selectedRowKeys.value,
-  onChange: (selectedKeys: (string|number)[]) => {
-    selectedRowKeys.value = selectedKeys.map(String)
-  },
-  checkStrictly: false,
-  preserveSelectedRowKeys: true,
-  fixed: true
-}))
+const rowSelection = computed(() => {
+  try {
+    return {
+      selectedRowKeys: selectedRowKeys.value,
+      onChange: (selectedKeys: (string|number)[]) => {
+        try {
+          selectedRowKeys.value = selectedKeys.map(String)
+        } catch (error) {
+          console.warn('rowSelection onChange error:', error)
+        }
+      },
+      checkStrictly: false,
+      preserveSelectedRowKeys: true,
+      fixed: true
+    }
+  } catch (error) {
+    console.warn('rowSelection computed error:', error)
+    return {}
+  }
+})
 
-// 展开配置
-const expandableConfig = {
+// 展开的节点keys
+const expandedRowKeys = ref<string[]>([])
+
+// 计算菜单标题列的索引
+const expandIconColumnIndex = computed(() => {
+  return columns.value.findIndex(col => col.dataIndex === 'title')
+})
+
+// 展开配置（平铺结构专用）
+const expandableConfig = computed(() => ({
   expandedRowKeys: expandedRowKeys.value,
-  onExpand: (expanded: boolean, record: any) => {
+  expandIconColumnIndex: expandIconColumnIndex.value,
+  rowExpandable: (record: any) => !record.leaf,
+  onExpand: async (expanded: boolean, record: any) => {
+    console.log('[菜单调试] onExpand 触发', { expanded, record });
     if (expanded) {
-      expandedRowKeys.value.push(String(record.id))
+      console.log('[菜单调试] 进入展开分支，准备请求子菜单', record.id);
+      // 不判断 _childrenLoaded，每次都请求
+      try {
+        const childMenus = await getMenusByParentId(record.id);
+        console.log('[菜单调试] getMenusByParentId 返回', childMenus);
+        if (childMenus && Array.isArray(childMenus) && childMenus.length > 0) {
+          const childMenusArray = childMenus as MenuItemEx[];
+          childMenusArray.forEach(item => {
+            item.expanded = false;
+            item._childrenLoaded = false;
+            item._loading = false;
+            if (item.leaf === false || item.leaf === 0) {
+              item.children = [];
+            }
+          });
+          record._childrenLoaded = true;
+          const parentIndex = tableData.value.findIndex(item => item.id === record.id);
+          if (parentIndex !== -1) {
+            const newData = [
+              ...tableData.value.slice(0, parentIndex + 1),
+              ...childMenusArray,
+              ...tableData.value.slice(parentIndex + 1)
+            ];
+            tableData.value = newData;
+          }
+        } else {
+          console.log('[菜单调试] 没有子菜单数据');
+        }
+      } catch (err) {
+        console.error('[菜单调试] getMenusByParentId 请求异常', err);
+      }
     } else {
-      expandedRowKeys.value = expandedRowKeys.value.filter(key => key !== String(record.id))
+      console.log('[菜单调试] 进入收起分支', record.id);
+      collapseChildren(record);
+      expandedRowKeys.value = expandedRowKeys.value.filter(key => key !== String(record.id));
+      record._childrenLoaded = false;
     }
   },
   onExpandedRowsChange: (expandedRows: any[]) => {
-    expandedRowKeys.value = expandedRows.map(row => String(row.id))
+    try {
+      expandedRowKeys.value = expandedRows.map(row => String(row.id));
+      console.log('[菜单调试] onExpandedRowsChange', expandedRows);
+    } catch (error) {
+      console.warn('expandable onExpandedRowsChange error:', error);
+    }
   }
-}
+}))
 
 // 表格内容区高度自适应
 const tableContentRef = ref<HTMLElement | null>(null)
 const tableScrollContainerRef = ref<HTMLElement | null>(null)
-const paginationRef = ref<HTMLElement | null>(null)
 const tableBodyHeight = ref(400)
 
 function updateTableBodyHeight() {
-  nextTick(() => {
-    if (tableContentRef.value && paginationRef.value) {
-      const tableHeader = tableContentRef.value.querySelector('.ant-table-header') as HTMLElement
-      const containerHeight = tableContentRef.value.clientHeight
-      const paginationHeight = paginationRef.value.clientHeight
-      const tableHeaderHeight = tableHeader ? tableHeader.clientHeight : 55
-      const bodyHeight = containerHeight - paginationHeight - tableHeaderHeight
-      tableBodyHeight.value = Math.max(bodyHeight, 200)
-    }
-  })
+  try {
+    nextTick(() => {
+      if (tableContentRef.value && tableScrollContainerRef.value) {
+        const tableHeader = tableContentRef.value.querySelector('.ant-table-header') as HTMLElement
+        const containerHeight = tableContentRef.value.clientHeight
+        const tableHeaderHeight = tableHeader ? tableHeader.clientHeight : 55
+        const bodyHeight = containerHeight - tableHeaderHeight
+        tableBodyHeight.value = Math.max(bodyHeight, 200)
+      }
+    })
+  } catch (error) {
+    console.warn('updateTableBodyHeight error:', error)
+  }
 }
 
-// 加载数据
+// 加载数据 - 使用list结构加载
 async function loadData() {
-  loading.value = true
   try {
+    loading.value = true
     const params = {
-      name: query.value.name?.trim(),
-      title: query.value.title?.trim(),
-      permission: query.value.permission?.trim(),
-      page: (Number(pagination.value.current) || 1) - 1,
-      size: Number(pagination.value.pageSize) || 10
+      name: query.value.name?.trim() || '',
+      title: query.value.title?.trim() || '',
+      permission: query.value.permission?.trim() || '',
+      enabled: query.value.enabled,
+      parentId: query.value.parentId || 0
     }
     const res = await menuList(params)
-    tableData.value = Array.isArray(res.content) ? res.content : []
-    pagination.value.total = res.totalElements || 0
+    // 验证响应数据
+    if (res && Array.isArray(res)) {
+      tableData.value = res.map(item => {
+        const obj: MenuItemEx = { 
+          ...item, 
+          expanded: false, 
+          _childrenLoaded: false,
+          // 确保 enabled 字段有默认值
+          enabled: item.enabled !== undefined ? item.enabled : true
+        }
+        // 只要 leaf 为 false 或 0，就加 children: []
+        if (item.leaf === false || item.leaf === 0) {
+          obj.children = []
+        }
+        return obj
+      })
+    } else {
+      tableData.value = []
+    }
   } catch (error) {
+    console.error('加载菜单数据失败:', error)
     tableData.value = []
-    pagination.value.total = 0
+    message.error('加载菜单数据失败')
   } finally {
     loading.value = false
   }
@@ -403,233 +530,449 @@ async function loadData() {
 
 // 查询
 function handleSearch() {
-  pagination.value.current = 1
-  loadData()
+  try {
+    loadData()
+  } catch (error) {
+    console.warn('handleSearch error:', error)
+  }
 }
 const throttledSearch = handleSearch
 
 // 重置
 function handleReset() {
-  query.value = { name: '', title: '', permission: '' }
-  pagination.value.current = 1
-  loadData()
+  try {
+    query.value = { name: '', title: '', permission: '', enabled: undefined, parentId: 0 }
+    loadData()
+  } catch (error) {
+    console.warn('handleReset error:', error)
+  }
 }
 const throttledReset = handleReset
 
 // 新建
 function handleCreate() {
-  drawerMode.value = 'create'
-  currentMenu.value = { name: '', title: '', sort: 0, showIcon: true, hidden: false, keepAlive: false }
-  parentMenu.value = null
-  drawerVisible.value = true
+  try {
+    drawerMode.value = 'create'
+    currentMenu.value = { 
+      name: '', 
+      title: '', 
+      sort: 0, 
+      showIcon: true, 
+      hidden: false, 
+      keepAlive: false,
+      icon: '',
+      url: '',
+      component: '',
+      redirect: '',
+      permission: '',
+      parentId: null
+    }
+    parentMenu.value = null
+    drawerVisible.value = true
+  } catch (error) {
+    console.warn('handleCreate error:', error)
+  }
 }
 const throttledCreate = handleCreate
 
 // 刷新动画状态
 const refreshing = ref(false)
 async function handleRefresh() {
-  refreshing.value = true
-  loading.value = true
-  await loadData().catch((error) => {
-    console.error('刷新数据失败:', error)
-  }).finally(() => {
-    setTimeout(() => {
-      refreshing.value = false
-    }, 1000)
+  try {
+    refreshing.value = true
+    loading.value = true
+    await loadData().catch((error) => {
+      console.error('刷新数据失败:', error)
+    }).finally(() => {
+      setTimeout(() => {
+        refreshing.value = false
+      }, 1000)
+      loading.value = false
+    })
+  } catch (error) {
+    console.warn('handleRefresh error:', error)
+    refreshing.value = false
     loading.value = false
-  })
+  }
 }
 const throttledRefresh = handleRefresh
 
 // 清除选择
-function clearSelection() { 
-  selectedRowKeys.value = [] 
-}
-
-// 分页变化
-function handlePageChange(page: number) {
-  pagination.value.current = page || 1
-  loadData()
-}
-
-function handlePageSizeChange(current: number, size: number) {
-  pagination.value.pageSize = size || 10
-  pagination.value.current = 1
-  loadData()
+function clearSelection() {
+  try {
+    selectedRowKeys.value = []
+  } catch (error) {
+    console.warn('clearSelection error:', error)
+  }
 }
 
 // 批量删除
 function handleBatchDelete() {
-  if (selectedRowKeys.value.length === 0) {
-    message.warning('请先选择要删除的菜单')
-    return
-  }
-  Modal.confirm({
-    title: '确认批量删除',
-    content: `确定要删除选中的 ${selectedRowKeys.value.length} 个菜单吗？`,
-    okText: '确认',
-    cancelText: '取消',
-    onOk: () => {
-      return batchDeleteMenus(selectedRowKeys.value)
-        .then(() => {
-          message.success('批量删除成功')
-          selectedRowKeys.value = []
-          loadData()
-        })
-        .catch((error: any) => {
-          message.error('批量删除失败: ' + (error.message || '未知错误'))
-          return Promise.reject(error)
-        })
+  try {
+    if (selectedRowKeys.value.length === 0) {
+      message.warning('请先选择要删除的菜单')
+      return
     }
-  })
+    Modal.confirm({
+      title: '确认批量删除',
+      content: `确定要删除选中的 ${selectedRowKeys.value.length} 个菜单吗？`,
+      okText: '确认',
+      cancelText: '取消',
+      onOk: () => {
+        return batchDeleteMenus(selectedRowKeys.value)
+          .then(() => {
+            message.success('批量删除成功')
+            selectedRowKeys.value = []
+            loadData()
+          })
+          .catch((error: any) => {
+            message.error('批量删除失败: ' + (error.message || '未知错误'))
+            return Promise.reject(error)
+          })
+      }
+    })
+  } catch (error) {
+    console.warn('handleBatchDelete error:', error)
+  }
 }
 const throttledBatchDelete = handleBatchDelete
 
 // 单条删除
 function handleDelete(record: any) {
-  Modal.confirm({
-    title: '确认删除',
-    content: `确定要删除菜单 ${record.title} 吗？`,
-    okText: '确认',
-    cancelText: '取消',
-    onOk: () => {
-      return deleteMenu(record.id).then(() => {
-        message.success('删除成功')
-        loadData()
-      }).catch((error: any) => {
-        message.error('删除菜单失败: ' + (error.message || '未知错误'))
-        return Promise.reject(error)
-      })
+  try {
+    if (!record || !record.title) {
+      message.warning('无效的菜单数据')
+      return
     }
-  })
+
+    Modal.confirm({
+      title: '确认删除',
+      content: `确定要删除菜单 ${record.title} 吗？`,
+      okText: '确认',
+      cancelText: '取消',
+      onOk: () => {
+        return deleteMenu(record.id).then(() => {
+          message.success('删除成功')
+          loadData()
+        }).catch((error: any) => {
+          message.error('删除菜单失败: ' + (error.message || '未知错误'))
+          return Promise.reject(error)
+        })
+      }
+    })
+  } catch (error) {
+    console.warn('handleDelete error:', error)
+  }
 }
 const throttledDelete = handleDelete
 
 // 编辑
 function handleEdit(record: any) {
-  drawerMode.value = 'edit'
-  currentMenu.value = { ...record }
-  parentMenu.value = null
-  drawerVisible.value = true
+  try {
+    if (!record || !record.id) {
+      message.warning('无效的菜单数据')
+      return
+    }
+
+    drawerMode.value = 'edit'
+    // 深拷贝数据，避免直接引用
+    currentMenu.value = {
+      ...record,
+      id: record.id,
+      name: record.name || '',
+      title: record.title || '',
+      url: record.url || '',
+      icon: record.icon || '',
+      showIcon: Boolean(record.showIcon),
+      sort: Number(record.sort) || 0,
+      component: record.component || '',
+      redirect: record.redirect || '',
+      hidden: Boolean(record.hidden),
+      keepAlive: Boolean(record.keepAlive),
+      permission: record.permission || '',
+      parentId: record.parentId || null
+    }
+    parentMenu.value = null
+    drawerVisible.value = true
+  } catch (error) {
+    console.error('编辑菜单失败:', error)
+    message.error('编辑菜单失败')
+  }
 }
 const throttledEdit = handleEdit
 
 // 添加子菜单
 function handleAddChild(record: any) {
-  drawerMode.value = 'create'
-  currentMenu.value = { name: '', title: '', sort: 0, showIcon: true, hidden: false, keepAlive: false }
-  parentMenu.value = record
-  drawerVisible.value = true
+  try {
+    if (!record || !record.id) {
+      message.warning('无效的父级菜单数据')
+      return
+    }
+
+    drawerMode.value = 'create'
+    currentMenu.value = {
+      name: '',
+      title: '',
+      sort: 0,
+      showIcon: true,
+      hidden: false,
+      keepAlive: false,
+      icon: '',
+      url: '',
+      component: '',
+      redirect: '',
+      permission: '',
+      parentId: null
+    }
+    parentMenu.value = { ...record }
+    drawerVisible.value = true
+  } catch (error) {
+    console.error('添加子菜单失败:', error)
+    message.error('添加子菜单失败')
+  }
 }
 const throttledAddChild = handleAddChild
 
 // 抽屉关闭
 function handleDrawerClose() {
-  drawerVisible.value = false
-  currentMenu.value = null
-  parentMenu.value = null
+  try {
+    drawerVisible.value = false
+    // 延迟清理数据，确保抽屉完全关闭
+    setTimeout(() => {
+      currentMenu.value = null
+      parentMenu.value = null
+    }, 300)
+  } catch (error) {
+    console.warn('抽屉关闭错误:', error)
+  }
 }
 
 // 保存（新建/编辑）
 async function handleFormSubmit(formData: any) {
   try {
+    // 验证表单数据
+    if (!formData || typeof formData !== 'object') {
+      message.error('无效的表单数据')
+      return
+    }
+
+    if (!formData.name || !formData.title) {
+      message.error('请填写必填字段')
+      return
+    }
+
+    // 构建提交数据，确保包含所有必要字段
+    const submitData = {
+      ...formData,
+      name: formData.name.trim(),
+      title: formData.title.trim(),
+      url: formData.url || '',
+      icon: formData.icon || '',
+      showIcon: Boolean(formData.showIcon),
+      sort: Number(formData.sort) || 0,
+      component: formData.component || '',
+      redirect: formData.redirect || '',
+      hidden: Boolean(formData.hidden),
+      keepAlive: Boolean(formData.keepAlive),
+      permission: formData.permission || '',
+      parentId: formData.parentId || null,
+      // 根据是否有组件路径判断菜单类型
+      type: formData.component ? 1 : 0, // 0-目录，1-菜单
+      uri: formData.url || '',
+      method: 'GET'
+    }
+
     if (drawerMode.value === 'edit' && formData.id) {
-      await updateMenu(formData.id, formData)
+      await updateMenu(formData.id, submitData)
       message.success('更新成功')
     } else {
-      await createMenu(formData)
+      await createMenu(submitData)
       message.success('创建成功')
     }
+
     handleDrawerClose()
-    loadData()
+    await loadData() // 等待数据加载完成
   } catch (error: any) {
+    console.error('保存菜单失败:', error)
     message.error('保存失败: ' + (error.message || '未知错误'))
   }
 }
 
 // 生命周期钩子
 onMounted(() => {
-  loadData()
-  updateTableBodyHeight()
-  window.addEventListener('resize', updateTableBodyHeight)
+  try {
+    loadData()
+    updateTableBodyHeight()
+    window.addEventListener('resize', updateTableBodyHeight)
+  } catch (error) {
+    console.warn('Menu onMounted error:', error)
+  }
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', updateTableBodyHeight)
-})
+  try {
+    // 清理事件监听器
+    window.removeEventListener('resize', updateTableBodyHeight)
 
-watch(() => pagination.value.pageSize, () => {
-  updateTableBodyHeight()
+    // 清理响应式数据，避免卸载时访问已销毁的数据
+    selectedRowKeys.value = []
+    expandedRowKeys.value = []
+    tableData.value = []
+
+    // 清理抽屉相关数据
+    drawerVisible.value = false
+    currentMenu.value = null
+    parentMenu.value = null
+
+    // 清理加载状态
+    loading.value = false
+    refreshing.value = false
+  } catch (error) {
+    console.warn('Menu onBeforeUnmount error:', error)
+  }
 })
 
 // 抽屉相关
 const drawerVisible = ref(false)
 const drawerMode = ref<'create' | 'edit'>('edit')
-const currentMenu = ref<MenuItem | null>(null)
-const parentMenu = ref<MenuItem | null>(null)
-
-// 展开的节点keys
-const expandedRowKeys = ref<string[]>([])
+const currentMenu = ref<MenuItemEx | null>(null)
+const parentMenu = ref<MenuItemEx | null>(null)
 
 // 行点击事件
 function onCustomRow(record: any) {
   return {
     onClick: (event: MouseEvent) => {
-      if ((event.target as HTMLElement).closest('.ant-checkbox-wrapper')) return
-      const recordId = String(record.id)
-      const isSelected = selectedRowKeys.value.includes(recordId)
-      if (isSelected && selectedRowKeys.value.length === 1) {
-        selectedRowKeys.value = []
-      } else {
-        selectedRowKeys.value = [recordId]
+      try {
+        if ((event.target as HTMLElement).closest('.ant-checkbox-wrapper')) return
+        const recordId = String(record.id)
+        const isSelected = selectedRowKeys.value.includes(recordId)
+        if (isSelected && selectedRowKeys.value.length === 1) {
+          selectedRowKeys.value = []
+        } else {
+          selectedRowKeys.value = [recordId]
+        }
+      } catch (error) {
+        console.warn('onCustomRow onClick error:', error)
       }
     }
   }
 }
 
 function getRowClassName(record: any) {
-  if (selectedRowKeys.value.includes(String(record.id))) {
-    return 'checkbox-selected-row'
+  try {
+    if (selectedRowKeys.value.includes(String(record.id))) {
+      return 'checkbox-selected-row'
+    }
+    return ''
+  } catch (error) {
+    console.warn('getRowClassName error:', error)
+    return ''
   }
-  return ''
-}
-
-// 图标组件映射
-const iconMap: Record<string, any> = {
-  'HomeOutlined': HomeOutlined,
-  'UserOutlined': UserOutlined,
-  'DashboardOutlined': DashboardOutlined,
-  'TeamOutlined': TeamOutlined,
-  'FileOutlined': FileOutlined,
-  'FolderOutlined': FolderOutlined,
-  'AppstoreOutlined': AppstoreOutlined,
-  'MenuOutlined': MenuOutlined,
-  'ApiOutlined': ApiOutlined,
-  'SettingOutlined': SettingOutlined
-}
-
-function getIconComponent(iconName: string) {
-  return iconMap[iconName] || MenuOutlined
 }
 
 // 获取类型颜色
 function getTypeColor(type: number) {
-  const colorMap: Record<number, string> = {
-    0: 'blue',    // 目录
-    1: 'green',   // 菜单
-    2: 'orange'   // 按钮
+  try {
+    const colorMap: Record<number, string> = {
+      0: 'blue',    // 目录
+      1: 'green',   // 菜单
+      2: 'orange'   // 按钮
+    }
+    return colorMap[type] || 'default'
+  } catch (error) {
+    console.warn('getTypeColor error:', error)
+    return 'default'
   }
-  return colorMap[type] || 'default'
 }
 
 // 获取类型文本
 function getTypeText(type: number) {
-  const textMap: Record<number, string> = {
-    0: '目录',
-    1: '菜单', 
-    2: '按钮'
+  try {
+    const textMap: Record<number, string> = {
+      0: '目录',
+      1: '菜单',
+      2: '按钮'
+    }
+    return textMap[type] || '未知'
+  } catch (error) {
+    console.warn('getTypeText error:', error)
+    return '未知'
   }
-  return textMap[type] || '未知'
+}
+
+// 递归移除所有子节点
+function collapseChildren(record: any) {
+  try {
+    const parentId = record.id;
+    // 收集所有要删除的 id
+    const idsToDelete: any[] = [];
+    function collectIds(id: any) {
+      tableData.value.forEach(item => {
+        if (item.parentId === id) {
+          idsToDelete.push(item.id);
+          collectIds(item.id);
+        }
+      });
+    }
+    collectIds(parentId);
+    tableData.value = tableData.value.filter(item => !idsToDelete.includes(item.id));
+  } catch (error) {
+    console.warn('collapseChildren error:', error);
+  }
+}
+
+// 新增的 handleExpand 函数
+async function handleExpand(expanded: boolean, record: any) {
+  console.log('[菜单调试] handleExpand 触发', { expanded, record });
+  if (expanded) {
+    // 展开逻辑
+    try {
+      const childMenus = await getMenusByParentId(record.id);
+      console.log('[菜单调试] getMenusByParentId 返回', childMenus);
+      if (childMenus && Array.isArray(childMenus) && childMenus.length > 0) {
+        const childMenusArray = childMenus as MenuItemEx[];
+        childMenusArray.forEach(item => {
+          item.expanded = false;
+          item._childrenLoaded = false;
+          item._loading = false;
+          if (item.leaf === false || item.leaf === 0) {
+            item.children = [];
+          }
+        });
+        record._childrenLoaded = true;
+        const parentIndex = tableData.value.findIndex(item => item.id === record.id);
+        if (parentIndex !== -1) {
+          const newData = [
+            ...tableData.value.slice(0, parentIndex + 1),
+            ...childMenusArray,
+            ...tableData.value.slice(parentIndex + 1)
+          ];
+          tableData.value = newData;
+        }
+      } else {
+        console.log('[菜单调试] 没有子菜单数据');
+      }
+    } catch (err) {
+      console.error('[菜单调试] getMenusByParentId 请求异常', err);
+    }
+  } else {
+    // 收起逻辑
+    console.log('[菜单调试] 进入收起分支', record.id);
+    collapseChildren(record);
+    record._childrenLoaded = false;
+  }
+}
+
+// 新增的 onExpandIconClick 方法
+function onExpandIconClick(record: any) {
+  const key = String(record.id);
+  const isExpanded = expandedRowKeys.value.includes(key);
+  if (!isExpanded) {
+    expandedRowKeys.value.push(key);
+  } else {
+    expandedRowKeys.value = expandedRowKeys.value.filter(k => k !== key);
+  }
+  handleExpand(!isExpanded, record);
 }
 </script>
 
@@ -677,50 +1020,10 @@ function getTypeText(type: number) {
 
 .table-scroll-container {
   min-height: 0;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: auto;
 }
-
-.pagination-container {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  background: #fff;
-}
-
-:deep(.ant-pagination) {
-  min-height: 32px !important;
-  height: 32px !important;
-  line-height: 32px !important;
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: center !important;
-}
-
-:deep(.ant-pagination-item),
-:deep(.ant-pagination-item-link),
-:deep(.ant-pagination-prev),
-:deep(.ant-pagination-next),
-:deep(.ant-pagination-jump-next),
-:deep(.ant-pagination-jump-prev) {
-  height: 32px !important;
-  min-width: 32px !important;
-  line-height: 32px !important;
-  box-sizing: border-box;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding: 0 !important;
-}
-
-:deep(.ant-pagination-item-ellipsis) {
-  line-height: 32px !important;
-  vertical-align: middle !important;
-  display: inline-block !important;
-  font-size: 16px !important;
-}
-
 .ml-2 { margin-left: 8px; }
-
 .table-title {
   font-size: 16px;
   font-weight: bold;
@@ -878,4 +1181,12 @@ function getTypeText(type: number) {
 :deep(.ant-table-tbody > tr.checkbox-selected-row:hover) {
   background-color: #bae7ff !important;
 }
-</style> 
+:deep(.ant-table-thead th) {
+  white-space: nowrap;
+}
+:deep(.ant-table-cell) {
+  white-space: nowrap;
+  /* overflow: hidden; */
+  /* text-overflow: ellipsis; */
+}
+</style>

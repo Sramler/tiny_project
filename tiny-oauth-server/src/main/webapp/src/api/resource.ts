@@ -5,7 +5,7 @@ export interface ResourceItem {
   id?: number
   name: string
   title?: string
-  path?: string
+  url?: string
   uri?: string
   method?: string
   icon?: string
@@ -28,7 +28,7 @@ export interface ResourceItem {
 export interface ResourceQuery {
   name?: string
   title?: string
-  path?: string
+  url?: string
   uri?: string
   permission?: string
   type?: number
@@ -43,7 +43,7 @@ export interface ResourceCreateUpdateDto {
   id?: number
   name: string
   title: string
-  path?: string
+  url?: string
   uri?: string
   method?: string
   icon?: string
@@ -162,12 +162,12 @@ export function checkResourceNameExists(
   return request.get('/sys/resources/check-name', { params: { name, excludeId } })
 }
 
-// 检查资源路径是否存在
-export function checkResourcePathExists(
-  path: string,
+// 检查资源URL是否存在
+export function checkResourceUrlExists(
+  url: string,
   excludeId?: number,
 ): Promise<{ exists: boolean }> {
-  return request.get('/sys/resources/check-path', { params: { path, excludeId } })
+  return request.get('/sys/resources/check-url', { params: { url, excludeId } })
 }
 
 // 检查资源URI是否存在

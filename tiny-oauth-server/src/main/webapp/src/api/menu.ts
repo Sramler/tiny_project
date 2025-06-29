@@ -5,7 +5,9 @@ export interface MenuItem {
   id?: number
   name: string
   title: string
-  path?: string
+  url?: string
+  uri?: string
+  method?: string
   icon?: string
   showIcon?: boolean
   sort?: number
@@ -24,12 +26,11 @@ export interface MenuItem {
 export interface MenuQuery {
   name?: string
   title?: string
-  path?: string
+  url?: string
   permission?: string
   parentId?: number
   hidden?: boolean
-  page?: number
-  size?: number
+  enabled?: boolean
 }
 
 // 创建/更新菜单参数
@@ -37,7 +38,9 @@ export interface MenuCreateUpdateDto {
   id?: number
   name: string
   title: string
-  path?: string
+  url?: string
+  uri?: string
+  method?: string
   icon?: string
   showIcon?: boolean
   sort?: number
@@ -68,13 +71,19 @@ export interface PageResponse<T> {
   numberOfElements: number
 }
 
-// 获取菜单列表（分页）
-export function menuList(params?: MenuQuery): Promise<PageResponse<MenuItem>> {
+// 获取菜单列表（返回list结构）
+export function menuList(params: {
+  name?: string
+  title?: string
+  permission?: string
+  parentId?: number
+  enabled?: boolean
+}) {
   return request.get('/sys/menus', { params })
 }
 
 // 获取菜单树
-export function getMenuTree(): Promise<MenuItem[]> {
+export function menuTree() {
   return request.get('/sys/menus/tree')
 }
 
@@ -84,17 +93,53 @@ export function getUserMenuTree(userId: number): Promise<MenuItem[]> {
 }
 
 // 创建菜单
-export function createMenu(data: MenuCreateUpdateDto): Promise<MenuItem> {
+export function createMenu(data: {
+  name: string
+  title: string
+  url: string
+  uri: string
+  method: string
+  icon: string
+  showIcon: boolean
+  sort: number
+  component: string
+  redirect: string
+  hidden: boolean
+  keepAlive: boolean
+  permission: string
+  type: number // 0-目录，1-菜单
+  parentId?: number
+}) {
   return request.post('/sys/menus', data)
 }
 
 // 更新菜单
-export function updateMenu(id: number | string, data: MenuCreateUpdateDto): Promise<MenuItem> {
+export function updateMenu(
+  id: string | number,
+  data: {
+    id?: number
+    name: string
+    title: string
+    url: string
+    uri: string
+    method: string
+    icon: string
+    showIcon: boolean
+    sort: number
+    component: string
+    redirect: string
+    hidden: boolean
+    keepAlive: boolean
+    permission: string
+    type: number // 0-目录，1-菜单
+    parentId?: number
+  },
+) {
   return request.put(`/sys/menus/${id}`, data)
 }
 
 // 删除菜单
-export function deleteMenu(id: number | string): Promise<void> {
+export function deleteMenu(id: string | number) {
   return request.delete(`/sys/menus/${id}`)
 }
 
@@ -104,15 +149,13 @@ export function getMenuDetail(id: number | string): Promise<MenuItem> {
 }
 
 // 批量删除菜单
-export function batchDeleteMenus(
-  ids: (number | string)[],
-): Promise<{ success: boolean; message: string }> {
-  return request.post('/sys/menus/batch/delete', ids)
+export function batchDeleteMenus(ids: (string | number)[]) {
+  return request.post('/sys/resources/menus/batch/delete', ids)
 }
 
 // 更新菜单排序
-export function updateMenuSort(id: number | string, sort: number): Promise<MenuItem> {
-  return request.put(`/sys/menus/${id}/sort`, null, { params: { sort } })
+export function updateMenuSort(id: string | number, sort: number) {
+  return request.put(`/sys/resources/menus/${id}/sort`, null, { params: { sort } })
 }
 
 // 批量更新菜单排序
@@ -143,22 +186,24 @@ export function getMenusByHidden(hidden: boolean): Promise<MenuItem[]> {
 }
 
 // 检查菜单名称是否存在
-export function checkMenuNameExists(
-  name: string,
-  excludeId?: number,
-): Promise<{ exists: boolean }> {
-  return request.get('/sys/menus/check-name', { params: { name, excludeId } })
+export function checkMenuNameExists(name: string, excludeId?: string | number) {
+  return request.get('/sys/resources/check-name', { params: { name, excludeId } })
 }
 
 // 检查菜单路径是否存在
-export function checkMenuPathExists(
-  path: string,
-  excludeId?: number,
-): Promise<{ exists: boolean }> {
-  return request.get('/sys/menus/check-path', { params: { path, excludeId } })
+export function checkMenuUrlExists(url: string, excludeId?: string | number) {
+  return request.get('/sys/resources/check-url', { params: { url, excludeId } })
 }
 
 // 获取菜单选项列表（用于下拉选择）
 export function getMenuOptions(): Promise<any[]> {
   return request.get('/sys/menus/options')
+}
+
+// 获取菜单类型选项
+export function getMenuTypeOptions() {
+  return [
+    { label: '目录', value: 0 },
+    { label: '菜单', value: 1 },
+  ]
 }

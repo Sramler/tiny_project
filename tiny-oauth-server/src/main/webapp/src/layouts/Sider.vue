@@ -9,7 +9,7 @@
     <!-- 菜单列表，支持滚动 -->
     <div class="menu-scroll">
       <ul class="menu">
-        <template v-for="(item, idx) in menuList" :key="item.path">
+        <template v-for="(item, idx) in menuList" :key="item.url">
           <li
             :class="['menu-item', { active: isActive(item), open: openMenu === idx }]"
             @click="toggleMenu(idx, item)"
@@ -26,7 +26,7 @@
           </li>
           <!-- 二级菜单 -->
           <ul v-if="item.children && openMenu === idx && !collapsed" class="submenu">
-            <template v-for="(sub, subIdx) in item.children" :key="sub.path">
+            <template v-for="(sub, subIdx) in item.children" :key="sub.url">
               <li
                 :class="['submenu-item', { active: isActive(sub), open: openSubMenu === subIdx }]"
                 @click.stop="toggleSubMenu(subIdx, sub)"
@@ -40,9 +40,9 @@
               <ul v-if="sub.children && openSubMenu === subIdx" class="submenu third">
                 <li
                   v-for="third in sub.children"
-                  :key="third.path"
+                  :key="third.url"
                   :class="['submenu-item', { active: isActive(third) }]"
-                  @click.stop="goMenu(third.path)"
+                  @click.stop="goMenu(third.url)"
                 >
                   <!-- 三级菜单不渲染图标 -->
                   <span class="text">{{ third.title }}</span>
@@ -106,7 +106,7 @@ function toggleMenu(idx: number, item: any) {
     }
   } else {
     // 叶子节点直接跳转到 path
-    goMenu(item.path)
+    goMenu(item.url)
     openMenu.value = idx
     openSubMenu.value = -1
   }
@@ -116,7 +116,7 @@ function toggleSubMenu(subIdx: number, sub: any) {
   if (sub.children) {
     openSubMenu.value = openSubMenu.value === subIdx ? -1 : subIdx
   } else {
-    goMenu(sub.path)
+    goMenu(sub.url)
     openSubMenu.value = subIdx
   }
 }
@@ -126,16 +126,16 @@ function goMenu(path: string) {
 }
 // 判断当前路由是否激活
 function isActive(item: any) {
-  return route.path === item.path
+  return route.path === item.url
 }
 // 路由变化时自动展开对应菜单
 watch(() => route.path, (newPath) => {
   // 一级
-  const idx = menuList.value.findIndex((m: any) => m.path === newPath || (m.children && m.children.some((sub: any) => sub.path === newPath || (sub.children && sub.children.some((third: any) => third.path === newPath)))))
+  const idx = menuList.value.findIndex((m: any) => m.url === newPath || (m.children && m.children.some((sub: any) => sub.url === newPath || (sub.children && sub.children.some((third: any) => third.url === newPath)))))
   if (idx !== -1) openMenu.value = idx
   // 二级
   if (idx !== -1 && menuList.value[idx].children) {
-    const subIdx = menuList.value[idx].children.findIndex((sub: any) => sub.path === newPath || (sub.children && sub.children.some((third: any) => third.path === newPath)))
+    const subIdx = menuList.value[idx].children.findIndex((sub: any) => sub.url === newPath || (sub.children && sub.children.some((third: any) => third.url === newPath)))
     openSubMenu.value = subIdx
   } else {
     openSubMenu.value = -1

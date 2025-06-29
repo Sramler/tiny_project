@@ -31,7 +31,7 @@ class UserRepositoryTest {
         // 创建 mock 实体
         Resource resource = new Resource();
         resource.setName("用户新增权限");
-        resource.setPath("/api/user/add");
+        resource.setUrl("/api/user/add");
         resource.setMethod("POST");
         resource.setType(ResourceType.fromCode(0));
         resource.setParentId(0L);
@@ -64,7 +64,7 @@ class UserRepositoryTest {
         assertThat(role.getName()).isEqualTo("ROLE_TEST");
 
         Resource resource = role.getResources().iterator().next();
-        assertThat(resource.getPath()).isEqualTo("/api/user/add");
+        assertThat(resource.getUrl()).isEqualTo("/api/user/add");
     }
 
 }

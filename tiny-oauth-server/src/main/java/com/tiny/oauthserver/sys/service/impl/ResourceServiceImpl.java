@@ -29,21 +29,25 @@ public class ResourceServiceImpl implements ResourceService {
     @Override
     public Page<ResourceResponseDto> resources(ResourceRequestDto query, Pageable pageable) {
         // 构建查询条件
-        String name = StringUtils.hasText(query.getName()) ? query.getName() : null;
-        String path = StringUtils.hasText(query.getPath()) ? query.getPath() : null;
-        String uri = StringUtils.hasText(query.getUri()) ? query.getUri() : null;
-        String permission = StringUtils.hasText(query.getPermission()) ? query.getPermission() : null;
-        String title = StringUtils.hasText(query.getTitle()) ? query.getTitle() : null;
         ResourceType type = query.getType() != null ? ResourceType.fromCode(query.getType()) : null;
-        Long parentId = query.getParentId();
-        Boolean hidden = query.getHidden();
-
-        // 执行查询
-        Page<Resource> resources = resourceRepository.findByConditions(
-                name, path, uri, permission, title, type, parentId, hidden, pageable);
-
+        
+        // 使用复合查询方法
+        Page<Resource> resourcePage = resourceRepository.findByConditions(
+                query.getName(),
+                query.getUrl(),
+                query.getUri(),
+                query.getPermission(),
+                query.getTitle(),
+                type,
+                query.getParentId(),
+                query.getHidden(),
+                pageable
+        );
+        
         // 转换为DTO
-        return resources.map(this::toDto);
+        Page<ResourceResponseDto> dtoPage = resourcePage.map(this::toDto);
+        
+        return dtoPage;
     }
 
     @Override
@@ -64,16 +68,16 @@ public class ResourceServiceImpl implements ResourceService {
         // 更新字段
         existingResource.setName(resource.getName());
         existingResource.setTitle(resource.getTitle());
-        existingResource.setPath(resource.getPath());
+        existingResource.setUrl(resource.getUrl());
         existingResource.setUri(resource.getUri());
         existingResource.setMethod(resource.getMethod());
         existingResource.setIcon(resource.getIcon());
-        existingResource.setShowIcon(resource.isShowIcon());
+        existingResource.setShowIcon(resource.getShowIcon());
         existingResource.setSort(resource.getSort());
         existingResource.setComponent(resource.getComponent());
         existingResource.setRedirect(resource.getRedirect());
-        existingResource.setHidden(resource.isHidden());
-        existingResource.setKeepAlive(resource.isKeepAlive());
+        existingResource.setHidden(resource.getHidden());
+        existingResource.setKeepAlive(resource.getKeepAlive());
         existingResource.setPermission(resource.getPermission());
         existingResource.setType(resource.getType());
         existingResource.setParentId(resource.getParentId());
@@ -88,10 +92,10 @@ public class ResourceServiceImpl implements ResourceService {
             throw new RuntimeException("资源名称已存在");
         }
         
-        // 检查路径是否已存在（如果提供了路径）
-        if (StringUtils.hasText(resourceDto.getPath()) && 
-            resourceRepository.findByPath(resourceDto.getPath()).isPresent()) {
-            throw new RuntimeException("资源路径已存在");
+        // 检查URL是否已存在（如果提供了URL）
+        if (StringUtils.hasText(resourceDto.getUrl()) && 
+            resourceRepository.findByUrl(resourceDto.getUrl()).isPresent()) {
+            throw new RuntimeException("资源URL已存在");
         }
         
         // 检查URI是否已存在（如果提供了URI）
@@ -104,9 +108,21 @@ public class ResourceServiceImpl implements ResourceService {
         Resource resource = new Resource();
         resource.setName(resourceDto.getName());
         resource.setTitle(resourceDto.getTitle());
-        resource.setPath(resourceDto.getPath());
-        resource.setUri(resourceDto.getUri());
-        resource.setMethod(resourceDto.getMethod());
+        resource.setUrl(resourceDto.getUrl());
+        
+        // 设置 uri 和 method 的默认值
+        String uri = resourceDto.getUri();
+        if (uri == null || uri.trim().isEmpty()) {
+            uri = ""; // 设置默认值为空字符串
+        }
+        resource.setUri(uri);
+        
+        String method = resourceDto.getMethod();
+        if (method == null || method.trim().isEmpty()) {
+            method = ""; // 设置默认值为空字符串
+        }
+        resource.setMethod(method);
+        
         resource.setIcon(resourceDto.getIcon());
         resource.setShowIcon(resourceDto.isShowIcon());
         resource.setSort(resourceDto.getSort());
@@ -132,11 +148,11 @@ public class ResourceServiceImpl implements ResourceService {
             throw new RuntimeException("资源名称已被其他资源使用");
         }
         
-        // 检查路径是否已被其他资源使用（如果提供了路径）
-        if (StringUtils.hasText(resourceDto.getPath())) {
-            Optional<Resource> resourceWithSamePath = resourceRepository.findByPath(resourceDto.getPath());
-            if (resourceWithSamePath.isPresent() && !resourceWithSamePath.get().getId().equals(resourceDto.getId())) {
-                throw new RuntimeException("资源路径已被其他资源使用");
+        // 检查URL是否已被其他资源使用（如果提供了URL）
+        if (StringUtils.hasText(resourceDto.getUrl())) {
+            Optional<Resource> resourceWithSameUrl = resourceRepository.findByUrl(resourceDto.getUrl());
+            if (resourceWithSameUrl.isPresent() && !resourceWithSameUrl.get().getId().equals(resourceDto.getId())) {
+                throw new RuntimeException("资源URL已被其他资源使用");
             }
         }
         
@@ -151,9 +167,21 @@ public class ResourceServiceImpl implements ResourceService {
         // 更新字段
         existingResource.setName(resourceDto.getName());
         existingResource.setTitle(resourceDto.getTitle());
-        existingResource.setPath(resourceDto.getPath());
-        existingResource.setUri(resourceDto.getUri());
-        existingResource.setMethod(resourceDto.getMethod());
+        existingResource.setUrl(resourceDto.getUrl());
+        
+        // 设置 uri 和 method 的默认值
+        String uri = resourceDto.getUri();
+        if (uri == null || uri.trim().isEmpty()) {
+            uri = ""; // 设置默认值为空字符串
+        }
+        existingResource.setUri(uri);
+        
+        String method = resourceDto.getMethod();
+        if (method == null || method.trim().isEmpty()) {
+            method = ""; // 设置默认值为空字符串
+        }
+        existingResource.setMethod(method);
+        
         existingResource.setIcon(resourceDto.getIcon());
         existingResource.setShowIcon(resourceDto.isShowIcon());
         existingResource.setSort(resourceDto.getSort());
@@ -197,6 +225,11 @@ public class ResourceServiceImpl implements ResourceService {
     @Override
     public List<Resource> findByType(ResourceType type) {
         return resourceRepository.findByTypeOrderBySortAsc(type);
+    }
+
+    @Override
+    public List<Resource> findByTypeIn(List<ResourceType> types) {
+        return resourceRepository.findByTypeInOrderBySortAsc(types);
     }
 
     @Override
@@ -248,8 +281,8 @@ public class ResourceServiceImpl implements ResourceService {
     }
 
     @Override
-    public Optional<Resource> findByPath(String path) {
-        return resourceRepository.findByPath(path);
+    public Optional<Resource> findByUrl(String url) {
+        return resourceRepository.findByUrl(url);
     }
 
     @Override
@@ -271,11 +304,11 @@ public class ResourceServiceImpl implements ResourceService {
     }
 
     @Override
-    public boolean existsByPath(String path, Long excludeId) {
+    public boolean existsByUrl(String url, Long excludeId) {
         if (excludeId == null) {
-            return resourceRepository.findByPath(path).isPresent();
+            return resourceRepository.findByUrl(url).isPresent();
         }
-        return resourceRepository.existsByPathAndIdNot(path, excludeId);
+        return resourceRepository.existsByUrlAndIdNot(url, excludeId);
     }
 
     @Override
@@ -321,16 +354,16 @@ public class ResourceServiceImpl implements ResourceService {
         dto.setId(resource.getId());
         dto.setName(resource.getName());
         dto.setTitle(resource.getTitle());
-        dto.setPath(resource.getPath());
+        dto.setUrl(resource.getUrl());
         dto.setUri(resource.getUri());
         dto.setMethod(resource.getMethod());
         dto.setIcon(resource.getIcon());
-        dto.setShowIcon(resource.isShowIcon());
+        dto.setShowIcon(resource.getShowIcon());
         dto.setSort(resource.getSort());
         dto.setComponent(resource.getComponent());
         dto.setRedirect(resource.getRedirect());
-        dto.setHidden(resource.isHidden());
-        dto.setKeepAlive(resource.isKeepAlive());
+        dto.setHidden(resource.getHidden());
+        dto.setKeepAlive(resource.getKeepAlive());
         dto.setPermission(resource.getPermission());
         dto.setType(resource.getType().getCode());
         dto.setTypeName(getTypeName(resource.getType()));

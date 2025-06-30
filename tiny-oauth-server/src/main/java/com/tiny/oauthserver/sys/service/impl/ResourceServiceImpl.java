@@ -265,7 +265,7 @@ public class ResourceServiceImpl implements ResourceService {
                 ResourceResponseDto parent = resourceMap.get(resource.getParentId());
                 if (parent != null) {
                     if (parent.getChildren() == null) {
-                        parent.setChildren(new HashSet<>());
+                        parent.setChildren(new ArrayList<>());
                     }
                     parent.getChildren().add(dto);
                 }
@@ -368,7 +368,7 @@ public class ResourceServiceImpl implements ResourceService {
         dto.setType(resource.getType().getCode());
         dto.setTypeName(getTypeName(resource.getType()));
         dto.setParentId(resource.getParentId());
-        dto.setChildren(new HashSet<>());
+        dto.setChildren(new ArrayList<>());
         return dto;
     }
 

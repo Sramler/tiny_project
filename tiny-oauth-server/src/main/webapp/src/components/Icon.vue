@@ -55,7 +55,7 @@ const iconClass = computed(() => {
 /* 通用图标样式，可根据需要覆盖 */
 .icon-vue {
   font-size: 18px; /* 默认大小 */
-  color: #1890ff;  /* 默认主色 */
+  color: inherit;  /* 继承父元素的颜色 */
   vertical-align: middle;
 }
 </style> 

@@ -92,6 +92,10 @@
       <!-- 显示配置 -->
       <a-divider>显示配置</a-divider>
       
+      <a-form-item label="是否启用" name="enabled">
+        <a-switch v-model:checked="formData.enabled" />
+      </a-form-item>
+      
       <a-form-item label="菜单图标" name="icon">
         <div class="icon-selector-row">
           <a-input
@@ -146,7 +150,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, watch, onBeforeUnmount, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
 import type { FormInstance } from 'ant-design-vue'
 // 引入菜单API
@@ -191,6 +195,7 @@ const formData = reactive({
   keepAlive: false,
   permission: '',
   parentId: null as number | null,
+  enabled: true
 })
 
 // 表单验证规则
@@ -231,18 +236,28 @@ function selectIcon(iconName: string) {
 // 加载菜单树数据
 async function loadMenuTree() {
   try {
+    console.log('开始加载菜单树数据...')
     const data = await menuTree()
+    console.log('菜单树原始数据:', data)
     
     // 验证返回的数据
     if (Array.isArray(data)) {
-      menuTreeData.value = data
-    } else if (data && typeof data === 'object' && Array.isArray(data.content)) {
+      // 转换数据格式，确保 children 是数组格式
+      const convertedData = convertTreeData(data)
+      menuTreeData.value = convertedData
+      console.log('菜单树数据加载成功，共', data.length, '项')
+    } else if (data && typeof data === 'object' && Array.isArray((data as any).content)) {
       // 如果返回的是分页格式，取 content
-      menuTreeData.value = data.content
+      const convertedData = convertTreeData((data as any).content)
+      menuTreeData.value = convertedData
+      console.log('菜单树数据加载成功（分页格式），共', (data as any).content.length, '项')
     } else {
       console.warn('菜单树数据格式异常:', data)
       menuTreeData.value = []
     }
+    
+    // 打印菜单树结构，便于调试
+    console.log('最终菜单树数据:', menuTreeData.value)
   } catch (error) {
     console.error('加载菜单树失败:', error)
     message.error('加载菜单树失败')
@@ -250,26 +265,44 @@ async function loadMenuTree() {
   }
 }
 
+// 工具函数：递归把 children 从 Set 转成 Array
+function convertTreeData(tree: any[]): any[] {
+  if (!Array.isArray(tree)) return []
+  return tree.map(node => ({
+    ...node,
+    children: node.children ? convertTreeData(Array.from(node.children)) : [],
+  }))
+}
+
 // 初始化表单数据
 function initFormData() {
   try {
+    console.log('初始化表单数据，当前模式:', props.mode)
+    console.log('菜单数据:', props.menuData)
+    console.log('父级菜单:', props.parentMenu)
+    
     if (props.menuData && typeof props.menuData === 'object') {
       // 安全地复制数据，避免直接引用
+      const menuData = props.menuData
       Object.assign(formData, {
-        id: props.menuData.id || '',
-        name: props.menuData.name || '',
-        title: props.menuData.title || '',
-        url: props.menuData.url || '',
-        icon: props.menuData.icon || '',
-        showIcon: Boolean(props.menuData.showIcon),
-        sort: Number(props.menuData.sort) || 0,
-        component: props.menuData.component || '',
-        redirect: props.menuData.redirect || '',
-        hidden: Boolean(props.menuData.hidden),
-        keepAlive: Boolean(props.menuData.keepAlive),
-        permission: props.menuData.permission || '',
-        parentId: props.menuData.parentId || null,
+        id: menuData.id || '',
+        name: menuData.name || '',
+        title: menuData.title || '',
+        url: menuData.url || '',
+        icon: menuData.icon || '',
+        showIcon: Boolean(menuData.showIcon),
+        sort: Number(menuData.sort) || 0,
+        component: menuData.component || '',
+        redirect: menuData.redirect || '',
+        hidden: Boolean(menuData.hidden),
+        keepAlive: Boolean(menuData.keepAlive),
+        permission: menuData.permission || '',
+        parentId: menuData.parentId || null,
+        enabled: menuData.enabled !== undefined ? menuData.enabled : true
       })
+      
+      console.log('编辑模式 - 表单数据已设置:', formData)
+      console.log('父级菜单ID:', formData.parentId)
     } else {
       // 重置表单数据
       Object.assign(formData, {
@@ -286,12 +319,25 @@ function initFormData() {
         keepAlive: false,
         permission: '',
         parentId: null,
+        enabled: true
       })
+      console.log('新建模式 - 表单数据已重置')
     }
     
     // 如果是添加子菜单，设置父级菜单ID
     if (props.parentMenu && typeof props.parentMenu === 'object') {
       formData.parentId = props.parentMenu.id || null
+      console.log('添加子菜单模式 - 父级菜单ID已设置:', formData.parentId)
+    }
+    
+    // 验证父级菜单ID是否正确设置
+    console.log('最终父级菜单ID:', formData.parentId)
+    console.log('菜单树数据是否可用:', menuTreeData.value.length > 0)
+    
+    // 如果菜单树数据已加载，验证父级菜单是否存在
+    if (menuTreeData.value.length > 0 && formData.parentId) {
+      const parentExists = findMenuInTree(menuTreeData.value, formData.parentId)
+      console.log('父级菜单在树中是否存在:', parentExists)
     }
   } catch (error) {
     console.warn('initFormData error:', error)
@@ -300,8 +346,26 @@ function initFormData() {
       id: '', name: '', title: '', url: '', icon: '',
       showIcon: true, sort: 0, component: '', redirect: '',
       hidden: false, keepAlive: false, permission: '', parentId: null,
+      enabled: true
     })
   }
+}
+
+// 递归查找菜单在树中的位置
+function findMenuInTree(tree: MenuItem[], targetId: number | null): boolean {
+  if (!targetId) return false
+  
+  for (const item of tree) {
+    if (item.id === targetId) {
+      return true
+    }
+    if (item.children && item.children.length > 0) {
+      if (findMenuInTree(item.children, targetId)) {
+        return true
+      }
+    }
+  }
+  return false
 }
 
 // 提交表单
@@ -338,6 +402,7 @@ async function handleSubmit() {
       keepAlive: Boolean(formData.keepAlive),
       permission: formData.permission || '',
       parentId: formData.parentId || null,
+      enabled: formData.enabled
     }
     
     emit('submit', submitData)
@@ -361,6 +426,7 @@ function handleCancel() {
 // 监听菜单数据变化
 watch(() => props.menuData, () => {
   try {
+    console.log('菜单数据变化，重新初始化表单')
     initFormData()
   } catch (error) {
     console.warn('MenuForm watch menuData error:', error)
@@ -370,18 +436,41 @@ watch(() => props.menuData, () => {
 // 监听父级菜单变化
 watch(() => props.parentMenu, () => {
   try {
+    console.log('父级菜单变化:', props.parentMenu)
     if (props.parentMenu) {
       formData.parentId = props.parentMenu.id || null
+      console.log('父级菜单ID已更新:', formData.parentId)
     }
   } catch (error) {
     console.warn('MenuForm watch parentMenu error:', error)
   }
 }, { immediate: true })
 
-// 组件挂载时加载菜单树
-onMounted(() => {
+// 监听菜单树数据变化，确保数据加载完成后再初始化表单
+watch(() => menuTreeData.value, (newTreeData) => {
   try {
-    loadMenuTree()
+    console.log('菜单树数据变化，重新初始化表单数据')
+    if (newTreeData && newTreeData.length > 0) {
+      // 菜单树数据加载完成，重新初始化表单以确保父级菜单正确回显
+      nextTick(() => {
+        initFormData()
+      })
+    }
+  } catch (error) {
+    console.warn('MenuForm watch menuTreeData error:', error)
+  }
+}, { deep: true })
+
+// 组件挂载时加载菜单树
+onMounted(async () => {
+  try {
+    console.log('MenuForm 组件挂载，开始加载菜单树')
+    await loadMenuTree()
+    console.log('菜单树加载完成，初始化表单数据')
+    // 确保菜单树加载完成后再初始化表单
+    nextTick(() => {
+      initFormData()
+    })
   } catch (error) {
     console.warn('MenuForm onMounted error:', error)
   }
@@ -395,6 +484,7 @@ onBeforeUnmount(() => {
       id: '', name: '', title: '', url: '', icon: '',
       showIcon: true, sort: 0, component: '', redirect: '',
       hidden: false, keepAlive: false, permission: '', parentId: null,
+      enabled: true
     })
     
     // 清理其他响应式数据
@@ -405,6 +495,34 @@ onBeforeUnmount(() => {
     console.warn('MenuForm onBeforeUnmount error:', error)
   }
 })
+
+// 测试菜单树API
+async function testMenuTreeApi() {
+  try {
+    console.log('开始测试菜单树API...')
+    const data = await menuTree()
+    console.log('菜单树API返回数据:', data)
+    
+    if (Array.isArray(data)) {
+      console.log('数据是数组格式，长度:', data.length)
+      data.forEach((item, index) => {
+        console.log(`菜单 ${index + 1}:`, {
+          id: item.id,
+          title: item.title,
+          parentId: item.parentId,
+          children: item.children?.length || 0
+        })
+      })
+    } else {
+      console.log('数据不是数组格式:', typeof data, data)
+    }
+    
+    message.success('菜单树API测试完成，请查看控制台')
+  } catch (error) {
+    console.error('菜单树API测试失败:', error)
+    message.error('菜单树API测试失败: ' + (error instanceof Error ? error.message : '未知错误'))
+  }
+}
 </script>
 
 <style scoped>

@@ -67,6 +67,7 @@ public class Resource implements Serializable {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
     @Column(nullable = false)
     private Boolean enabled = true; // 是否启用
 

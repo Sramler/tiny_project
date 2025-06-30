@@ -3,10 +3,12 @@ import type { Ref, ComputedRef } from 'vue'
 import { userManager } from './oidc'
 import type { User } from 'oidc-client-ts'
 import { jwtVerify, createRemoteJWKSet } from 'jose'
+
 const metadata = await fetch('http://localhost:9000/.well-known/openid-configuration').then((res) =>
   res.json(),
 )
 const JWKS = createRemoteJWKSet(new URL(metadata.jwks_uri))
+
 export async function verifyAccessToken(token: string) {
   try {
     console.log(JWKS)
@@ -21,6 +23,7 @@ export async function verifyAccessToken(token: string) {
     return null
   }
 }
+
 export interface AuthContext {
   user: Ref<User | null>
   isAuthenticated: ComputedRef<boolean>
@@ -33,22 +36,58 @@ export interface AuthContext {
 const user = ref<User | null>(null)
 const isAuthenticated = computed(() => !!user.value && !user.value.expired)
 
+// 防重复重定向标志
+let loginInProgress = false
+
 // 顶层定义，避免 useAuth() 调用循环引用
 export const login = async () => {
-  await userManager.signinRedirect({
-    state: {
-      returnUrl: window.location.pathname + window.location.search,
-    },
-  })
+  // 防止重复重定向
+  if (loginInProgress) {
+    console.log('登录重定向已在进行中，跳过重复操作')
+    return
+  }
+
+  // 检查是否已经在 OIDC 流程中
+  const currentUser = await userManager.getUser()
+  if (currentUser && !currentUser.expired) {
+    console.log('用户已认证，无需重定向')
+    user.value = currentUser
+    return
+  }
+
+  // 检查 URL 参数，避免重复重定向
+  const urlParams = new URLSearchParams(window.location.search)
+  if (urlParams.has('code') || urlParams.has('error')) {
+    console.log('检测到 OIDC 回调参数，不进行重定向')
+    return
+  }
+
+  try {
+    console.log('开始 OIDC 登录重定向')
+    loginInProgress = true
+
+    await userManager.signinRedirect({
+      state: {
+        returnUrl: window.location.pathname + window.location.search,
+      },
+    })
+  } catch (error) {
+    console.error('OIDC 登录重定向失败:', error)
+    loginInProgress = false
+    throw error
+  }
 }
+
 export const logout = async () => {
   await userManager.removeUser() // 本地清除 user
   user.value = null
+  loginInProgress = false // 重置登录状态
   await userManager.signoutRedirect()
 }
 
 let renewInProgress = false
 const FORCE_LOGOUT_ON_RENEW_FAIL = true
+
 async function safeSilentRenew() {
   if (renewInProgress) return null
   renewInProgress = true
@@ -62,6 +101,7 @@ async function safeSilentRenew() {
     if (FORCE_LOGOUT_ON_RENEW_FAIL) {
       await userManager.removeUser()
       user.value = null
+      loginInProgress = false // 重置登录状态
       window.location.href = '/login'
     }
     return null
@@ -76,10 +116,13 @@ export async function initAuth() {
     const u = await userManager.getUser()
     if (u && !u.expired) {
       user.value = u
+      console.log('✅ 用户状态恢复成功')
     } else {
+      console.log('用户状态无效，尝试静默续期')
       await safeSilentRenew()
     }
-  } catch {
+  } catch (error) {
+    console.error('初始化认证状态失败:', error)
     user.value = null
   }
 }
@@ -93,6 +136,7 @@ export function useAuth(): AuthContext {
     }
     return user.value?.access_token || null
   }
+
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
     const token = await getAccessToken()
     if (!token) throw new Error('Not authenticated')
@@ -142,6 +186,7 @@ export const initPromise = initAuth()
 userManager.events.addUserLoaded((u) => {
   console.debug('[OIDC] User loaded:', u)
   user.value = u
+  loginInProgress = false // 重置登录状态
   //console.log(u.access_token);
   verifyAccessToken(u.access_token)
 })
@@ -149,6 +194,7 @@ userManager.events.addUserLoaded((u) => {
 userManager.events.addUserUnloaded(() => {
   console.debug('[OIDC] User unloaded')
   user.value = null
+  loginInProgress = false // 重置登录状态
 })
 
 userManager.events.addSilentRenewError((err) => {
@@ -158,9 +204,11 @@ userManager.events.addSilentRenewError((err) => {
 userManager.events.addUserSignedOut(() => {
   console.debug('[OIDC] User signed out')
   user.value = null
+  loginInProgress = false // 重置登录状态
   // 可选：跳转登录页
   window.location.href = '/login'
 })
+
 userManager.events.addAccessTokenExpiring(async () => {
   const secondsLeft = user.value?.expires_in ?? 0
   console.debug(`[OIDC] Token expiring in ${secondsLeft}s`)

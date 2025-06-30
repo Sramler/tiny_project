@@ -20,6 +20,7 @@ export interface MenuItem {
   children?: MenuItem[]
   createdAt?: string
   updatedAt?: string
+  enabled?: boolean
 }
 
 // 查询参数类型
@@ -28,7 +29,7 @@ export interface MenuQuery {
   title?: string
   url?: string
   permission?: string
-  parentId?: number
+  parentId?: number | null
   hidden?: boolean
   enabled?: boolean
 }
@@ -76,10 +77,15 @@ export function menuList(params: {
   name?: string
   title?: string
   permission?: string
-  parentId?: number
+  parentId?: number | null
   enabled?: boolean
 }) {
-  return request.get('/sys/menus', { params })
+  // 只在 parentId 不为 undefined/null 时传递
+  const queryParams: any = { ...params }
+  if (queryParams.parentId === undefined || queryParams.parentId === null) {
+    delete queryParams.parentId
+  }
+  return request.get('/sys/menus', { params: queryParams })
 }
 
 // 获取菜单树

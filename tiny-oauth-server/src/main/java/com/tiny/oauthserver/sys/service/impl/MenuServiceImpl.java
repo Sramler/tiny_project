@@ -19,7 +19,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
-import java.util.HashSet;
 import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.Set;
@@ -83,6 +82,7 @@ public class MenuServiceImpl implements MenuService {
                    r.permission,
                    r.type,
                    r.parent_id AS parentId,
+                   r.enabled,
                    CASE WHEN EXISTS (
                        SELECT 1 FROM resource c WHERE c.parent_id = r.id
                    ) THEN 0 ELSE 1 END AS leaf
@@ -198,7 +198,8 @@ public class MenuServiceImpl implements MenuService {
         dto.setPermission((String) row[11]); // permission
         dto.setType(safeToInteger(row[12])); // type - 安全转换为 Integer
         dto.setParentId(row[13] != null ? ((Number) row[13]).longValue() : null); // parentId
-        dto.setLeaf(safeToBoolean(row[14])); // leaf - 安全转换为 Boolean
+        dto.setEnabled(safeToBoolean(row[14])); // enabled
+        dto.setLeaf(safeToBoolean(row[15])); // leaf
         
         return dto;
     }
@@ -266,7 +267,75 @@ public class MenuServiceImpl implements MenuService {
     @Override
     public List<ResourceResponseDto> menuTree() {
         List<Resource> menus = resourceRepository.findByTypeInOrderBySortAsc(List.of(ResourceType.DIRECTORY, ResourceType.MENU));
-        return buildResourceTree(menus);
+        List<ResourceResponseDto> fullTree = buildResourceTree(menus);
+
+        // 1. 获取所有节点的扁平化列表，用于后续查找 redirect 目标
+        List<ResourceResponseDto> flatList = new ArrayList<>();
+        flattenTree(fullTree, flatList);
+
+        // 2. 从扁平化列表中，筛选出所有可见菜单的 URL，作为有效 redirect 目标集合
+        Set<String> visibleUrls = flatList.stream()
+                .filter(node -> Boolean.TRUE.equals(node.getEnabled()) && !Boolean.TRUE.equals(node.getHidden()))
+                .map(ResourceResponseDto::getUrl)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+
+        // 3. 返回前进行过滤，并传入可见 URL 集合
+        return filterVisibleMenus(fullTree, visibleUrls);
+    }
+
+    /**
+     * 将树形结构扁平化为列表
+     * @param nodes 节点列表
+     * @param flatList 存储扁平化结果的列表
+     */
+    private void flattenTree(List<ResourceResponseDto> nodes, List<ResourceResponseDto> flatList) {
+        if (nodes == null || nodes.isEmpty()) {
+            return;
+        }
+        for (ResourceResponseDto node : nodes) {
+            flatList.add(node);
+            if (node.getChildren() != null) {
+                flattenTree(node.getChildren(), flatList);
+            }
+        }
+    }
+
+    /**
+     * 递归过滤出启用的、未隐藏的菜单项
+     * @param nodes 菜单节点列表
+     * @param visibleUrls 所有可见菜单的 URL 集合，用于校验 redirect
+     * @return 过滤后的菜单节点列表
+     */
+    private List<ResourceResponseDto> filterVisibleMenus(List<ResourceResponseDto> nodes, Set<String> visibleUrls) {
+        if (nodes == null) {
+            return new ArrayList<>();
+        }
+
+        return nodes.stream()
+            .filter(node -> Boolean.TRUE.equals(node.getEnabled()) && !Boolean.TRUE.equals(node.getHidden()))
+            .map(node -> {
+                if (node.getChildren() != null && !node.getChildren().isEmpty()) {
+                    node.setChildren(filterVisibleMenus(node.getChildren(), visibleUrls));
+                }
+                return node;
+            })
+            // 过滤掉没有可访问子菜单的目录，除非它有有效的重定向
+            .filter(node -> {
+                // 非目录节点直接保留
+                if (node.getType() != 0) {
+                    return true;
+                }
+
+                // 是目录节点，满足以下任一条件则保留：
+                // 1. 有可见的子菜单
+                boolean hasVisibleChildren = node.getChildren() != null && !node.getChildren().isEmpty();
+                // 2. 有一个有效的重定向地址（该地址必须是一个可见菜单的URL）
+                boolean hasValidRedirect = StringUtils.hasText(node.getRedirect()) && visibleUrls.contains(node.getRedirect());
+
+                return hasVisibleChildren || hasValidRedirect;
+            })
+            .collect(Collectors.toList());
     }
 
     /**
@@ -380,7 +449,7 @@ public class MenuServiceImpl implements MenuService {
                     ResourceResponseDto parent = resourceMap.get(resource.getParentId());
                     if (parent != null) {
                         if (parent.getChildren() == null) {
-                            parent.setChildren(new HashSet<>());
+                            parent.setChildren(new ArrayList<>());
                         }
                         parent.getChildren().add(dto);
                     }
@@ -421,13 +490,14 @@ public class MenuServiceImpl implements MenuService {
             dto.setType(resource.getType() != null ? resource.getType().getCode() : null);
             dto.setTypeName(resource.getType() != null ? resource.getType().getDescription() : null);
             dto.setParentId(resource.getParentId());
+            dto.setEnabled(Boolean.TRUE.equals(resource.getEnabled()));
             
             // 判断是否为叶子节点（没有子资源）
             Boolean isLeaf = !resourceRepository.existsByParentId(resource.getId());
             dto.setLeaf(Boolean.TRUE.equals(isLeaf));
             
             // 初始化children为空集合，避免null指针异常
-            dto.setChildren(new HashSet<>());
+            dto.setChildren(new ArrayList<>());
             
             return dto;
         } catch (Exception e) {
@@ -438,7 +508,12 @@ public class MenuServiceImpl implements MenuService {
             dto.setTitle(resource.getTitle());
             dto.setType(resource.getType() != null ? resource.getType().getCode() : null);
             dto.setParentId(resource.getParentId());
-            dto.setChildren(new HashSet<>());
+            dto.setEnabled(false);
+            
+            // 判断是否为叶子节点（没有子资源）
+            dto.setLeaf(true);
+            
+            dto.setChildren(new ArrayList<>());
             return dto;
         }
     }
@@ -521,6 +596,7 @@ public class MenuServiceImpl implements MenuService {
                r.permission,
                r.type,
                r.parent_id AS parentId,
+               r.enabled,
                CASE WHEN EXISTS (
                    SELECT 1 FROM resource c WHERE c.parent_id = r.id
                ) THEN 0 ELSE 1 END AS leaf
@@ -531,6 +607,8 @@ public class MenuServiceImpl implements MenuService {
         // 动态条件拼接
         if (query.getParentId() != null) {
             sqlBuilder.append(" AND r.parent_id = :parentId");
+        } else {
+            sqlBuilder.append(" AND r.parent_id IS NULL");
         }
         if (StringUtils.hasText(query.getTitle())) {
             sqlBuilder.append(" AND r.title LIKE :title");

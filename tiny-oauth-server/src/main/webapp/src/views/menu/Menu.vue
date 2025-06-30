@@ -249,12 +249,12 @@ type MenuItemEx = MenuItem & {
 }
 
 // 查询条件，包含parentId用于按层级查询
-const query = ref<MenuQuery>({
+const query = ref<MenuQuery & { parentId: number | null }>({
   name: '',
   title: '',
   permission: '',
   enabled: undefined,
-  parentId: 0 // 默认查询顶级菜单
+  parentId: null // 默认查询顶级菜单，允许 null
 })
 
 // 表格数据
@@ -492,12 +492,14 @@ function updateTableBodyHeight() {
 async function loadData() {
   try {
     loading.value = true
-    const params = {
+    const params: any = {
       name: query.value.name?.trim() || '',
       title: query.value.title?.trim() || '',
       permission: query.value.permission?.trim() || '',
-      enabled: query.value.enabled,
-      parentId: query.value.parentId || 0
+      enabled: query.value.enabled
+    }
+    if (query.value.parentId !== undefined && query.value.parentId !== null) {
+      params.parentId = query.value.parentId
     }
     const res = await menuList(params)
     // 验证响应数据
@@ -541,7 +543,7 @@ const throttledSearch = handleSearch
 // 重置
 function handleReset() {
   try {
-    query.value = { name: '', title: '', permission: '', enabled: undefined, parentId: 0 }
+    query.value = { name: '', title: '', permission: '', enabled: undefined, parentId: null }
     loadData()
   } catch (error) {
     console.warn('handleReset error:', error)
@@ -674,6 +676,8 @@ function handleEdit(record: any) {
       return
     }
 
+    console.log('编辑菜单，原始数据:', record)
+    
     drawerMode.value = 'edit'
     // 深拷贝数据，避免直接引用
     currentMenu.value = {
@@ -692,6 +696,12 @@ function handleEdit(record: any) {
       permission: record.permission || '',
       parentId: record.parentId || null
     }
+    
+    console.log('编辑菜单，处理后的数据:', currentMenu.value)
+    if (currentMenu.value) {
+      console.log('父级菜单ID:', currentMenu.value.parentId)
+    }
+    
     parentMenu.value = null
     drawerVisible.value = true
   } catch (error) {

@@ -14,18 +14,18 @@
             :class="['menu-item', { active: isActive(item), open: openMenu === idx }]"
             @click="toggleMenu(idx, item)"
           >
-            <!-- 一级菜单图标动态渲染 -->
-            <component
+            <!-- 使用 Icon.vue 组件渲染图标 -->
+            <Icon
               v-if="item.showIcon && item.icon"
-              :is="getIconComponent(item.icon)"
-              class="icon"
+              :icon="item.icon"
+              className="icon"
             />
             <span v-if="!collapsed" class="text">{{ item.title }}</span>
-            <!-- 有子菜单时显示箭头 -->
-            <span v-if="item.children && !collapsed" class="arrow">{{ openMenu === idx ? '▼' : '▶' }}</span>
+            <!-- 使用 Icon 组件替换箭头 -->
+            <Icon v-if="item.children && item.children.length > 0 && !collapsed" :icon="openMenu === idx ? 'DownOutlined' : 'RightOutlined'" class="arrow" />
           </li>
           <!-- 二级菜单 -->
-          <ul v-if="item.children && openMenu === idx && !collapsed" class="submenu">
+          <ul v-if="item.children && item.children.length > 0 && openMenu === idx && !collapsed" class="submenu">
             <template v-for="(sub, subIdx) in item.children" :key="sub.url">
               <li
                 :class="['submenu-item', { active: isActive(sub), open: openSubMenu === subIdx }]"
@@ -33,11 +33,11 @@
               >
                 <!-- 二级菜单不渲染图标 -->
                 <span class="text">{{ sub.title }}</span>
-                <!-- 有三级菜单时显示箭头 -->
-                <span v-if="sub.children" class="arrow">{{ openSubMenu === subIdx ? '▼' : '▶' }}</span>
+                <!-- 使用 Icon 组件替换箭头 -->
+                <Icon v-if="sub.children && sub.children.length > 0" :icon="openSubMenu === subIdx ? 'DownOutlined' : 'RightOutlined'" class="arrow" />
               </li>
               <!-- 三级菜单 -->
-              <ul v-if="sub.children && openSubMenu === subIdx" class="submenu third">
+              <ul v-if="sub.children && sub.children.length > 0 && openSubMenu === subIdx" class="submenu third">
                 <li
                   v-for="third in sub.children"
                   :key="third.url"
@@ -55,8 +55,7 @@
     </div>
     <!-- 折叠按钮固定在底部 -->
     <div class="collapse-btn" @click="toggleCollapse">
-      <MenuUnfoldOutlined v-if="collapsed" />
-      <MenuFoldOutlined v-else />
+      <Icon :icon="collapsed ? 'MenuUnfoldOutlined' : 'MenuFoldOutlined'" />
     </div>
   </div>
 </template>
@@ -64,10 +63,9 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import axios from 'axios'
-// 引入所有 ant-design-vue 图标
-import * as Icons from '@ant-design/icons-vue'
-import { MenuUnfoldOutlined, MenuFoldOutlined } from '@ant-design/icons-vue'
+import { menuTree } from '@/api/menu'
+import { message } from 'ant-design-vue'
+import Icon from '@/components/Icon.vue'
 
 // 侧边栏是否折叠状态
 const collapsed = ref(false)
@@ -80,8 +78,19 @@ const openSubMenu = ref(-1)
 
 // 加载菜单数据
 async function loadMenu() {
-  const res = await axios.get('/menu.json')
-  menuList.value = res.data
+  try {
+    const data = await menuTree()
+    if (data && Array.isArray(data)) {
+      menuList.value = data
+    } else {
+      menuList.value = []
+      message.warning('未加载到可用菜单')
+    }
+  } catch (error) {
+    console.error('加载菜单失败:', error)
+    message.error('加载菜单失败，请检查网络或联系管理员')
+    menuList.value = []
+  }
 }
 
 onMounted(loadMenu)
@@ -97,7 +106,7 @@ function toggleCollapse() {
 // 一级菜单点击，手风琴效果
 function toggleMenu(idx: number, item: any) {
   // 如果有子菜单
-  if (item.children) {
+  if (item.children && item.children.length > 0) {
     openMenu.value = openMenu.value === idx ? -1 : idx
     openSubMenu.value = -1
     // 如果有 redirect 字段，点击父菜单时跳转到 redirect
@@ -113,7 +122,7 @@ function toggleMenu(idx: number, item: any) {
 }
 // 二级菜单点击，手风琴效果
 function toggleSubMenu(subIdx: number, sub: any) {
-  if (sub.children) {
+  if (sub.children && sub.children.length > 0) {
     openSubMenu.value = openSubMenu.value === subIdx ? -1 : subIdx
   } else {
     goMenu(sub.url)
@@ -134,19 +143,13 @@ watch(() => route.path, (newPath) => {
   const idx = menuList.value.findIndex((m: any) => m.url === newPath || (m.children && m.children.some((sub: any) => sub.url === newPath || (sub.children && sub.children.some((third: any) => third.url === newPath)))))
   if (idx !== -1) openMenu.value = idx
   // 二级
-  if (idx !== -1 && menuList.value[idx].children) {
+  if (idx !== -1 && menuList.value[idx].children && menuList.value[idx].children.length > 0) {
     const subIdx = menuList.value[idx].children.findIndex((sub: any) => sub.url === newPath || (sub.children && sub.children.some((third: any) => third.url === newPath)))
     openSubMenu.value = subIdx
   } else {
     openSubMenu.value = -1
   }
 }, { immediate: true })
-
-// 获取图标组件的方法
-function getIconComponent(iconName: string) {
-  // 如果 iconName 存在于 Icons 中，则返回对应组件，否则返回 null
-  return (Icons as any)[iconName] || null
-}
 </script>
 
 <style scoped>
@@ -228,6 +231,7 @@ function getIconComponent(iconName: string) {
 }
 .menu-item.active {
   background: #1890ff;
+  color: #fff; /* 激活时字体和图标都为白色 */
 }
 .menu-item.open {
   /* background: #112240; */
@@ -243,6 +247,7 @@ function getIconComponent(iconName: string) {
 .menu-item .arrow {
   margin-left: auto;
   font-size: 12px;
+  transition: transform 0.2s;
 }
 .submenu {
   /* background: #0d1a26; */

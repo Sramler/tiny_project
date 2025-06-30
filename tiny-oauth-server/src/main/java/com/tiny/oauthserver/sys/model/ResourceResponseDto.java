@@ -2,7 +2,7 @@ package com.tiny.oauthserver.sys.model;
 
 import com.tiny.oauthserver.sys.enums.ResourceType;
 
-import java.util.Set;
+import java.util.List;
 
 /**
  * 资源响应DTO
@@ -48,7 +48,7 @@ public class ResourceResponseDto {
     /**
      * 是否显示图标
      */
-    private boolean showIcon;
+    private Boolean showIcon;
     
     /**
      * 排序权重
@@ -68,12 +68,12 @@ public class ResourceResponseDto {
     /**
      * 是否隐藏
      */
-    private boolean hidden;
+    private Boolean hidden;
     
     /**
      * 是否缓存页面
      */
-    private boolean keepAlive;
+    private Boolean keepAlive;
     
     /**
      * 权限标识
@@ -98,11 +98,16 @@ public class ResourceResponseDto {
     /**
      * 子资源列表
      */
-    private Set<ResourceResponseDto> children;
+    private List<ResourceResponseDto> children;
     /**
      * 是否叶子节点
      */
-    private boolean leaf;
+    private Boolean leaf;
+
+    /**
+     * 是否启用
+     */
+    private Boolean enabled;
 
     public ResourceResponseDto() {
 
@@ -165,11 +170,11 @@ public class ResourceResponseDto {
         this.icon = icon;
     }
     
-    public boolean isShowIcon() {
+    public Boolean getShowIcon() {
         return showIcon;
     }
     
-    public void setShowIcon(boolean showIcon) {
+    public void setShowIcon(Boolean showIcon) {
         this.showIcon = showIcon;
     }
     
@@ -197,19 +202,19 @@ public class ResourceResponseDto {
         this.redirect = redirect;
     }
     
-    public boolean isHidden() {
+    public Boolean getHidden() {
         return hidden;
     }
     
-    public void setHidden(boolean hidden) {
+    public void setHidden(Boolean hidden) {
         this.hidden = hidden;
     }
     
-    public boolean isKeepAlive() {
+    public Boolean getKeepAlive() {
         return keepAlive;
     }
     
-    public void setKeepAlive(boolean keepAlive) {
+    public void setKeepAlive(Boolean keepAlive) {
         this.keepAlive = keepAlive;
     }
     
@@ -245,23 +250,29 @@ public class ResourceResponseDto {
         this.parentId = parentId;
     }
 
-    public boolean isLeaf() {
+    public Boolean getLeaf() {
         return leaf;
     }
 
-    public void setLeaf(boolean leaf) {
+    public void setLeaf(Boolean leaf) {
         this.leaf = leaf;
     }
 
-    public Set<ResourceResponseDto> getChildren() {
+    public List<ResourceResponseDto> getChildren() {
         return children;
     }
     
-    public void setChildren(Set<ResourceResponseDto> children) {
+    public void setChildren(List<ResourceResponseDto> children) {
         this.children = children;
     }
 
+    public Boolean getEnabled() {
+        return enabled;
+    }
 
+    public void setEnabled(Boolean enabled) {
+        this.enabled = enabled;
+    }
 
     // 新增构造方法，便于SQL/JPQL投影
 // 注意 type 用 ResourceType 枚举

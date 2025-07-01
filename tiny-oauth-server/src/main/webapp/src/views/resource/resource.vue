@@ -20,6 +20,7 @@
           <a-form-item label="资源类型">
             <a-select v-model:value="query.type" placeholder="请选择资源类型" style="width: 120px;">
               <a-select-option :value="undefined">全部</a-select-option>
+              <a-select-option :value="ResourceType.DIRECTORY">目录</a-select-option>
               <a-select-option :value="ResourceType.MENU">菜单</a-select-option>
               <a-select-option :value="ResourceType.BUTTON">按钮</a-select-option>
               <a-select-option :value="ResourceType.API">API</a-select-option>
@@ -115,7 +116,24 @@
             :custom-row="onCustomRow"
             :row-class-name="getRowClassName"
             :scroll="{ x: 1400, y: tableBodyHeight }"
+            defaultExpandAllRows
+            :row-expandable="(record: ResourceItem) => !record.leaf"
           >
+            <template #expandIcon="{ expanded, onExpand, record }">
+              <span
+                v-if="!record.leaf"
+                class="custom-expand-icon"
+                @click="(e) => { e.stopPropagation(); onExpand(record, e) }"
+                style="cursor: pointer; color: #1677ff; font-size: 16px;"
+              >
+                <template v-if="expanded">
+                  <MinusOutlined style="margin-right: 2px;" />
+                </template>
+                <template v-else>
+                  <PlusOutlined style="margin-right: 2px;" />
+                </template>
+              </span>
+            </template>
             <template #bodyCell="{ column, record }">
               <template v-if="column.dataIndex === 'method'">
                 <a-tag :color="getMethodColor(record.method)">
@@ -126,6 +144,9 @@
                 <a-tag :color="getTypeColor(record.type)">
                   {{ getTypeText(record.type) }}
                 </a-tag>
+              </template>
+              <template v-else-if="column.dataIndex === 'icon'">
+                <Icon :icon="record.icon" />
               </template>
               <template v-else-if="column.dataIndex === 'action'">
                 <div class="action-buttons">
@@ -145,19 +166,6 @@
               </template>
             </template>
           </a-table>
-        </div>
-        <div class="pagination-container" ref="paginationRef">
-          <a-pagination
-            v-model:current="pagination.current"
-            :page-size="pagination.pageSize"
-            :total="pagination.total"
-            :show-size-changer="pagination.showSizeChanger"
-            :page-size-options="paginationConfig.pageSizeOptions"
-            :show-total="pagination.showTotal"
-            @change="handlePageChange"
-            @showSizeChange="handlePageSizeChange"
-            :locale="{ items_per_page: '条/页' }"
-          />
         </div>
       </div>
     </div>
@@ -186,7 +194,7 @@
 // 引入Vue相关API
 import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
 // 引入资源API
-import { resourceList, createResource, updateResource, deleteResource, batchDeleteResources, type ResourceItem, type ResourceQuery, ResourceType } from '@/api/resource'
+import { getResourceTree, createResource, updateResource, deleteResource, batchDeleteResources, type ResourceItem, type ResourceQuery, ResourceType } from '@/api/resource'
 // 引入Antd组件和图标
 import { message, Modal } from 'ant-design-vue'
 import { 
@@ -195,10 +203,12 @@ import {
   EditOutlined, 
   DeleteOutlined,
   SettingOutlined,
-  HolderOutlined
+  HolderOutlined,
+  MinusOutlined
 } from '@ant-design/icons-vue'
 import VueDraggable from 'vuedraggable'
 import ResourceForm from './ResourceForm.vue'
+import Icon from '@/components/Icon.vue'
 
 // 查询条件
 const query = ref<ResourceQuery>({ 
@@ -208,7 +218,7 @@ const query = ref<ResourceQuery>({
   type: undefined
 })
 
-// 表格数据
+// 表格数据（树形结构）
 const tableData = ref<ResourceItem[]>([])
 
 // 加载状态
@@ -220,25 +230,6 @@ const selectedRowKeys = ref<string[]>([])
 // 刷新动画状态
 const refreshing = ref(false)
 
-// 分页配置
-const pagination = ref({
-  current: 1,
-  pageSize: 10,
-  showSizeChanger: true,
-  pageSizeOptions: ['10', '20', '30', '40', '50'],
-  total: 0,
-  showTotal: (total: number) => `共 ${total} 条`
-})
-
-const paginationConfig = computed(() => ({
-  current: Number(pagination.value.current) || 1,
-  pageSize: Number(pagination.value.pageSize) || 10,
-  showSizeChanger: pagination.value.showSizeChanger,
-  pageSizeOptions: pagination.value.pageSizeOptions,
-  total: Number(pagination.value.total) || 0,
-  showTotal: pagination.value.showTotal
-}))
-
 // 初始列定义
 const INITIAL_COLUMNS = [
   { title: '资源名称', dataIndex: 'name', width: 150 },
@@ -249,6 +240,7 @@ const INITIAL_COLUMNS = [
   { title: '权限标识', dataIndex: 'permission', width: 200 },
   { title: '资源类型', dataIndex: 'type', width: 100, align: 'center' },
   { title: '排序', dataIndex: 'sort', width: 80, align: 'center' },
+  { title: '图标', dataIndex: 'icon', width: 60, align: 'center' },
   { title: '操作', dataIndex: 'action', width: 160, fixed: 'right', align: 'center' }
 ]
 
@@ -304,20 +296,8 @@ function resetColumnOrder() {
 // 拖拽结束
 function onDragEnd() {}
 
-// 计算最终表格列
+// 计算最终表格列（去除序号，树形结构不适合分页序号）
 const columns = computed(() => [
-  {
-    title: '序号',
-    dataIndex: 'index',
-    width: 80,
-    align: 'center',
-    fixed: 'left',
-    customRender: ({ index }: { index?: number }) => {
-      const current = Number(pagination.value.current) || 1
-      const pageSize = Number(pagination.value.pageSize) || 10
-      return (current - 1) * pageSize + (typeof index === 'number' ? index : 0) + 1
-    }
-  },
   ...INITIAL_COLUMNS.filter(col => showColumnKeys.value.includes(col.dataIndex))
 ])
 
@@ -335,42 +315,48 @@ const rowSelection = computed(() => ({
 // 表格内容区高度自适应
 const tableContentRef = ref<HTMLElement | null>(null)
 const tableScrollContainerRef = ref<HTMLElement | null>(null)
-const paginationRef = ref<HTMLElement | null>(null)
 const tableBodyHeight = ref(400)
 
 function updateTableBodyHeight() {
   nextTick(() => {
-    if (tableContentRef.value && paginationRef.value) {
+    if (tableContentRef.value) {
       const tableHeader = tableContentRef.value.querySelector('.ant-table-header') as HTMLElement
       const containerHeight = tableContentRef.value.clientHeight
-      const paginationHeight = paginationRef.value.clientHeight
       const tableHeaderHeight = tableHeader ? tableHeader.clientHeight : 55
-      const bodyHeight = containerHeight - paginationHeight - tableHeaderHeight
+      const bodyHeight = containerHeight - tableHeaderHeight
       tableBodyHeight.value = Math.max(bodyHeight, 200)
     }
   })
 }
 
-// 加载数据
+// 递归补全 leaf 字段，保证所有节点都有 leaf: true/false
+function fixLeafAndChildren(nodes: ResourceItem[]) {
+  if (!Array.isArray(nodes)) return
+  nodes.forEach(node => {
+    // children 必须为数组
+    if (!Array.isArray(node.children)) {
+      node.children = []
+    }
+    // leaf 字段补全
+    node.leaf = node.children.length === 0
+    // 递归处理子节点
+    if (node.children.length > 0) {
+      fixLeafAndChildren(node.children)
+    }
+  })
+}
+
+// 加载树形数据
 async function loadData() {
   loading.value = true
   try {
-    const params = {
-      name: query.value.name?.trim(),
-      title: query.value.title?.trim(),
-      uri: query.value.uri?.trim(),
-      permission: query.value.permission?.trim(),
-      type: query.value.type,
-      page: (Number(pagination.value.current) || 1) - 1,
-      size: Number(pagination.value.pageSize) || 10
-    }
-    const res = await resourceList(params)
-    tableData.value = Array.isArray(res.content) ? res.content : []
-    pagination.value.total = res.totalElements || 0
+    const res = await getResourceTree()
+    fixLeafAndChildren(res) // 递归修正 leaf 和 children 字段
+    removeEmptyChildren(res) // 递归删除空 children 字段
+    tableData.value = Array.isArray(res) ? res : []
   } catch (error) {
-    console.error('加载资源数据失败:', error)
+    console.error('加载资源树数据失败:', error)
     tableData.value = []
-    pagination.value.total = 0
   } finally {
     loading.value = false
   }
@@ -378,7 +364,6 @@ async function loadData() {
 
 // 查询
 function handleSearch() {
-  pagination.value.current = 1
   loadData()
 }
 const throttledSearch = handleSearch
@@ -386,7 +371,6 @@ const throttledSearch = handleSearch
 // 重置
 function handleReset() {
   query.value = { name: '', title: '', uri: '', permission: '', type: undefined }
-  pagination.value.current = 1
   loadData()
 }
 const throttledReset = handleReset
@@ -474,23 +458,14 @@ function clearSelection() {
   selectedRowKeys.value = []
 }
 
-// 分页变化
-function handlePageChange(page: number) {
-  pagination.value.current = page || 1
-  loadData()
-}
-
-function handlePageSizeChange(current: number, size: number) {
-  pagination.value.pageSize = size || 10
-  pagination.value.current = 1
-  loadData()
-}
-
 // 行点击事件
 function onCustomRow(record: any) {
   return {
     onClick: (event: MouseEvent) => {
+      // 排除点击复选框
       if ((event.target as HTMLElement).closest('.ant-checkbox-wrapper')) return
+      // 排除点击自定义展开/折叠图标，防止点击展开时触发行选中
+      if ((event.target as HTMLElement).closest('.custom-expand-icon')) return
       const recordId = String(record.id)
       const isSelected = selectedRowKeys.value.includes(recordId)
       if (isSelected && selectedRowKeys.value.length === 1) {
@@ -548,10 +523,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', updateTableBodyHeight)
 })
 
-watch(() => pagination.value.pageSize, () => {
-  updateTableBodyHeight()
-})
-
 // 获取请求方法颜色
 function getMethodColor(method: string) {
   const colorMap: Record<string, string> = {
@@ -567,6 +538,7 @@ function getMethodColor(method: string) {
 // 获取资源类型颜色
 function getTypeColor(type: number) {
   const colorMap: Record<number, string> = {
+    [ResourceType.DIRECTORY]: 'orange',
     [ResourceType.MENU]: 'blue',
     [ResourceType.BUTTON]: 'green',
     [ResourceType.API]: 'orange'
@@ -577,11 +549,25 @@ function getTypeColor(type: number) {
 // 获取资源类型文本
 function getTypeText(type: number) {
   const textMap: Record<number, string> = {
+    [ResourceType.DIRECTORY]: '目录',
     [ResourceType.MENU]: '菜单',
     [ResourceType.BUTTON]: '按钮',
     [ResourceType.API]: 'API'
   }
   return textMap[type] || '未知'
+}
+
+function removeEmptyChildren(nodes: ResourceItem[]) {
+  if (!Array.isArray(nodes)) return
+  nodes.forEach(node => {
+    if (Array.isArray(node.children)) {
+      if (node.children.length === 0) {
+        delete node.children // 删除空 children 字段
+      } else {
+        removeEmptyChildren(node.children)
+      }
+    }
+  })
 }
 </script>
 

@@ -22,6 +22,14 @@ export interface ResourceItem {
   children?: ResourceItem[]
   createdAt?: string
   updatedAt?: string
+  /**
+   * 是否为叶子节点（用于树形表格控制展开按钮，true 表示无子节点，不显示展开按钮）
+   */
+  leaf?: boolean
+  /**
+   * 是否启用（资源状态）
+   */
+  enabled?: boolean
 }
 
 // 查询参数类型
@@ -79,9 +87,10 @@ export interface PageResponse<T> {
 
 // 资源类型枚举
 export enum ResourceType {
-  MENU = 0,
-  BUTTON = 1,
-  API = 2,
+  DIRECTORY = 0,
+  MENU = 1,
+  BUTTON = 2,
+  API = 3,
 }
 
 // 获取资源列表（分页）

@@ -244,35 +244,56 @@ public class ResourceServiceImpl implements ResourceService {
 
     @Override
     public List<ResourceResponseDto> buildResourceTree(List<Resource> resources) {
-        // 构建ID到资源的映射
+        // 构建ID到资源DTO的映射
         Map<Long, ResourceResponseDto> resourceMap = new HashMap<>();
         List<ResourceResponseDto> rootResources = new ArrayList<>();
-        
-        // 转换为DTO并建立映射
+        // 1. 先将所有资源转为DTO并建立映射
         for (Resource resource : resources) {
             ResourceResponseDto dto = toDto(resource);
+            // 自动补全 enabled 字段，null 时默认 true
+            if (dto.getEnabled() == null) {
+                dto.setEnabled(Boolean.TRUE);
+            }
+            // 初始化 children，避免为 null
+            dto.setChildren(new ArrayList<>());
             resourceMap.put(resource.getId(), dto);
         }
-        
-        // 构建树形结构
+        // 2. 构建树形结构
         for (Resource resource : resources) {
             ResourceResponseDto dto = resourceMap.get(resource.getId());
             if (resource.getParentId() == null) {
-                // 顶级资源
+                // 顶级资源，加入根节点列表
                 rootResources.add(dto);
             } else {
-                // 子资源
+                // 子资源，加入父节点的 children
                 ResourceResponseDto parent = resourceMap.get(resource.getParentId());
                 if (parent != null) {
-                    if (parent.getChildren() == null) {
-                        parent.setChildren(new ArrayList<>());
-                    }
                     parent.getChildren().add(dto);
                 }
             }
         }
-        
+        // 3. 递归补全 leaf 字段
+        for (ResourceResponseDto root : rootResources) {
+            fillLeafField(root);
+        }
         return rootResources;
+    }
+
+    /**
+     * 递归补全 leaf 字段，children 为空则 leaf=true，否则 leaf=false
+     */
+    private void fillLeafField(ResourceResponseDto node) {
+        if (node.getChildren() == null) {
+            node.setChildren(new ArrayList<>());
+        }
+        if (node.getChildren().isEmpty()) {
+            node.setLeaf(Boolean.TRUE);
+        } else {
+            node.setLeaf(Boolean.FALSE);
+            for (ResourceResponseDto child : node.getChildren()) {
+                fillLeafField(child);
+            }
+        }
     }
 
     @Override

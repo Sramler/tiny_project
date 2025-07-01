@@ -53,6 +53,14 @@
         <a-form-item label="最后登录时间" name="lastLoginAt" v-if="form.id">
           <a-input v-model:value="formattedLastLoginAt" disabled />
         </a-form-item>
+        <a-form-item label="分配角色" v-if="props.mode !== 'create'">
+          <a-button @click="showRoleTransfer = true">分配角色</a-button>
+          <RoleTransfer
+            v-model:modelValue="selectedRoleIds"
+            :allRoles="roleOptions"
+            v-model:open="showRoleTransfer"
+          />
+        </a-form-item>
         <a-form-item :wrapper-col="{ offset: 6, span: 16 }">
           <a-button v-if="props.mode !== 'view'" type="primary" html-type="submit">保存</a-button>
           <a-button style="margin-left: 8px" @click="throttledCancel">返回</a-button>
@@ -63,9 +71,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted, nextTick } from 'vue'
 import type { Rule } from 'ant-design-vue/es/form'
 import { useThrottleFn } from '@/utils/throttle'
+import { getAllRoles } from '@/api/role'
+import { getUserRoles, updateUserRoles } from '@/api/user'
+import { message } from 'ant-design-vue'
+import RoleTransfer from './RoleTransfer.vue'
 
 const form = ref({
   id: '',
@@ -195,18 +207,52 @@ watch(() => props.userData, (newData) => {
   }
 }, { immediate: true, deep: true })
 
+// 角色分配相关响应式数据
+const roleOptions = ref<any[]>([]) // 所有可选角色
+const showRoleTransfer = ref(false)
+const selectedRoleIds = ref<string[]>([]) // 已分配角色ID
 
-function onSubmit() {
-  // 创建提交数据
+// 加载所有角色和当前用户已分配角色
+async function loadRoles() {
+  // 获取所有角色
+  const all = await getAllRoles()
+  roleOptions.value = (all || []).map((r: any) => ({
+    key: String(r.id),
+    title: r.name + (r.description ? `（${r.description}）` : ''),
+    ...r
+  }))
+  // 获取当前用户已分配角色
+  if (form.value.id) {
+    const userRoleIds = await getUserRoles(form.value.id)
+    selectedRoleIds.value = (userRoleIds || []).map((id: any) => String(id))
+  } else {
+    selectedRoleIds.value = []
+  }
+}
+
+// 监听用户数据变化，自动加载角色
+watch(() => form.value.id, (newId) => {
+  if (props.mode !== 'create' && newId) {
+    loadRoles()
+  } else {
+    selectedRoleIds.value = []
+  }
+})
+
+// 编辑/查看模式下，初始加载角色
+onMounted(() => {
+  if (props.mode !== 'create' && form.value.id) {
+    loadRoles()
+  }
+})
+
+// 保存时同步角色绑定
+async function onSubmit() {
   const submitData = {
-    ...form.value
+    ...form.value,
+    roleIds: selectedRoleIds.value.map(id => Number(id))
   }
-  
-  // 编辑模式下，如果密码为空或确认密码不显示，将confirmPassword设置为空字符串
-  if (props.mode === 'edit' && (!submitData.password || submitData.password.trim() === '' || !showConfirmPassword.value)) {
-    submitData.confirmPassword = ''
-  }
-  
+  console.log('提交数据', submitData)
   emit('submit', submitData)
 }
 

@@ -5,6 +5,7 @@ import com.tiny.oauthserver.sys.model.UserRequestDto;
 import com.tiny.oauthserver.sys.model.UserResponseDto;
 import com.tiny.oauthserver.sys.model.UserCreateUpdateDto;
 import com.tiny.oauthserver.sys.repository.UserRepository;
+import com.tiny.oauthserver.sys.repository.RoleRepository;
 import com.tiny.oauthserver.sys.service.UserService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -17,16 +18,21 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import jakarta.persistence.criteria.Predicate;
+import org.springframework.beans.factory.annotation.Autowired;
+import java.util.HashSet;
 
 @Service
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final RoleRepository roleRepository;
 
-    public UserServiceImpl(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    @Autowired
+    public UserServiceImpl(UserRepository userRepository, PasswordEncoder passwordEncoder, RoleRepository roleRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.roleRepository = roleRepository;
     }
 
 
@@ -103,6 +109,15 @@ public class UserServiceImpl implements UserService {
         // 加密密码
         user.setPassword(passwordEncoder.encode(userDto.getPassword()));
         
+        // 处理角色
+        if (userDto.getRoleIds() != null && !userDto.getRoleIds().isEmpty()) {
+            var roles = roleRepository.findAllById(userDto.getRoleIds());
+            if (roles.size() != userDto.getRoleIds().size()) {
+                throw new RuntimeException("部分角色不存在");
+            }
+            user.setRoles(new HashSet<>(roles));
+        }
+        
         return userRepository.save(user);
     }
 
@@ -128,6 +143,15 @@ public class UserServiceImpl implements UserService {
         // 如果提供了新密码，则更新密码
         if (userDto.needUpdatePassword()) {
             existingUser.setPassword(passwordEncoder.encode(userDto.getPassword()));
+        }
+        
+        // 处理角色
+        if (userDto.getRoleIds() != null) {
+            var roles = roleRepository.findAllById(userDto.getRoleIds());
+            if (roles.size() != userDto.getRoleIds().size()) {
+                throw new RuntimeException("部分角色不存在");
+            }
+            existingUser.setRoles(new HashSet<>(roles));
         }
         
         return userRepository.save(existingUser);
@@ -173,5 +197,19 @@ public class UserServiceImpl implements UserService {
         }
         
         userRepository.deleteAll(users);
+    }
+
+    @Override
+    @Transactional
+    public void updateUserRoles(Long userId, List<Long> roleIds) {
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new RuntimeException("用户不存在"));
+        // 查询所有角色
+        List<com.tiny.oauthserver.sys.model.Role> roles = roleRepository.findAllById(roleIds);
+        if (roles.size() != roleIds.size()) {
+            throw new RuntimeException("部分角色不存在");
+        }
+        user.setRoles(new java.util.HashSet<>(roles));
+        userRepository.save(user);
     }
 }

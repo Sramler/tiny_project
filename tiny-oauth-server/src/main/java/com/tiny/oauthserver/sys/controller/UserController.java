@@ -96,4 +96,27 @@ public class UserController {
             return ResponseEntity.badRequest().body(Map.of("success", false, "message", e.getMessage()));
         }
     }
+
+    /**
+     * 查询指定用户已绑定的角色ID列表
+     */
+    @GetMapping("/{id}/roles")
+    public ResponseEntity<List<Long>> getUserRoles(@PathVariable("id") Long id) {
+        return userService.findById(id)
+            .map(user -> ResponseEntity.ok(user.getRoles().stream().map(role -> role.getId()).toList()))
+            .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * 保存用户角色绑定
+     */
+    @PostMapping("/{id}/roles")
+    public ResponseEntity<?> updateUserRoles(@PathVariable("id") Long id, @RequestBody List<Long> roleIds) {
+        try {
+            userService.updateUserRoles(id, roleIds);
+            return ResponseEntity.ok(Map.of("success", true, "message", "用户角色已更新"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", e.getMessage()));
+        }
+    }
 }

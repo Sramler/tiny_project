@@ -74,6 +74,12 @@
               </template>
               取消选择
             </a-button>
+            <a-button type="primary" class="toolbar-btn" @click="openBatchRoleTransfer">
+              <template #icon>
+                <SettingOutlined />
+              </template>
+              分配角色
+            </a-button>
           </div>
           
           <a-button type="link" @click="throttledCreate" class="toolbar-btn">
@@ -240,6 +246,15 @@
         @cancel="handleDrawerClose"
       />
     </a-drawer>
+
+    <RoleTransfer
+      v-if="showBatchRoleTransfer"
+      :open="showBatchRoleTransfer"
+      :all-roles="allRoles"
+      :model-value="batchSelectedRoleIds"
+      @update:open="showBatchRoleTransfer = $event"
+      @update:modelValue="handleBatchRoleAssign"
+    />
   </div>
 </template>
 
@@ -252,6 +267,9 @@ import UserForm from '@/views/user/UserForm.vue'
 import { message, Modal } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import { useThrottleFn } from '@/utils/throttle'
+import RoleTransfer from './RoleTransfer.vue'
+import { getAllRoles, getRoleById } from '@/api/role'
+import { getUserRoles, updateUserRoles } from '@/api/user'
 
 const query = ref({
   username: '',
@@ -793,6 +811,44 @@ const allDisabled = computed(() => {
 const allEnabled = computed(() => {
   return selectedRows.value.length > 0 && selectedRows.value.every(row => row.enabled === true)
 })
+
+const showBatchRoleTransfer = ref(false)
+const allRoles = ref<any[]>([])
+const batchSelectedRoleIds = ref<string[]>([])
+
+async function openBatchRoleTransfer() {
+  // 获取所有角色
+  const all = await getAllRoles()
+  allRoles.value = (all || []).map((r: any) => ({
+    key: String(r.id),
+    title: r.name + (r.description ? `（${r.description}）` : ''),
+    ...r
+  }))
+  // 获取选中用户的角色交集（如需自定义可改为并集或第一个用户的角色）
+  if (selectedRowKeys.value.length > 0) {
+    // 这里只取第一个用户的角色作为默认
+    const userId = selectedRowKeys.value[0]
+    const userRoleIds = await getUserRoles(userId)
+    batchSelectedRoleIds.value = (userRoleIds || []).map((id: any) => String(id))
+  } else {
+    batchSelectedRoleIds.value = []
+  }
+  showBatchRoleTransfer.value = true
+}
+
+async function handleBatchRoleAssign(newRoleIds: string[]) {
+  // 这里可以实现批量分配角色逻辑，如循环调用后端接口
+  // 示例：对每个选中用户调用 updateUser/updateUserRoles
+  for (const userIdStr of selectedRowKeys.value) {
+    const userId = Number(userIdStr)
+    const userRoleIds = await getUserRoles(userId)
+    await updateUserRoles(userId, newRoleIds.map(id => Number(id)))
+  }
+  message.success('批量分配角色成功')
+  showBatchRoleTransfer.value = false
+  // 可选：刷新表格数据
+  loadData()
+}
 </script>
 
 <style scoped>

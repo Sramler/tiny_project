@@ -94,3 +94,13 @@ export function checkUsernameExists(username: string) {
     return { exists, message: exists ? '用户名已存在' : '用户名可用' }
   })
 }
+
+// 获取指定用户已绑定的角色ID列表
+export function getUserRoles(userId: number) {
+  return request.get(`/sys/users/${userId}/roles`)
+}
+
+// 保存用户角色绑定
+export function updateUserRoles(userId: number, roleIds: number[]) {
+  return request.post(`/sys/users/${userId}/roles`, roleIds)
+}

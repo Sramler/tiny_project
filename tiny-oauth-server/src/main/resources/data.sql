@@ -4,9 +4,9 @@ INSERT INTO `user` (`username`, `password`, `nickname`, `enabled`, `account_non_
 ('user', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVEFDa', '普通用户', true, true, true, true);
 
 -- 插入角色数据
-INSERT INTO `role` (`name`, `description`) VALUES
-('ADMIN', '系统管理员'),
-('USER', '普通用户');
+INSERT INTO `role` (`code`, `name`, `description`, `builtin`, `enabled`) VALUES
+('ROLE_ADMIN', '系统管理员', '拥有系统所有权限的管理员角色', true, true),
+('ROLE_USER', '普通用户', '普通用户角色，拥有基本权限', true, true);
 
 -- 插入用户角色关联数据
 INSERT INTO `user_role` (`user_id`, `role_id`) VALUES

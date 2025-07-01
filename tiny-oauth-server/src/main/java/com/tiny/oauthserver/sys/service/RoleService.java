@@ -3,6 +3,7 @@ package com.tiny.oauthserver.sys.service;
 import com.tiny.oauthserver.sys.model.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import java.util.List;
 import java.util.Optional;
 
 public interface RoleService {
@@ -11,4 +12,8 @@ public interface RoleService {
     RoleResponseDto create(RoleCreateUpdateDto dto);
     RoleResponseDto update(Long id, RoleCreateUpdateDto dto);
     void delete(Long id);
+    // 获取该角色下所有已分配用户ID
+    List<Long> getUserIdsByRoleId(Long roleId);
+    // 保存角色与用户的分配关系
+    void updateRoleUsers(Long roleId, List<Long> userIds);
 } 

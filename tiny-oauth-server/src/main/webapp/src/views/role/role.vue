@@ -8,6 +8,9 @@
           <a-form-item label="角色名">
             <a-input v-model:value="query.name" placeholder="请输入角色名" />
           </a-form-item>
+          <a-form-item label="角色标识">
+            <a-input v-model:value="query.code" placeholder="请输入角色标识" />
+          </a-form-item>
           <a-form-item>
             <a-button type="primary" @click="throttledSearch">搜索</a-button>
             <a-button class="ml-2" @click="throttledReset">重置</a-button>
@@ -19,7 +22,35 @@
         <div class="table-title">角色列表</div>
         <div class="table-actions">
           <div v-if="selectedRowKeys.length > 0" class="batch-actions">
-            <a-button type="primary" danger @click="throttledBatchDelete" class="toolbar-btn">
+            <a-tooltip
+              v-if="hasBuiltinSelected && selectedRowKeys.length > 0"
+              title="选中项包含内置角色，无法批量删除"
+            >
+              <span>
+                <a-button
+                  type="primary"
+                  danger
+                  disabled
+                  class="toolbar-btn danger"
+                  style="pointer-events: auto;"
+                >
+                  <template #icon>
+                    <DeleteOutlined />
+                  </template>
+                  批量删除 ({{ selectedRowKeys.length }})
+                </a-button>
+              </span>
+            </a-tooltip>
+            <a-button
+              v-else
+              type="primary"
+              danger
+              @click="throttledBatchDelete"
+              class="toolbar-btn danger"
+            >
+              <template #icon>
+                <DeleteOutlined />
+              </template>
               批量删除 ({{ selectedRowKeys.length }})
             </a-button>
             <a-button @click="clearSelection" class="toolbar-btn">取消选择</a-button>
@@ -95,13 +126,68 @@
             :row-selection="rowSelection"
             :custom-row="onCustomRow"
             :row-class-name="getRowClassName"
-            :scroll="{ x: 900, y: tableBodyHeight }"
+            :scroll="{ x: 'max-content', y: tableBodyHeight }"
           >
             <template #bodyCell="{ column, record }">
-              <template v-if="column.dataIndex === 'action'">
+              <template v-if="column.dataIndex === 'builtin'">
+                <a-tag :color="record.builtin ? 'blue' : 'default'">
+                  {{ record.builtin ? '是' : '否' }}
+                </a-tag>
+              </template>
+              <template v-else-if="column.dataIndex === 'enabled'">
+                <a-tag :color="record.enabled ? 'green' : 'red'">
+                  {{ record.enabled ? '启用' : '禁用' }}
+                </a-tag>
+              </template>
+              <template v-else-if="column.dataIndex === 'createdAt'">
+                {{ formatDateTime(record.createdAt) }}
+              </template>
+              <template v-else-if="column.dataIndex === 'updatedAt'">
+                {{ formatDateTime(record.updatedAt) }}
+              </template>
+              <template v-else-if="column.dataIndex === 'action'">
                 <div class="action-buttons">
-                  <a-button type="link" size="small" @click.stop="throttledEdit(record)" class="action-btn">编辑</a-button>
-                  <a-button type="link" size="small" danger @click.stop="throttledDelete(record)" class="action-btn">删除</a-button>
+                  <a-button
+                    type="link"
+                    size="small"
+                    @click.stop="throttledEdit(record)"
+                    class="action-btn"
+                  >
+                    <template #icon>
+                      <EditOutlined />
+                    </template>
+                    编辑
+                  </a-button>
+                  <a-tooltip v-if="record.builtin" title="内置角色不允许删除">
+                    <span>
+                      <a-button
+                        type="link"
+                        size="small"
+                        danger
+                        disabled
+                        class="action-btn danger"
+                        style="pointer-events: auto;"
+                      >
+                        <template #icon>
+                          <DeleteOutlined />
+                        </template>
+                        删除
+                      </a-button>
+                    </span>
+                  </a-tooltip>
+                  <a-button
+                    v-else
+                    type="link"
+                    size="small"
+                    danger
+                    @click.stop="throttledDelete(record)"
+                    class="action-btn danger"
+                  >
+                    <template #icon>
+                      <DeleteOutlined />
+                    </template>
+                    删除
+                  </a-button>
                 </div>
               </template>
             </template>
@@ -126,7 +212,7 @@
     <a-drawer
       v-model:open="drawerVisible"
       :title="drawerMode === 'create' ? '新建角色' : '编辑角色'"
-      width="400px"
+      width="50%"
       :get-container="false"
       :style="{ position: 'absolute' }"
       @close="handleDrawerClose"
@@ -149,12 +235,12 @@ import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
 import { roleList, createRole, updateRole, deleteRole } from '@/api/role'
 // 引入Antd组件和图标
 import { message, Modal } from 'ant-design-vue'
-import { ReloadOutlined, SettingOutlined, HolderOutlined, PlusOutlined } from '@ant-design/icons-vue'
+import { ReloadOutlined, SettingOutlined, HolderOutlined, PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import VueDraggable from 'vuedraggable'
 import RoleForm from './RoleForm.vue'
 
 // 查询条件
-const query = ref({ name: '' })
+const query = ref({ name: '', code: '' })
 // 表格数据
 const tableData = ref<any[]>([])
 // 加载状态
@@ -180,9 +266,14 @@ const paginationConfig = computed(() => ({
 }))
 // 所有列定义
 const INITIAL_COLUMNS = [
-  { title: 'ID', dataIndex: 'id' },
-  { title: '角色名', dataIndex: 'name' },
-  { title: '描述', dataIndex: 'description' },
+  { title: 'ID', dataIndex: 'id', width: 80 },
+  { title: '角色名', dataIndex: 'name', width: 120 },
+  { title: '角色标识', dataIndex: 'code', width: 150 },
+  { title: '是否内置', dataIndex: 'builtin', width: 100 },
+  { title: '是否启用', dataIndex: 'enabled', width: 100 },
+  { title: '描述', dataIndex: 'description', width: 200 },
+  { title: '创建时间', dataIndex: 'createdAt', width: 160 },
+  { title: '更新时间', dataIndex: 'updatedAt', width: 160 },
   { title: '操作', dataIndex: 'action', width: 160, fixed: 'right', align: 'center' }
 ]
 const allColumns = ref([...INITIAL_COLUMNS])
@@ -278,6 +369,7 @@ async function loadData() {
   try {
     const params = {
       name: query.value.name.trim(),
+      code: query.value.code.trim(),
       page: (Number(pagination.value.current) || 1) - 1,
       size: Number(pagination.value.pageSize) || 10
     }
@@ -300,6 +392,7 @@ const throttledSearch = handleSearch
 // 重置
 function handleReset() {
   query.value.name = ''
+  query.value.code = ''
   pagination.value.current = 1
   loadData()
 }
@@ -307,7 +400,7 @@ const throttledReset = handleReset
 // 新建
 function handleCreate() {
   drawerMode.value = 'create'
-  currentRole.value = { id: '', name: '', description: '' }
+  currentRole.value = { id: '', name: '', code: '', description: '', builtin: false, enabled: true }
   drawerVisible.value = true
 }
 const throttledCreate = handleCreate
@@ -396,7 +489,8 @@ function handleDrawerClose() {
   currentRole.value = null
 }
 // 保存（新建/编辑）
-async function handleFormSubmit(formData: any) {
+async function handleFormSubmit(formData) {
+  console.log('handleFormSubmit收到', formData) // 这里应有 userIds
   try {
     if (drawerMode.value === 'edit' && formData.id) {
       await updateRole(formData.id, formData)
@@ -407,10 +501,28 @@ async function handleFormSubmit(formData: any) {
     }
     handleDrawerClose()
     loadData()
-  } catch (error: any) {
+  } catch (error) {
     message.error('保存失败: ' + (error.message || '未知错误'))
   }
 }
+// 格式化日期时间函数
+function formatDateTime(dateTime: string | null | undefined): string {
+  if (!dateTime) return '-'
+  try {
+    const date = new Date(dateTime)
+    return date.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    })
+  } catch (error) {
+    return '-'
+  }
+}
+
 // 生命周期钩子
 onMounted(() => {
   loadData()
@@ -453,6 +565,13 @@ function getRowClassName(record: any) {
   }
   return ''
 }
+
+// 是否选中项包含内置角色
+const hasBuiltinSelected = computed(() =>
+  tableData.value.some(
+    (row: any) => selectedRowKeys.value.includes(String(row.id)) && row.builtin
+  )
+)
 </script>
 
 <style scoped>
@@ -502,6 +621,14 @@ function getRowClassName(record: any) {
   /* 不要设置 flex: 1; */
   min-height: 0; /* 可选，防止撑开 */
   overflow: auto; /* 内容多时滚动 */
+  /* 隐藏滚动条但保持滚动功能 */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+/* 隐藏 Webkit 浏览器的滚动条 */
+.table-scroll-container::-webkit-scrollbar {
+  display: none;
 }
 
 .pagination-container {
@@ -659,20 +786,149 @@ function getRowClassName(record: any) {
 .action-buttons {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   justify-content: center;
+  min-width: 120px;
 }
 
 .action-btn {
-  padding: 2px 4px;
-  height: auto;
-  line-height: 1.2;
-  font-size: 12px;
+  padding: 0 8px;
+  height: 28px;
+  line-height: 28px;
+  font-size: 13px;
+  border-radius: 4px;
+  transition: background 0.2s;
+  color: #1677ff;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
 }
 
 .action-btn:hover {
-  background-color: #f5f5f5;
-  border-radius: 4px;
+  background-color: #f0f5ff;
+  color: #0958d9;
+}
+
+/* 删除按钮特殊色 */
+.action-btn.danger,
+.action-btn[danger] {
+  color: #ff4d4f;
+}
+
+.action-btn.danger:hover,
+.action-btn[danger]:hover {
+  background-color: #fff1f0;
+  color: #cf1322;
+}
+
+/* 禁用状态的删除按钮变灰色，保留边框 */
+.action-btn.danger[disabled],
+.action-btn.danger[disabled]:hover,
+.action-btn.danger[disabled]:focus {
+  color: #bfbfbf !important;
+  background: #fff !important;
+  border: 1px solid #d9d9d9 !important; /* 保留灰色边框 */
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+}
+
+/* 隐藏所有滚动条但保持滚动功能 */
+:deep(.ant-table-body),
+:deep(.ant-table-content),
+:deep(.ant-table-scroll) {
+  scrollbar-width: none !important; /* Firefox */
+  -ms-overflow-style: none !important; /* IE and Edge */
+}
+
+:deep(.ant-table-body::-webkit-scrollbar),
+:deep(.ant-table-content::-webkit-scrollbar),
+:deep(.ant-table-scroll::-webkit-scrollbar) {
+  display: none !important;
+}
+
+/* 确保表格容器也不显示滚动条 */
+.table-scroll-container :deep(.ant-table) {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.table-scroll-container :deep(.ant-table::-webkit-scrollbar) {
+  display: none !important;
+}
+
+/* 表头单行显示控制 */
+:deep(.ant-table-thead > tr > th) {
+  white-space: nowrap !important; /* 防止换行 */
+  overflow: hidden !important; /* 隐藏溢出内容 */
+  text-overflow: ellipsis !important; /* 显示省略号 */
+  word-break: keep-all !important; /* 防止单词断开 */
+  line-height: 1.2 !important; /* 控制行高 */
+  padding: 12px 8px !important; /* 调整内边距 */
+  height: 48px !important; /* 固定表头高度 */
+  vertical-align: middle !important; /* 垂直居中 */
+}
+
+/* 表头文字样式 */
+:deep(.ant-table-thead > tr > th .ant-table-column-title) {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  display: block !important;
+  width: 100% !important;
+}
+
+/* 表头排序图标位置调整 */
+:deep(.ant-table-thead > tr > th .ant-table-column-sorter) {
+  margin-left: 4px !important;
+}
+
+/* 表头复选框位置调整 */
+:deep(.ant-table-thead > tr > th .ant-checkbox-wrapper) {
+  margin: 0 !important;
+}
+
+/* 表头单元格内容布局 */
+:deep(.ant-table-thead > tr > th > div) {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 100% !important;
+}
+
+/* 表头文字容器 */
+:deep(.ant-table-thead > tr > th .ant-table-column-title) {
+  flex: 1 !important;
+  min-width: 0 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* 表头排序图标容器 */
+:deep(.ant-table-thead > tr > th .ant-table-column-sorter) {
+  flex-shrink: 0 !important;
+  margin-left: 4px !important;
+}
+
+/* 表头复选框容器 */
+:deep(.ant-table-thead > tr > th .ant-checkbox-wrapper) {
+  flex-shrink: 0 !important;
+}
+
+/* 确保表头行高度固定 */
+:deep(.ant-table-thead > tr) {
+  height: 48px !important;
+}
+
+/* 表头单元格最小宽度控制 */
+:deep(.ant-table-thead > tr > th) {
+  min-width: 80px !important;
+  max-width: none !important;
 }
 
 /* 复用user/index.vue的隔行换色和高亮样式 */
@@ -687,5 +943,37 @@ function getRowClassName(record: any) {
 }
 :deep(.ant-table-tbody > tr.checkbox-selected-row:hover) {
   background-color: #bae7ff !important;
+}
+
+/* 表格内容单元格单行省略号 */
+:deep(.ant-table-tbody > tr > td) {
+  white-space: nowrap !important;      /* 不换行 */
+  overflow: hidden !important;         /* 超出隐藏 */
+  text-overflow: ellipsis !important;  /* 超出显示省略号 */
+  word-break: keep-all !important;     /* 防止单词断开 */
+  max-width: 100%;                     /* 防止撑破表格 */
+}
+
+/* 禁用状态的批量删除按钮变灰色，保留边框 */
+.toolbar-btn.danger[disabled],
+.toolbar-btn.danger[disabled]:hover,
+.toolbar-btn.danger[disabled]:focus {
+  color: #bfbfbf !important;
+  background: #fff !important;
+  border: 1px solid #d9d9d9 !important; /* 保留灰色边框 */
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+}
+
+/* 操作列禁用删除按钮无边框，仅变灰色，背景透明 */
+:deep(.action-buttons .action-btn.danger[disabled]),
+:deep(.action-buttons .action-btn.danger[disabled]:hover),
+:deep(.action-buttons .action-btn.danger[disabled]:focus) {
+  color: #bfbfbf !important;
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  cursor: not-allowed !important;
+  outline: none !important;
 }
 </style> 

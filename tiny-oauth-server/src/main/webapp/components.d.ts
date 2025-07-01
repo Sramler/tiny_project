@@ -26,6 +26,7 @@ declare module 'vue' {
     ATable: typeof import('ant-design-vue/es')['Table']
     ATag: typeof import('ant-design-vue/es')['Tag']
     ATooltip: typeof import('ant-design-vue/es')['Tooltip']
+    ATransfer: typeof import('ant-design-vue/es')['Transfer']
     ATreeSelect: typeof import('ant-design-vue/es')['TreeSelect']
     Icon: typeof import('./src/components/Icon.vue')['default']
     IconSelect: typeof import('./src/components/IconSelect.vue')['default']

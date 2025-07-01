@@ -2,6 +2,7 @@ package com.tiny.oauthserver.sys.model;
 
 import com.tiny.oauthserver.sys.validation.PasswordConfirm;
 import jakarta.validation.constraints.*;
+import java.util.List;
 
 /**
  * 用户创建和更新请求DTO
@@ -38,6 +39,8 @@ public class UserCreateUpdateDto {
     
     @NotNull(message = "密码是否未过期不能为空")
     private Boolean credentialsNonExpired = true;
+    
+    private List<Long> roleIds;
     
     // 构造函数
     public UserCreateUpdateDto() {}
@@ -113,6 +116,14 @@ public class UserCreateUpdateDto {
     
     public void setCredentialsNonExpired(Boolean credentialsNonExpired) {
         this.credentialsNonExpired = credentialsNonExpired;
+    }
+    
+    public List<Long> getRoleIds() {
+        return roleIds;
+    }
+    
+    public void setRoleIds(List<Long> roleIds) {
+        this.roleIds = roleIds;
     }
     
     /**

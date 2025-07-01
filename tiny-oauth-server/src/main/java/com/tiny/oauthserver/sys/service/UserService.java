@@ -23,4 +23,11 @@ public interface UserService {
     void batchEnable(List<Long> ids);
     void batchDisable(List<Long> ids);
     void batchDelete(List<Long> ids);
+
+    /**
+     * 更新用户角色绑定
+     * @param userId 用户ID
+     * @param roleIds 角色ID列表
+     */
+    void updateUserRoles(Long userId, List<Long> roleIds);
 }

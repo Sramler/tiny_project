@@ -54,6 +54,22 @@
               批量删除 ({{ selectedRowKeys.length }})
             </a-button>
             <a-button @click="clearSelection" class="toolbar-btn">取消选择</a-button>
+            <a-tooltip v-if="selectedRowKeys.length !== 1" title="请仅选择一个角色进行用户配置">
+              <span>
+                <a-button type="primary" class="toolbar-btn" disabled style="pointer-events: auto;">
+                  <template #icon>
+                    <SettingOutlined />
+                  </template>
+                  配置用户
+                </a-button>
+              </span>
+            </a-tooltip>
+            <a-button v-else type="primary" class="toolbar-btn" @click="openBatchUserTransfer">
+              <template #icon>
+                <SettingOutlined />
+              </template>
+              配置用户
+            </a-button>
           </div>
           <a-button type="link" @click="throttledCreate" class="toolbar-btn">
             <template #icon>
@@ -225,6 +241,16 @@
         @cancel="handleDrawerClose"
       />
     </a-drawer>
+    <!-- 新增：批量配置用户弹窗 -->
+    <UserTransfer
+      v-if="showBatchUserTransfer"
+      :open="showBatchUserTransfer"
+      :all-users="allUsers"
+      :model-value="batchSelectedUserIds"
+      title="批量配置用户"
+      @update:open="showBatchUserTransfer = $event"
+      @update:modelValue="handleBatchUserAssign"
+    />
   </div>
 </template>
 
@@ -238,6 +264,8 @@ import { message, Modal } from 'ant-design-vue'
 import { ReloadOutlined, SettingOutlined, HolderOutlined, PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import VueDraggable from 'vuedraggable'
 import RoleForm from './RoleForm.vue'
+import UserTransfer from './UserTransfer.vue' // 引入用户分配弹窗组件
+import { userList } from '@/api/user' // 引入用户API
 
 // 查询条件
 const query = ref({ name: '', code: '' })
@@ -489,7 +517,7 @@ function handleDrawerClose() {
   currentRole.value = null
 }
 // 保存（新建/编辑）
-async function handleFormSubmit(formData) {
+async function handleFormSubmit(formData: any) {
   console.log('handleFormSubmit收到', formData) // 这里应有 userIds
   try {
     if (drawerMode.value === 'edit' && formData.id) {
@@ -501,7 +529,7 @@ async function handleFormSubmit(formData) {
     }
     handleDrawerClose()
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     message.error('保存失败: ' + (error.message || '未知错误'))
   }
 }
@@ -572,6 +600,46 @@ const hasBuiltinSelected = computed(() =>
     (row: any) => selectedRowKeys.value.includes(String(row.id)) && row.builtin
   )
 )
+
+// 批量配置用户弹窗相关响应式变量
+const showBatchUserTransfer = ref(false) // 控制弹窗显示
+const allUsers = ref<any[]>([]) // 所有可选用户
+const batchSelectedUserIds = ref<string[]>([]) // 已分配用户ID
+
+// 打开批量配置用户弹窗
+async function openBatchUserTransfer() {
+  // 查询所有用户（假设不超过1000条）
+  const res = await userList({ current: 1, pageSize: 1000 })
+  allUsers.value = (res.records || []).map((u: any) => ({
+    key: String(u.id),
+    title: u.username + (u.nickname ? `（${u.nickname}）` : ''),
+    ...u
+  }))
+  // 这里只取第一个选中角色的用户作为默认（如需交集/并集可自定义）
+  if (selectedRowKeys.value.length > 0) {
+    // 取第一个角色ID
+    const roleId = selectedRowKeys.value[0]
+    // 查询该角色已分配用户
+    const { getRoleUsers } = await import('@/api/role')
+    const userIds = await getRoleUsers(Number(roleId))
+    batchSelectedUserIds.value = (userIds || []).map((id: any) => String(id))
+  } else {
+    batchSelectedUserIds.value = []
+  }
+  showBatchUserTransfer.value = true
+}
+// 批量保存分配用户
+async function handleBatchUserAssign(newUserIds: string[]) {
+  // 对每个选中角色调用 updateRoleUsers
+  const { updateRoleUsers } = await import('@/api/role')
+  for (const roleIdStr of selectedRowKeys.value) {
+    const roleId = Number(roleIdStr)
+    await updateRoleUsers(roleId, newUserIds.map(id => Number(id)))
+  }
+  message.success('批量配置用户成功')
+  showBatchUserTransfer.value = false
+  loadData() // 刷新表格
+}
 </script>
 
 <style scoped>

@@ -74,7 +74,18 @@
               </template>
               取消选择
             </a-button>
-            <a-button type="primary" class="toolbar-btn" @click="openBatchRoleTransfer">
+            <!-- 分配角色按钮，仅单选时可用，否则禁用并提示 -->
+            <a-tooltip v-if="selectedRowKeys.length !== 1" title="请仅选择一个用户进行角色分配">
+              <span>
+                <a-button type="primary" class="toolbar-btn" disabled style="pointer-events: auto;">
+                  <template #icon>
+                    <SettingOutlined />
+                  </template>
+                  分配角色
+                </a-button>
+              </span>
+            </a-tooltip>
+            <a-button v-else type="primary" class="toolbar-btn" @click="openBatchRoleTransfer">
               <template #icon>
                 <SettingOutlined />
               </template>
@@ -827,7 +838,7 @@ async function openBatchRoleTransfer() {
   // 获取选中用户的角色交集（如需自定义可改为并集或第一个用户的角色）
   if (selectedRowKeys.value.length > 0) {
     // 这里只取第一个用户的角色作为默认
-    const userId = selectedRowKeys.value[0]
+    const userId = Number(selectedRowKeys.value[0])
     const userRoleIds = await getUserRoles(userId)
     batchSelectedRoleIds.value = (userRoleIds || []).map((id: any) => String(id))
   } else {

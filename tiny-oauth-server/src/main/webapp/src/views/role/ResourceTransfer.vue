@@ -1,45 +1,47 @@
 <template>
-  <!-- 用 a-modal 包裹树-树穿梭内容 -->
-  <a-modal v-model:open="visible" :title="title" @ok="handleOk" @cancel="handleCancel" width="800px">
+  <!-- 用 a-modal 包裹穿梭组件 -->
+  <a-modal v-model:open="visible" :title="title" @ok="handleOk" @cancel="handleCancel" width="900px">
     <div style="min-height: 400px;">
-      <!-- 树-树穿梭内容 -->
-      <div style="display: flex; gap: 32px;">
-        <!-- 左侧资源树 -->
-        <div style="flex: 1;">
-          <div style="font-weight: bold; margin-bottom: 8px;">可选资源</div>
+      <!-- 使用 a-transfer 组件实现树形穿梭 -->
+      <a-transfer
+        v-model:target-keys="rightKeys"
+        class="tree-transfer"
+        :data-source="transferDataSource"
+        :render="(item: any) => item.title"
+        :show-select-all="false"
+        :disabled="loading"
+        :titles="['可选资源', '已分配资源']"
+        style="height: 400px;"
+      >
+        <template #children="{ direction, selectedKeys, onItemSelect }">
+          <!-- 左侧树形结构 -->
           <a-tree
-            :tree-data="leftTree"
+            v-if="direction === 'left'"
+            block-node
             checkable
-            :checked-keys="leftCheckedKeys"
-            @check="onLeftCheck"
-            :defaultExpandAll="true"
+            check-strictly
+            default-expand-all
+            :checked-keys="[...selectedKeys, ...rightKeys]"
+            :tree-data="leftTreeData"
             :field-names="{ title: 'title', key: 'key', children: 'children' }"
-            :loading="loading"
+            @check="(checkedKeys: any, info: any) => handleTreeCheck(info, [...selectedKeys, ...rightKeys], onItemSelect)"
+            @select="(selectedKeys: any, info: any) => handleTreeSelect(info, [...selectedKeys, ...rightKeys], onItemSelect)"
           />
-        </div>
-        <!-- 穿梭按钮 -->
-        <div style="display: flex; flex-direction: column; justify-content: center; gap: 8px;">
-          <a-button @click="moveToRight" :disabled="leftCheckedKeys.length === 0">
-            <Icon icon="RightOutlined" />
-          </a-button>
-          <a-button @click="moveToLeft" :disabled="rightCheckedKeys.length === 0">
-            <Icon icon="LeftOutlined" />
-          </a-button>
-        </div>
-        <!-- 右侧已选资源树 -->
-        <div style="flex: 1;">
-          <div style="font-weight: bold; margin-bottom: 8px;">已分配资源</div>
+          <!-- 右侧树形结构 -->
           <a-tree
-            :tree-data="rightTree"
+            v-if="direction === 'right'"
+            block-node
             checkable
-            :checked-keys="rightCheckedKeys"
-            @check="onRightCheck"
-            :defaultExpandAll="true"
+            check-strictly
+            default-expand-all
+            :checked-keys="selectedKeys"
+            :tree-data="rightTreeData"
             :field-names="{ title: 'title', key: 'key', children: 'children' }"
-            :loading="loading"
+            @check="(checkedKeys: any, info: any) => handleTreeCheck(info, selectedKeys, onItemSelect)"
+            @select="(selectedKeys: any, info: any) => handleTreeSelect(info, selectedKeys, onItemSelect)"
           />
-        </div>
-      </div>
+        </template>
+      </a-transfer>
     </div>
   </a-modal>
 </template>
@@ -47,7 +49,6 @@
 <script setup lang="ts">
 // 引入Vue API
 import { ref, computed, watch, defineProps, defineEmits, onMounted } from 'vue';
-import Icon from '@/components/Icon.vue' // 引入自定义图标组件
 import { getResourceTree } from '@/api/resource' // 引入资源API
 import { getRoleResources } from '@/api/role' // 引入角色API
 
@@ -67,15 +68,14 @@ watch(visible, v => emit('update:open', v))
 // 加载状态
 const loading = ref(false)
 
-// 资源树数据（从后端加载）
-const resourceTree = ref<any[]>([]);
+// 原始树形数据（从后端加载）
+const originalTreeData = ref<any[]>([]);
 
-// 左侧树选中key
-const leftCheckedKeys = ref<number[]>([]);
-// 右侧树选中key
-const rightCheckedKeys = ref<number[]>([]);
 // 已分配资源key
 const rightKeys = ref<number[]>([]);
+
+// 扁平化的transfer数据源
+const transferDataSource = ref<any[]>([]);
 
 // 加载资源树数据
 async function loadResourceTree() {
@@ -83,7 +83,9 @@ async function loadResourceTree() {
   try {
     const tree = await getResourceTree()
     // 转换数据格式，确保key为number类型
-    resourceTree.value = transformTreeData(tree)
+    originalTreeData.value = transformTreeData(tree)
+    // 扁平化数据用于transfer组件
+    flattenTreeData(originalTreeData.value)
   } catch (error) {
     console.error('加载资源树失败:', error)
   } finally {
@@ -112,27 +114,44 @@ function transformTreeData(nodes: any[]): any[] {
   }))
 }
 
-// 递归查找所有子节点key
-function getAllKeys(nodes: any[]): number[] {
-  let keys: number[] = [];
-  for (const node of nodes) {
-    keys.push(node.key);
-    if (node.children) {
-      keys = keys.concat(getAllKeys(node.children));
+// 扁平化树形数据为transfer组件需要的格式
+function flattenTreeData(list: any[] = []) {
+  transferDataSource.value = [];
+  list.forEach(item => {
+    transferDataSource.value.push({
+      key: item.key,
+      title: item.title,
+      disabled: false
+    });
+    if (item.children) {
+      flattenTreeData(item.children);
     }
-  }
-  return keys;
+  });
 }
 
-// 递归过滤树，仅保留key在rightKeys中的节点
-function filterTree(nodes: any[], keys: number[]): any[] {
+// 检查节点是否被选中
+function isChecked(selectedKeys: (string | number)[], eventKey: string | number) {
+  return selectedKeys.indexOf(eventKey) !== -1;
+}
+
+// 处理树形数据，为已分配的节点设置disabled状态
+function handleTreeData(treeNodes: any[], targetKeys: (string | number)[] = []): any[] {
+  return treeNodes.map(({ children, ...props }) => ({
+    ...props,
+    disabled: targetKeys.includes(props.key as string | number),
+    children: handleTreeData(children ?? [], targetKeys),
+  }));
+}
+
+// 递归过滤树，仅保留key在rightKeys中的节点（已分配的资源）
+function filterAssignedTree(nodes: any[], assignedKeys: (string | number)[]): any[] {
   return nodes
     .map(node => {
-      if (keys.includes(node.key)) {
-        const children = node.children ? filterTree(node.children, keys) : [];
+      if (assignedKeys.includes(node.key)) {
+        const children = node.children ? filterAssignedTree(node.children, assignedKeys) : [];
         return { ...node, children: children.length > 0 ? children : undefined };
       } else if (node.children) {
-        const children = filterTree(node.children, keys);
+        const children = filterAssignedTree(node.children, assignedKeys);
         if (children.length > 0) {
           return { ...node, children };
         }
@@ -143,7 +162,7 @@ function filterTree(nodes: any[], keys: number[]): any[] {
 }
 
 // 递归过滤树，仅保留key不在rightKeys中的节点（未分配的资源）
-function filterUnassignedTree(nodes: any[], assignedKeys: number[]): any[] {
+function filterUnassignedTree(nodes: any[], assignedKeys: (string | number)[]): any[] {
   return nodes
     .map(node => {
       if (!assignedKeys.includes(node.key)) {
@@ -161,58 +180,26 @@ function filterUnassignedTree(nodes: any[], assignedKeys: number[]): any[] {
 }
 
 // 左侧树数据 (只显示未分配的资源)
-const leftTree = computed(() => filterUnassignedTree(resourceTree.value, rightKeys.value));
+const leftTreeData = computed(() => filterUnassignedTree(originalTreeData.value, rightKeys.value));
 
 // 右侧树数据 (只显示已分配的资源)
-const rightTree = computed(() => filterTree(resourceTree.value, rightKeys.value));
+const rightTreeData = computed(() => filterAssignedTree(originalTreeData.value, rightKeys.value));
 
-// 左侧树选中
-function onLeftCheck(checked: any) {
-  leftCheckedKeys.value = checked.checked || checked;
-}
-
-// 右侧树选中
-function onRightCheck(checked: any) {
-  rightCheckedKeys.value = checked.checked || checked;
-}
-
-// 穿梭到右侧
-function moveToRight() {
-  // 选中节点及其所有子节点都加入rightKeys
-  const addKeys = new Set(rightKeys.value);
-  function addAll(keys: number[], nodes: any[]) {
-    for (const node of nodes) {
-      if (keys.includes(node.key)) {
-        addKeys.add(node.key);
-        if (node.children) addAll(getAllKeys(node.children), node.children);
-      } else if (node.children) {
-        addAll(keys, node.children);
-      }
-    }
+// 处理树节点选中事件
+const handleTreeCheck = (info: any, checkedKeys: (string | number)[], onItemSelect: (n: any, c: boolean) => void) => {
+  const { eventKey } = info.node;
+  if (eventKey !== undefined) {
+    onItemSelect(eventKey, !isChecked(checkedKeys, eventKey));
   }
-  addAll(leftCheckedKeys.value, resourceTree.value);
-  rightKeys.value = Array.from(addKeys);
-  leftCheckedKeys.value = [];
-}
+};
 
-// 从右侧移除
-function moveToLeft() {
-  // 移除选中的key及其所有子节点
-  const removeSet = new Set<number>();
-  function collectRemoveKeys(keys: number[], nodes: any[]) {
-    for (const node of nodes) {
-      if (keys.includes(node.key)) {
-        removeSet.add(node.key);
-        if (node.children) collectRemoveKeys(getAllKeys(node.children), node.children);
-      } else if (node.children) {
-        collectRemoveKeys(keys, node.children);
-      }
-    }
+// 处理树节点选择事件
+const handleTreeSelect = (info: any, selectedKeys: (string | number)[], onItemSelect: (n: any, c: boolean) => void) => {
+  const { eventKey } = info.node;
+  if (eventKey !== undefined) {
+    onItemSelect(eventKey, !isChecked(selectedKeys, eventKey));
   }
-  collectRemoveKeys(rightCheckedKeys.value, rightTree.value);
-  rightKeys.value = rightKeys.value.filter(key => !removeSet.has(key));
-  rightCheckedKeys.value = [];
-}
+};
 
 // 点击确定
 function handleOk() {
@@ -244,4 +231,45 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* 自定义transfer组件样式 */
+.tree-transfer .ant-transfer-list:first-child {
+  width: 50%;
+  flex: none;
+}
+
+.tree-transfer .ant-transfer-list {
+  height: 400px;
+}
+
+.tree-transfer .ant-transfer-list-body {
+  height: 350px;
+}
+
+/* 树组件样式优化 */
+:deep(.ant-tree) {
+  background: transparent;
+}
+
+:deep(.ant-tree-node-content-wrapper) {
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+:deep(.ant-tree-node-content-wrapper:hover) {
+  background-color: #f5f5f5;
+}
+
+:deep(.ant-tree-checkbox) {
+  margin-right: 8px;
+}
+
+/* 禁用状态的节点样式 */
+:deep(.ant-tree-treenode-disabled .ant-tree-node-content-wrapper) {
+  color: #bfbfbf;
+  cursor: not-allowed;
+}
+
+:deep(.ant-tree-treenode-disabled .ant-tree-checkbox) {
+  cursor: not-allowed;
+}
 </style> 

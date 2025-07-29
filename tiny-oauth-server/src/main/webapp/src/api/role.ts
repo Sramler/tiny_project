@@ -36,3 +36,15 @@ export function updateRoleUsers(roleId: number, userIds: number[]) {
   // 向后端提交该角色分配的所有用户ID
   return request.post(`/sys/roles/${roleId}/users`, userIds)
 }
+
+// 获取某角色下已分配资源（返回资源ID数组，需后端实现）
+export function getRoleResources(roleId: number) {
+  // 向后端请求该角色下所有已分配资源
+  return request.get(`/sys/roles/${roleId}/resources`)
+}
+
+// 保存角色与资源的关系（需后端实现）
+export function updateRoleResources(roleId: number, resourceIds: number[]) {
+  // 向后端提交该角色分配的所有资源ID
+  return request.post(`/sys/roles/${roleId}/resources`, resourceIds)
+}

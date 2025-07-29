@@ -70,6 +70,23 @@
               </template>
               配置用户
             </a-button>
+            <!-- 新增：配置资源按钮 -->
+            <a-tooltip v-if="selectedRowKeys.length !== 1" title="请仅选择一个角色进行资源配置">
+              <span>
+                <a-button type="primary" class="toolbar-btn" disabled style="pointer-events: auto;">
+                  <template #icon>
+                    <SettingOutlined />
+                  </template>
+                  配置资源
+                </a-button>
+              </span>
+            </a-tooltip>
+            <a-button v-else type="primary" class="toolbar-btn" @click="openResourceTransfer">
+              <template #icon>
+                <SettingOutlined />
+              </template>
+              配置资源
+            </a-button>
           </div>
           <a-button type="link" @click="throttledCreate" class="toolbar-btn">
             <template #icon>
@@ -251,6 +268,15 @@
       @update:open="showBatchUserTransfer = $event"
       @update:modelValue="handleBatchUserAssign"
     />
+    <!-- 新增：资源分配弹窗 -->
+    <ResourceTransfer
+      v-if="showResourceTransfer"
+      :open="showResourceTransfer"
+      :role-id="currentRoleId"
+      title="配置资源"
+      @update:open="showResourceTransfer = $event"
+      @submit="handleResourceAssign"
+    />
   </div>
 </template>
 
@@ -266,6 +292,7 @@ import VueDraggable from 'vuedraggable'
 import RoleForm from './RoleForm.vue'
 import UserTransfer from './UserTransfer.vue' // 引入用户分配弹窗组件
 import { userList } from '@/api/user' // 引入用户API
+import ResourceTransfer from './ResourceTransfer.vue' // 资源分配弹窗组件
 
 // 查询条件
 const query = ref({ name: '', code: '' })
@@ -639,6 +666,37 @@ async function handleBatchUserAssign(newUserIds: string[]) {
   message.success('批量配置用户成功')
   showBatchUserTransfer.value = false
   loadData() // 刷新表格
+}
+
+// 控制资源分配弹窗显示
+const showResourceTransfer = ref(false)
+// 当前角色ID
+const currentRoleId = ref<number>(0)
+// 所有资源列表
+const allResources = ref<any[]>([])
+// 已分配资源ID
+const batchSelectedResourceIds = ref<string[]>([])
+
+// 打开资源分配弹窗
+async function openResourceTransfer() {
+  // 设置当前角色ID
+  if (selectedRowKeys.value.length > 0) {
+    currentRoleId.value = Number(selectedRowKeys.value[0])
+  }
+  showResourceTransfer.value = true
+}
+// 保存分配资源
+async function handleResourceAssign(newResourceIds: number[]) {
+  try {
+    // 调用 updateRoleResources 保存角色资源分配
+    const { updateRoleResources } = await import('@/api/role')
+    await updateRoleResources(currentRoleId.value, newResourceIds)
+    message.success('配置资源成功')
+    showResourceTransfer.value = false
+    loadData() // 刷新表格
+  } catch (error: any) {
+    message.error('配置资源失败: ' + (error.message || '未知错误'))
+  }
 }
 </script>
 

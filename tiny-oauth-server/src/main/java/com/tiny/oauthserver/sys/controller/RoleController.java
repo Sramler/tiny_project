@@ -79,4 +79,29 @@ public class RoleController {
         roleService.updateRoleUsers(id, userIds);
         return ResponseEntity.ok().build();
     }
+
+    // ==================== 角色资源分配API ====================
+
+    /**
+     * 获取角色已分配资源ID列表
+     * @param id 角色ID
+     * @return 资源ID列表
+     */
+    @GetMapping("/{id}/resources")
+    public ResponseEntity<List<Long>> getRoleResources(@PathVariable("id") Long id) {
+        // 使用Service层方法查询角色资源，避免懒加载问题
+        return ResponseEntity.ok(roleService.getResourceIdsByRoleId(id));
+    }
+
+    /**
+     * 保存角色与资源的分配关系
+     * @param id 角色ID
+     * @param resourceIds 资源ID列表
+     * @return 响应结果
+     */
+    @PostMapping("/{id}/resources")
+    public ResponseEntity<?> updateRoleResources(@PathVariable("id") Long id, @RequestBody List<Long> resourceIds) {
+        roleService.updateRoleResources(id, resourceIds);
+        return ResponseEntity.ok().build();
+    }
 } 

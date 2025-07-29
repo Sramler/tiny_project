@@ -16,4 +16,9 @@ public interface RoleService {
     List<Long> getUserIdsByRoleId(Long roleId);
     // 保存角色与用户的分配关系
     void updateRoleUsers(Long roleId, List<Long> userIds);
+    // 保存角色与资源的分配关系
+    void updateRoleResources(Long roleId, List<Long> resourceIds);
+
+    // 获取角色已分配资源ID列表
+    List<Long> getResourceIdsByRoleId(Long roleId);
 } 

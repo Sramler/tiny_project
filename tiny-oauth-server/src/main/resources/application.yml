@@ -30,6 +30,12 @@ spring:
     properties:
       hibernate:
         format_sql: true
+  # 数据初始化配置
+  sql:
+    init:
+      mode: always # 总是执行数据初始化脚本
+      data-locations: classpath:data.sql # 指定数据初始化脚本位置
+      continue-on-error: true # 遇到错误继续执行
 authentication:
   jwt:
     public-key-path: classpath:keys/public.pem
@@ -54,10 +60,10 @@ authentication:
         require-authorization-consent: true
     - client-id: vue-client
       authentication-methods:
-        - none                    # ✅ 表示前端（公有客户端）不需要 client secret
+        - none # ✅ 表示前端（公有客户端）不需要 client secret
       grant-types:
-        - authorization_code      # ✅ 标准 OIDC 授权码流程
-        - refresh_token           # ✅ 启用 refresh_token 支持
+        - authorization_code # ✅ 标准 OIDC 授权码流程
+        - refresh_token # ✅ 启用 refresh_token 支持
       redirect-uris:
         - http://localhost:5173/callback
         - http://localhost:5173/silent-renew.html # silent renew 时用于隐式授权流程的 iframe 回调页面。
@@ -66,7 +72,7 @@ authentication:
       scopes:
         - openid
         - profile
-        - offline_access          # ✅ 必须启用，否则不会发 refresh_token
+        - offline_access # ✅ 必须启用，否则不会发 refresh_token
       client-setting:
         require-authorization-consent: false
-        require-proof-key: true    # 开启 PKCE，是 Authorization Code Flow 安全的关键部分，前端用 code_challenge 和 code_verifier 实现。
+        require-proof-key: true # 开启 PKCE，是 Authorization Code Flow 安全的关键部分，前端用 code_challenge 和 code_verifier 实现。

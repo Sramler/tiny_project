@@ -4,6 +4,7 @@ import com.tiny.oauthserver.sys.model.User;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -26,6 +27,29 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     @EntityGraph(attributePaths = "roles")
     Optional<User> findById(Long id);
 
-    @Query("select u from User u join u.roles r where r.id = :roleId")
-    List<User> findByRoleId(@Param("roleId") Long roleId);
+    /**
+     * 根据角色ID查询所有拥有该角色的用户ID列表
+     * @param roleId 角色ID
+     * @return 用户ID列表
+     */
+    @Query(value = "SELECT user_id FROM user_role WHERE role_id = :roleId", nativeQuery = true)
+    List<Long> findUserIdsByRoleId(@Param("roleId") Long roleId);
+
+    /**
+     * 删除用户与角色的关联关系
+     * @param userId 用户ID
+     * @param roleId 角色ID
+     */
+    @Modifying
+    @Query(value = "DELETE FROM user_role WHERE user_id = :userId AND role_id = :roleId", nativeQuery = true)
+    void deleteUserRoleRelation(@Param("userId") Long userId, @Param("roleId") Long roleId);
+
+    /**
+     * 添加用户与角色的关联关系
+     * @param userId 用户ID
+     * @param roleId 角色ID
+     */
+    @Modifying
+    @Query(value = "INSERT INTO user_role (user_id, role_id) VALUES (:userId, :roleId)", nativeQuery = true)
+    void addUserRoleRelation(@Param("userId") Long userId, @Param("roleId") Long roleId);
 }

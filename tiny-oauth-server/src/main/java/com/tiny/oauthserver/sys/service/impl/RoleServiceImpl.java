@@ -3,11 +3,13 @@ package com.tiny.oauthserver.sys.service.impl;
 import com.tiny.oauthserver.sys.model.*;
 import com.tiny.oauthserver.sys.repository.RoleRepository;
 import com.tiny.oauthserver.sys.repository.UserRepository;
+import com.tiny.oauthserver.sys.repository.ResourceRepository;
 import com.tiny.oauthserver.sys.service.RoleService;
 import org.springframework.beans.BeanUtils;
 import org.springframework.data.domain.*;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -18,9 +20,11 @@ import java.util.Objects;
 public class RoleServiceImpl implements RoleService {
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
-    public RoleServiceImpl(RoleRepository roleRepository, UserRepository userRepository) {
+    private final ResourceRepository resourceRepository;
+    public RoleServiceImpl(RoleRepository roleRepository, UserRepository userRepository, ResourceRepository resourceRepository) {
         this.roleRepository = roleRepository;
         this.userRepository = userRepository;
+        this.resourceRepository = resourceRepository;
     }
 
     @Override
@@ -66,15 +70,18 @@ public class RoleServiceImpl implements RoleService {
     }
 
     @Override
+    @Transactional
     public RoleResponseDto update(Long id, RoleCreateUpdateDto dto) {
         Role role = roleRepository.findById(id).orElseThrow(() -> new RuntimeException("角色不存在"));
         BeanUtils.copyProperties(dto, role, "id");
 
-        // 只查当前拥有该角色的用户
-        List<User> oldUsers = userRepository.findByRoleId(id);
-        for (User user : oldUsers) {
-            user.getRoles().removeIf(r -> r.getId().equals(id));
-            userRepository.save(user);
+        // 只查当前拥有该角色的用户ID
+        List<Long> oldUserIds = userRepository.findUserIdsByRoleId(id);
+        for (Long userId : oldUserIds) {
+            userRepository.findById(userId).ifPresent(user -> {
+                user.getRoles().removeIf(r -> r.getId().equals(id));
+                userRepository.save(user);
+            });
         }
 
         // 再为新分配的用户添加角色
@@ -97,30 +104,51 @@ public class RoleServiceImpl implements RoleService {
 
     @Override
     public List<Long> getUserIdsByRoleId(Long roleId) {
-        Optional<Role> roleOpt = roleRepository.findByIdFetchUsers(roleId);
-        if (roleOpt.isPresent()) {
-            Role role = roleOpt.get();
-            if (role.getUsers() != null) {
-                return role.getUsers().stream().map(User::getId).toList();
-            }
-        }
-        return List.of();
+        // 直接使用原生SQL查询用户ID列表，避免懒加载问题
+        return userRepository.findUserIdsByRoleId(roleId);
     }
 
     @Override
+    @Transactional
     public void updateRoleUsers(Long roleId, List<Long> userIds) {
+        // 查询角色是否存在
+        Optional<Role> roleOpt = roleRepository.findById(roleId);
+        if (roleOpt.isEmpty()) return;
+        
+        // 1. 先删除该角色的所有用户关联
+        List<Long> oldUserIds = userRepository.findUserIdsByRoleId(roleId);
+        for (Long userId : oldUserIds) {
+            userRepository.deleteUserRoleRelation(userId, roleId);
+        }
+        
+        // 2. 为新分配的用户添加角色关联
+        if (userIds != null && !userIds.isEmpty()) {
+            for (Long userId : userIds) {
+                // 检查用户是否存在
+                if (userRepository.findById(userId).isPresent()) {
+                    userRepository.addUserRoleRelation(userId, roleId);
+                }
+            }
+        }
+    }
+
+    @Override
+    public void updateRoleResources(Long roleId, List<Long> resourceIds) {
         Optional<Role> roleOpt = roleRepository.findById(roleId);
         if (roleOpt.isEmpty()) return;
         Role role = roleOpt.get();
-        List<User> users = new ArrayList<>();
-        if (userIds != null && !userIds.isEmpty()) {
-            users = userIds.stream()
-                    .map(uid -> userRepository.findById(uid).orElse(null))
-                    .filter(u -> u != null)
-                    .toList();
+        List<Resource> resources = new ArrayList<>();
+        if (resourceIds != null && !resourceIds.isEmpty()) {
+            resources = resourceRepository.findAllById(resourceIds);
         }
-        role.setUsers(new HashSet<>(users));
+        role.setResources(new HashSet<>(resources));
         roleRepository.save(role);
+    }
+
+    @Override
+    public List<Long> getResourceIdsByRoleId(Long roleId) {
+        // 使用原生SQL查询角色资源ID列表，避免懒加载问题
+        return resourceRepository.findResourceIdsByRoleId(roleId);
     }
 
     private RoleResponseDto toDto(Role role) {

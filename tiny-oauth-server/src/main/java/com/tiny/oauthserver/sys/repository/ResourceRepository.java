@@ -7,6 +7,7 @@ import com.tiny.oauthserver.sys.model.ResourceResponseDto;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -19,7 +20,7 @@ import java.util.Optional;
  * 提供资源的CRUD操作和自定义查询方法
  */
 @Repository
-public interface ResourceRepository extends JpaRepository<Resource, Long> {
+public interface ResourceRepository extends JpaRepository<Resource, Long>, JpaSpecificationExecutor<Resource> {
     
     /**
      * 根据资源类型查找资源
@@ -383,4 +384,12 @@ public interface ResourceRepository extends JpaRepository<Resource, Long> {
      * @return 资源列表
      */
     List<Resource> findByParentIdIn(List<Long> parentIds);
+
+    /**
+     * 根据角色ID查询该角色拥有的所有资源ID列表
+     * @param roleId 角色ID
+     * @return 资源ID列表
+     */
+    @Query(value = "SELECT resource_id FROM role_resource WHERE role_id = :roleId", nativeQuery = true)
+    List<Long> findResourceIdsByRoleId(@Param("roleId") Long roleId);
 }

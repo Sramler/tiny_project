@@ -11,14 +11,17 @@
           <a-form-item label="资源标题">
             <a-input v-model:value="query.title" placeholder="请输入资源标题" />
           </a-form-item>
-          <a-form-item label="API路径">
-            <a-input v-model:value="query.uri" placeholder="请输入API路径" />
+          <a-form-item label="URL(路由路径)">
+            <a-input v-model:value="query.url" placeholder="请输入路由路径" style="width: 160px;" />
+          </a-form-item>
+          <a-form-item label="URI(API路径)">
+            <a-input v-model:value="query.uri" placeholder="请输入API路径" style="width: 160px;" />
           </a-form-item>
           <a-form-item label="权限标识">
             <a-input v-model:value="query.permission" placeholder="请输入权限标识" />
           </a-form-item>
           <a-form-item label="资源类型">
-            <a-select v-model:value="query.type" placeholder="请选择资源类型" style="width: 120px;">
+            <a-select v-model:value="query.type" placeholder="请选择资源类型">
               <a-select-option :value="undefined">全部</a-select-option>
               <a-select-option :value="ResourceType.DIRECTORY">目录</a-select-option>
               <a-select-option :value="ResourceType.MENU">菜单</a-select-option>
@@ -232,10 +235,11 @@ const refreshing = ref(false)
 
 // 初始列定义
 const INITIAL_COLUMNS = [
+  { title: '资源ID', dataIndex: 'id', width: 120 },
   { title: '资源名称', dataIndex: 'name', width: 150 },
   { title: '资源标题', dataIndex: 'title', width: 150 },
-  { title: '路径', dataIndex: 'path', width: 200 },
-  { title: 'URI', dataIndex: 'uri', width: 200 },
+  { title: 'URL(路由路径)', dataIndex: 'url', width: 200 },
+  { title: 'URI(API路径)', dataIndex: 'uri', width: 200 },
   { title: '请求方法', dataIndex: 'method', width: 100, align: 'center' },
   { title: '权限标识', dataIndex: 'permission', width: 200 },
   { title: '资源类型', dataIndex: 'type', width: 100, align: 'center' },
@@ -307,7 +311,7 @@ const rowSelection = computed(() => ({
   onChange: (selectedKeys: (string|number)[]) => {
     selectedRowKeys.value = selectedKeys.map(String)
   },
-  checkStrictly: false,
+  checkStrictly: true,
   preserveSelectedRowKeys: true,
   fixed: true
 }))

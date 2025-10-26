@@ -38,7 +38,7 @@
   </a-form>
 </template>
 <script setup lang="ts">
-import { ref, watch, defineProps, defineEmits, onMounted } from 'vue'
+import { ref, watch, defineProps, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { getRoleUsers, updateRoleUsers } from '@/api/role' // 角色相关API
 import { userList } from '@/api/user' // 用户列表API
@@ -134,7 +134,7 @@ function onCancel() {
 function onSubmit() {
   console.log('保存按钮点击，开始处理...'); // 日志1: 函数被调用
   console.log('当前的表单引用(formRef):', formRef.value); // 日志2: 检查formRef
-  
+
   if (!formRef.value) {
     message.error('表单实例未准备好，请稍后重试');
     console.error('formRef.value is null or undefined. Cannot validate form.');
@@ -162,4 +162,4 @@ function openUserTransfer() {
     showUserTransfer.value = true
   })
 }
-</script> 
+</script>

@@ -48,7 +48,7 @@
 
 <script setup lang="ts">
 // 引入Vue API
-import { ref, computed, watch, defineProps, defineEmits, onMounted } from 'vue';
+import { ref, computed, watch, defineProps, onMounted } from 'vue';
 import { getResourceTree } from '@/api/resource' // 引入资源API
 import { getRoleResources } from '@/api/role' // 引入角色API
 
@@ -272,4 +272,4 @@ onMounted(async () => {
 :deep(.ant-tree-treenode-disabled .ant-tree-checkbox) {
   cursor: not-allowed;
 }
-</style> 
+</style>

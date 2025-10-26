@@ -38,12 +38,16 @@ const isAuthenticated = computed(() => !!user.value && !user.value.expired)
 
 // 防重复重定向标志
 let loginInProgress = false
+let lastLoginAttempt = 0
+const LOGIN_COOLDOWN = 2000 // 2秒冷却时间
 
 // 顶层定义，避免 useAuth() 调用循环引用
 export const login = async () => {
-  // 防止重复重定向
-  if (loginInProgress) {
-    console.log('登录重定向已在进行中，跳过重复操作')
+  const now = Date.now()
+
+  // 防止重复重定向 - 检查冷却时间
+  if (loginInProgress || now - lastLoginAttempt < LOGIN_COOLDOWN) {
+    console.log('登录重定向已在进行中或冷却期内，跳过重复操作')
     return
   }
 
@@ -62,9 +66,16 @@ export const login = async () => {
     return
   }
 
+  // 检查是否已经在授权服务器页面
+  if (window.location.href.includes('localhost:9000')) {
+    console.log('已在授权服务器页面，不进行重定向')
+    return
+  }
+
   try {
     console.log('开始 OIDC 登录重定向')
     loginInProgress = true
+    lastLoginAttempt = now
 
     await userManager.signinRedirect({
       state: {
@@ -113,13 +124,25 @@ async function safeSilentRenew() {
 // 初始化恢复用户状态
 export async function initAuth() {
   try {
+    console.log('🔍 开始初始化认证状态...')
+
+    // 检查是否在 OIDC 回调中
+    const urlParams = new URLSearchParams(window.location.search)
+    if (urlParams.has('code') || urlParams.has('error')) {
+      console.log('检测到 OIDC 回调，跳过用户状态恢复')
+      return
+    }
+
     const u = await userManager.getUser()
     if (u && !u.expired) {
       user.value = u
       console.log('✅ 用户状态恢复成功')
-    } else {
-      console.log('用户状态无效，尝试静默续期')
+    } else if (u && u.expired) {
+      console.log('用户 token 已过期，尝试静默续期')
       await safeSilentRenew()
+    } else {
+      console.log('未找到用户状态，用户需要登录')
+      user.value = null
     }
   } catch (error) {
     console.error('初始化认证状态失败:', error)

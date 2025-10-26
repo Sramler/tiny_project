@@ -3,20 +3,16 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
-import Components from 'unplugin-vue-components/vite'
-import { AntDesignVueResolver } from 'unplugin-vue-components/resolvers'
+// Removed unplugin-vue-components as it's not used
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [
-    vue(),
-    vueDevTools(),
-    Components({
-      resolvers: [
-        AntDesignVueResolver({ importStyle: 'less' }), // 或 'css'
-      ],
-    }),
-  ],
+  plugins: [vue(), vueDevTools()],
+  // server: {
+  //   open: true, // 启动时自动打开浏览器
+  //   host: 'localhost', // 可选，指定主机
+  //   port: 5173, // 可选，指定端口
+  // },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

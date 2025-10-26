@@ -1,0 +1,128 @@
+/**
+ * Zeebe 属性面板翻译
+ * 对应 bpmn-js-i18n-zh/lib/zeebe-properties-panel/index.js
+ */
+
+export interface TranslationMap {
+  [key: string]: string
+}
+
+// Zeebe 属性面板翻译
+const zeebePropertiesPanelTranslations: TranslationMap = {
+  // zeebe tooltips
+  'Define who the task is assigned to. One or all of the following attributes can be specified simultaneously. ':
+    '定义任务分配人。可以同时指定一个或多个属性。',
+  'User task documentation': '用户任务文档',
+  'Conditions documentation': '条件文档',
+  'Business rule task documentation': '业务规则任务文档',
+  'Script task documentation': '脚本任务文档',
+  'User task form documentation': '用户任务表单文档',
+  'Send task documentation': '发送任务文档',
+  'Receive task documentation': '接收任务文档',
+  'Message event documentation': '消息事件文档',
+  'Call activity documentation': '调用活动文档',
+  'Service task documentation': '服务任务文档',
+  'Message throw event documentation': '抛出消息事件文档',
+  'Multi instance documentation': '多重实例文档',
+  'Error event documentation': '错误事件文档',
+  'Input mappings documentation': '输入映射文档',
+  'Output mappings documentation': '输出映射文档',
+  ') and the ': '和 ',
+  ' expression (e.g. ': '表达式（例如：',
+  ')': '）',
+  ').': '）。',
+  ' to subscribe to. ': '来订阅。',
+  ' or ': '或 ',
+  ' ).': '）。',
+  send: '发送',
+  and: '和',
+
+  'Learn more.': '了解更多。',
+  'Learn more how to ': '了解更多如何 ',
+  'Learn how to define conditions.': '了解如何定义条件。',
+  'receive messages. ': '接收消息。',
+  'Define a boolean condition expression that defines when this flow is taken. ':
+    '定义一个布尔条件表达式，用于定义何时启动此流程。',
+  'Evaluate a business rule, for example a DMN. To add a custom implementation, use a job worker. ':
+    '执行业务规则，例如 DMN。要添加自定义实现，请使用 job worker。',
+  'Implement a script task using an inline FEEL expression. To add a custom implementation, use a job worker. ':
+    '使用内联 FEEL 表达式实现脚本任务。要添加自定义实现，请使用 job worker。',
+  'Link or embed a form created with the Camunda Forms editor. To associate a custom form, application, or URL to the user task, specify a form key. ':
+    '链接或嵌入 Camunda Forms 编辑器创建的表单。要将自定义表单、应用程序或 URL 关联到用户任务，请指定表单 key。',
+  'Define the name of the message (e.g. ': '定义消息名称（例如：',
+  'Define the ID of the process to call (e.g. ': '定义要调用的流程 ID（例如：',
+  'Specify which job workers handle the task work to execute a service (e.g. ':
+    '指定要执行的服务（例如：',
+  'Specify which job workers handle the task work to evaluate business rules. ':
+    '指定要执行的业务规则。',
+  'Specify which job workers handle the task work to execute a script. ': '指定要执行的脚本。',
+  'Specify which job workers handle the task work to send a message (e.g. ':
+    '指定要发送的消息（例如：',
+  'Specify which job workers handle the event work. ': '指定要处理的事件。',
+  'Execute this task for each element of a given collection. ': '对给定集合的每个元素执行此任务。',
+  'Define an input collection expression that defines the collection to iterate over (e.g. ':
+    '定义迭代集合表达式（例如：',
+  'To collect the output define the output collection and the output element expressions. ':
+    '为收集输出定义输出集合和输出元素表达式。',
+  'Define an error code (e.g. ': '定义错误代码（例如：',
+  'Create a new local variable in the scope of this task. ':
+    '在此任务的作用域内创建一个新的本地变量。',
+  'Customize how result variables are merged into the global scope of the process instance. ':
+    '自定义如何将结果变量合并到流程实例的全局作用域。',
+
+  // properties-panel
+  Code: '编码',
+  Assignee: '处理用户',
+  'Candidate groups': '候选组',
+  'Candidate users': '候选用户',
+  'DMN decision': 'DMN 决断',
+  'Job worker': '工作线程',
+  Implementation: '实现方式',
+  'Decision ID': '决策 ID',
+  'Result variable': '结果变量',
+  'Condition expression': '条件表达式',
+  'Camunda form (linked)': 'Camunda 表单（链接）',
+  'Camunda form (embedded)': 'Camunda 表单（嵌入）',
+  'Custom form key': '自定义表单 key',
+  Type: '类型',
+  'Form JSON configuration': '表单 JSON 配置',
+  'Form ID': '表单 ID',
+  'Form key': '表单 key',
+  'Variable assignment value': '变量赋值',
+  'Propagate all variables': '传播所有变量',
+  On: '开启',
+  Off: '关闭',
+  'Subscription correlation key': '订阅关联密钥',
+  'Input collection': '输入集合',
+  'Input element': '输入元素',
+  'Output collection': '输出集合',
+  'Output element': '输出元素',
+  'Completion condition': '完成条件',
+  'Propagate all child process variables': '传播所有子进程变量',
+  'FEEL expression': 'FEEL 表达式',
+  Retries: '重试',
+  'Due date': '到期日期',
+  'Follow up date': '跟进日期',
+  'Timer documentation': '计时器文档',
+
+  'If turned on, all variables from this process instance will be propagated to the child process instance.':
+    '如果启用，则此流程实例中的所有变量都将传播到子流程实例。',
+  'Otherwise, only variables defined via input mappings will be propagated.':
+    '否则，只传播通过输入映射定义的变量。',
+  'If turned on, all variables from the child process instance will be propagated to the parent process instance.':
+    '如果启用，则子进程实例中的所有变量都将传播到父进程实例。',
+  'Otherwise, only variables defined via output mappings will be propagated.':
+    '否则，只传播通过输出映射定义的变量。',
+  'Specifies the number of times the job is retried when a worker signals failure. The default is three.':
+    '指定 worker 发出故障信号时重试作业的次数。默认值为 3。',
+  'How to configure a timer': '如何配置计时器',
+  'A specific point in time defined as ISO 8601 combined date and time representation.':
+    '定义格式为 ISO 8601 组合日期和时间表示的特定时间点。',
+  'A cycle defined as ISO 8601 repeating intervals format, or a cron expression.':
+    '定义格式为 ISO 8601 的重复间隔或 cron 表达式的循环周期。',
+  'every hour on the hour from 9-5 p.m. UTC Monday-Friday':
+    '星期一到星期五早上 9 点到下午 5 点（UTC 格式）间的每个小时',
+  'A time duration defined as ISO 8601 durations format.': '定义格式为 ISO 8601 的持续时间。',
+}
+
+export default zeebePropertiesPanelTranslations

@@ -1,0 +1,43 @@
+-- 用户认证方法示例数据
+-- 注意：实际使用时需要根据 authentication_configuration 字段的实际需求调整
+
+-- 为 admin 用户添加 TOTP 认证方式（示例）
+-- INSERT INTO `user_authentication_method` (
+--     `user_id`,
+--     `authentication_provider`,
+--     `authentication_type`,
+--     `authentication_configuration`,
+--     `is_primary_method`,
+--     `is_method_enabled`,
+--     `authentication_priority`
+-- ) VALUES (
+--     1,
+--     'LOCAL',
+--     'TOTP',
+--     '{"secret_key":"JBSWY3DPEHPK3PXP","backup_codes":["123456","789012"],"algorithm":"SHA1","digits":6,"period":30,"issuer":"Tiny OAuth Server"}',
+--     false,
+--     true,
+--     1
+-- );
+
+-- 为 admin 用户添加密码认证方式（如果需要）
+-- INSERT INTO `user_authentication_method` (
+--     `user_id`,
+--     `authentication_provider`,
+--     `authentication_type`,
+--     `authentication_configuration`,
+--     `is_primary_method`,
+--     `is_method_enabled`,
+--     `authentication_priority`
+-- ) VALUES (
+--     1,
+--     'LOCAL',
+--     'PASSWORD',
+--     '{"password_hash":"$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVEFDa","password_changed_at":"2024-01-01T00:00:00Z"}',
+--     true,
+--     true,
+--     0
+-- );
+
+-- 查询示例
+-- SELECT * FROM user_authentication_method WHERE user_id = 1;

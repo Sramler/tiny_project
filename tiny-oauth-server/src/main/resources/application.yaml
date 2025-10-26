@@ -1,0 +1,137 @@
+workflow:
+  engine: camunda # 或 flowable, activiti
+server:
+  port: 9000
+logging:
+  level:
+    org.camunda.bpm.engine.persistence: DEBUG
+    org.camunda.bpm.engine.impl.db.sql: DEBUG
+    org.camunda.bpm.engine.impl.persistence.entity: DEBUG
+    org.camunda.bpm.engine.impl.persistence: DEBUG
+    org.springframework.security: TRACE
+    com.zaxxer.hikari: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+spring:
+  application:
+    name: oauth-server
+  datasource:
+    url: >-
+      jdbc:mysql://localhost:3306/tiny_web
+      ?useSSL=false
+      &allowPublicKeyRetrieval=true
+      &useUnicode=true
+      &characterEncoding=UTF-8
+      &serverTimezone=Asia/Shanghai
+      &sessionVariables=transaction_isolation='READ-COMMITTED'
+      &rewriteBatchedStatements=true
+      &cachePrepStmts=true
+      &prepStmtCacheSize=250
+      &prepStmtCacheSqlLimit=2048
+      &useServerPrepStmts=true
+    #url: jdbc:mysql://localhost:3306/tiny_web?useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&sessionVariables=transaction_isolation='READ-COMMITTED'
+    username: root
+    password: Tianye0903.
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      minimum-idle: 5 # HikariCP 连接池最小空闲连接数，默认10
+      maximum-pool-size: 20 # HikariCP 连接池最大连接数，默认10
+      idle-timeout: 30000 # HikariCP 连接池中连接最大空闲时间（毫秒），默认600000（10分钟）
+      pool-name: HikariCP # HikariCP 连接池名称，默认HikariPool-1
+      max-lifetime: 1800000 # HikariCP 连接的最大存活时间（毫秒），默认1800000（30分钟）
+      connection-timeout: 30000 # HikariCP 获取连接的最大等待时间（毫秒），默认30000（30秒）
+      auto-commit: true # HikariCP 是否自动提交，默认true
+      # 设置事务隔离级别为 READ_COMMITTED
+      connection-init-sql: "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED"
+  jpa:
+    database-platform: org.hibernate.dialect.MySQL8Dialect
+    open-in-view: false # 避免延迟加载导致的 session 泄露警告
+
+    hibernate:
+      ddl-auto: update # JPA 自动建表策略，update为自动更新表结构,生产环境建议改为 none
+    show-sql: true # 是否显示SQL语句，开发时建议开启
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: Asia/Shanghai
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
+  # 数据初始化配置
+  sql:
+    init:
+      mode: always # 总是执行数据初始化脚本
+      data-locations: classpath:data.sql # 指定数据初始化脚本位置
+      continue-on-error: true # 遇到错误继续执行
+authentication:
+  jwt:
+    public-key-path: classpath:keys/public.pem
+    private-key-path: classpath:keys/private.pem
+  clients:
+    - client-id: oidc-client
+      client-secret: secret
+      authentication-methods:
+        - client_secret_basic
+      grant-types:
+        - authorization_code
+        - refresh_token
+      redirect-uris:
+        - http://localhost:9000/
+      post-logout-redirect-uris:
+        - http://127.0.0.1:8080/
+      scopes:
+        - openid
+        - profile
+      client-setting:
+        require-authorization-consent: true
+    - client-id: vue-client
+      authentication-methods:
+        - none # ✅ 表示前端（公有客户端）不需要 client secret
+      grant-types:
+        - authorization_code # ✅ 标准 OIDC 授权码流程
+        - refresh_token # ✅ 启用 refresh_token 支持
+      redirect-uris:
+        - http://localhost:5173/callback
+        - http://localhost:5173/silent-renew.html # silent renew 时用于隐式授权流程的 iframe 回调页面。
+      post-logout-redirect-uris:
+        - http://127.0.0.1:8080/
+      scopes:
+        - openid
+        - profile
+        - offline_access # ✅ 必须启用，否则不会发 refresh_token
+      client-setting:
+        require-authorization-consent: false
+        require-proof-key: true # 开启 PKCE，是 Authorization Code Flow 安全的关键部分，前端用 code_challenge 和 code_verifier 实现。
+# Camunda BPM 配置
+camunda:
+  bpm:
+    #admin-user:
+    #  id: admin
+    #  password: admin
+    database:
+      type: mysql
+      schema-update: false # 强制重新创建所有表
+    generic-properties:
+      properties:
+        dbIdentityUsed: false        # 关键：不使用 ACT_ID_* 身份表
+        tenantCheckEnabled: true
+    webapp:
+      enabled: false # 禁用 Camunda Webapp
+    job-execution:
+      enabled: true # 启用作业执行
+    metrics:
+      enabled: true # 启用指标收集
+    # 历史数据配置
+    history-level: full # 记录完整历史数据
+    default-history-time-to-live: 30 # 默认历史数据生存时间（天）
+    # 历史数据清理配置
+    history-cleanup:
+      enabled: true # 启用历史数据清理
+      batch-window-start-time: "02:00" # 清理开始时间
+      batch-window-end-time: "06:00" # 清理结束时间
+      batch-size: 100 # 清理批次大小
+    # 流程引擎配置
+    process-engine:
+      enforce-history-time-to-live: false # 临时禁用 TTL 强制检查
+

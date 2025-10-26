@@ -19,10 +19,15 @@ onMounted(async () => {
       console.log('✅ OIDC 登录回调成功')
       console.log('👤 用户信息:', user)
       
+      // 等待用户状态更新
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
       // 登录成功后跳转回主页或原始路径
       const returnUrl = (user?.state as any)?.returnUrl || '/'
       console.log('跳转到:', returnUrl)
-      router.replace(returnUrl)
+      
+      // 使用 replace 避免历史记录问题
+      await router.replace(returnUrl)
     } else if (window.location.search.includes('error=')) {
       // 处理 OIDC 错误
       const urlParams = new URLSearchParams(window.location.search)

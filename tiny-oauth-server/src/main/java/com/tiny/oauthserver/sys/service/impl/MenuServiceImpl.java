@@ -7,22 +7,23 @@ import com.tiny.oauthserver.sys.service.MenuService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
+
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Query;
-import jakarta.persistence.TypedQuery;
+
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.HashMap;
 import java.util.ArrayList;
-import java.util.Set;
-import java.util.Objects;
+
 
 /**
  * 菜单业务实现类，专注于 type=0/1 的菜单和目录
@@ -363,6 +364,10 @@ public class MenuServiceImpl implements MenuService {
         if (resourceDto.getType() == null || (resourceDto.getType() != ResourceType.DIRECTORY.getCode() && resourceDto.getType() != ResourceType.MENU.getCode())) {
             resourceDto.setType(ResourceType.MENU.getCode());
         }
+        
+        // 验证父ID设置（创建时ID为null，所以传入0作为占位符）
+        validateParentId(0L, resourceDto.getParentId());
+        
         Resource resource = new Resource();
         resource.setName(resourceDto.getName());
         resource.setTitle(resourceDto.getTitle());
@@ -389,6 +394,10 @@ public class MenuServiceImpl implements MenuService {
     public Resource updateMenu(ResourceCreateUpdateDto resourceDto) {
         Resource resource = resourceRepository.findById(resourceDto.getId())
                 .orElseThrow(() -> new RuntimeException("菜单不存在"));
+        
+        // 验证父ID设置
+        validateParentId(resourceDto.getId(), resourceDto.getParentId());
+        
         resource.setName(resourceDto.getName());
         resource.setTitle(resourceDto.getTitle());
         resource.setUrl(resourceDto.getUrl());
@@ -405,6 +414,66 @@ public class MenuServiceImpl implements MenuService {
         resource.setType(ResourceType.fromCode(resourceDto.getType()));
         resource.setParentId(resourceDto.getParentId());
         return resourceRepository.save(resource);
+    }
+    
+    /**
+     * 验证父ID设置是否有效
+     */
+    private void validateParentId(Long menuId, Long parentId) {
+        // 如果父ID为空，表示设置为顶级菜单，这是允许的
+        if (parentId == null || parentId == 0) {
+            return;
+        }
+        
+        // 不能将自己设置为自己的父菜单
+        if (menuId.equals(parentId)) {
+            throw new RuntimeException("不能将自己设置为父菜单");
+        }
+        
+        // 检查父菜单是否存在
+        Resource parentResource = resourceRepository.findById(parentId)
+                .orElseThrow(() -> new RuntimeException("父菜单不存在，ID: " + parentId));
+        
+        // 父菜单必须是目录类型
+        if (parentResource.getType() != ResourceType.DIRECTORY) {
+            throw new RuntimeException("父菜单必须是目录类型");
+        }
+        
+        // 检查是否会造成循环引用
+        if (wouldCreateCircularReference(menuId, parentId)) {
+            throw new RuntimeException("设置此父菜单会造成循环引用");
+        }
+    }
+    
+    /**
+     * 检查是否会造成循环引用
+     */
+    private boolean wouldCreateCircularReference(Long menuId, Long parentId) {
+        Long currentParentId = parentId;
+        Set<Long> visitedIds = new HashSet<>();
+        
+        while (currentParentId != null && currentParentId != 0) {
+            // 如果已经访问过这个ID，说明存在循环
+            if (visitedIds.contains(currentParentId)) {
+                return true;
+            }
+            
+            // 如果找到了要修改的菜单ID，说明会造成循环
+            if (currentParentId.equals(menuId)) {
+                return true;
+            }
+            
+            visitedIds.add(currentParentId);
+            
+            // 获取当前父菜单的父ID
+            Resource currentParent = resourceRepository.findById(currentParentId).orElse(null);
+            if (currentParent == null) {
+                break;
+            }
+            currentParentId = currentParent.getParentId();
+        }
+        
+        return false;
     }
 
     /**

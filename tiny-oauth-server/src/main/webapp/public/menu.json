@@ -7,6 +7,20 @@
     "component": "/views/Dashboard.vue" 
   },
   {
+    "title": "流程管理",
+    "url": "/workflow",
+    "icon": "ApartmentOutlined",
+    "showIcon": true,
+    "redirect": "/workflowDesign",
+      "children": [
+        { "title": "流程建模", "url": "/process/modeling", "showIcon": false, "component": "/views/process/Modeling.vue" },
+        { "title": "流程定义", "url": "/process/definition", "showIcon": false, "component": "/views/process/Definition.vue" },
+        { "title": "流程部署", "url": "/process/deployment", "showIcon": false, "component": "/views/process/Deployment.vue" },
+        { "title": "流程实例", "url": "/process/instance", "showIcon": false, "component": "/views/process/Instance.vue" },
+        { "title": "任务管理", "url": "/process/task", "showIcon": false, "component": "/views/process/task.vue" }
+      ]
+  },
+  {
     "title": "系统管理",
     "url": "/system",
     "icon": "SettingOutlined",

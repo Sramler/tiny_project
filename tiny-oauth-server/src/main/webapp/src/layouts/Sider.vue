@@ -1,6 +1,6 @@
 <template>
   <!-- 侧边栏容器 -->
-  <div :class="['sider', { collapsed }]">
+  <div :class="['sider', { collapsed }]" v-bind="$attrs">
     <!-- Logo 区域 -->
     <div class="logo">
       <img src="@/assets/logo.svg" alt="logo" class="logo-img" />
@@ -10,40 +10,29 @@
     <div class="menu-scroll">
       <ul class="menu">
         <template v-for="(item, idx) in menuList" :key="item.url">
-          <li
-            :class="['menu-item', { active: isActive(item), open: openMenu === idx }]"
-            @click="toggleMenu(idx, item)"
-          >
+          <li :class="['menu-item', { active: isActive(item), open: openMenu === idx }]" @click="toggleMenu(idx, item)">
             <!-- 使用 Icon.vue 组件渲染图标 -->
-            <Icon
-              v-if="item.showIcon && item.icon"
-              :icon="item.icon"
-              className="icon"
-            />
+            <Icon v-if="item.showIcon && item.icon" :icon="item.icon" className="icon" />
             <span v-if="!collapsed" class="text">{{ item.title }}</span>
             <!-- 使用 Icon 组件替换箭头 -->
-            <Icon v-if="item.children && item.children.length > 0 && !collapsed" :icon="openMenu === idx ? 'DownOutlined' : 'RightOutlined'" class="arrow" />
+            <Icon v-if="item.children && item.children.length > 0 && !collapsed"
+              :icon="openMenu === idx ? 'DownOutlined' : 'RightOutlined'" class="arrow" />
           </li>
           <!-- 二级菜单 -->
           <ul v-if="item.children && item.children.length > 0 && openMenu === idx && !collapsed" class="submenu">
             <template v-for="(sub, subIdx) in item.children" :key="sub.url">
-              <li
-                :class="['submenu-item', { active: isActive(sub), open: openSubMenu === subIdx }]"
-                @click.stop="toggleSubMenu(subIdx, sub)"
-              >
+              <li :class="['submenu-item', { active: isActive(sub), open: openSubMenu === subIdx }]"
+                @click.stop="toggleSubMenu(subIdx, sub)">
                 <!-- 二级菜单不渲染图标 -->
                 <span class="text">{{ sub.title }}</span>
                 <!-- 使用 Icon 组件替换箭头 -->
-                <Icon v-if="sub.children && sub.children.length > 0" :icon="openSubMenu === subIdx ? 'DownOutlined' : 'RightOutlined'" class="arrow" />
+                <Icon v-if="sub.children && sub.children.length > 0"
+                  :icon="openSubMenu === subIdx ? 'DownOutlined' : 'RightOutlined'" class="arrow" />
               </li>
               <!-- 三级菜单 -->
               <ul v-if="sub.children && sub.children.length > 0 && openSubMenu === subIdx" class="submenu third">
-                <li
-                  v-for="third in sub.children"
-                  :key="third.url"
-                  :class="['submenu-item', { active: isActive(third) }]"
-                  @click.stop="goMenu(third.url)"
-                >
+                <li v-for="third in sub.children" :key="third.url"
+                  :class="['submenu-item', { active: isActive(third) }]" @click.stop="goMenu(third.url)">
                   <!-- 三级菜单不渲染图标 -->
                   <span class="text">{{ third.title }}</span>
                 </li>
@@ -53,6 +42,8 @@
         </template>
       </ul>
     </div>
+
+
     <!-- 折叠按钮固定在底部 -->
     <div class="collapse-btn" @click="toggleCollapse">
       <Icon :icon="collapsed ? 'MenuUnfoldOutlined' : 'MenuFoldOutlined'" />
@@ -66,6 +57,11 @@ import { useRouter, useRoute } from 'vue-router'
 import { menuTree } from '@/api/menu'
 import { message } from 'ant-design-vue'
 import Icon from '@/components/Icon.vue'
+
+// 禁用自动属性继承，手动控制属性绑定
+defineOptions({
+  inheritAttrs: false
+})
 
 // 侧边栏是否折叠状态
 const collapsed = ref(false)
@@ -162,11 +158,14 @@ watch(() => route.path, (newPath) => {
   display: flex;
   flex-direction: column;
   transition: width 0.2s;
+  background: #fafbfc;
 }
+
 .sider.collapsed {
   /* 使用 var() 函数从 theme.css 中读取并应用侧边栏折叠宽度变量 */
   width: var(--sider-width-collapsed);
 }
+
 .logo {
   display: flex;
   align-items: center;
@@ -176,12 +175,14 @@ watch(() => route.path, (newPath) => {
   min-width: 0;
   overflow: hidden;
 }
+
 .logo-img {
   width: 36px;
   height: 36px;
   flex-shrink: 0;
   display: block;
 }
+
 .logo-text {
   margin-left: 10px;
   font-size: 20px;
@@ -193,34 +194,43 @@ watch(() => route.path, (newPath) => {
   line-height: 1;
   display: flex;
   align-items: center;
-  color: #333; /* logo区字体色与菜单一致 */
+  color: #333;
+  /* logo区字体色与菜单一致 */
 }
+
 .sider.collapsed .logo {
   justify-content: center;
   padding: 0;
 }
+
 .sider.collapsed .logo-img {
   margin: 0 auto;
 }
+
 .sider.collapsed .logo-text,
 .sider.collapsed .text,
 .sider.collapsed .arrow {
   display: none;
 }
+
 .menu-scroll {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
 }
+
 .menu {
   list-style: none;
   padding: 0;
   margin: 0;
 }
+
 .menu-item,
 .submenu-item {
-  color: #333; /* 普通菜单字体色 */
+  color: #333;
+  /* 普通菜单字体色 */
 }
+
 .menu-item {
   display: flex;
   align-items: center;
@@ -229,65 +239,154 @@ watch(() => route.path, (newPath) => {
   transition: background 0.2s;
   user-select: none;
 }
+
 .menu-item.active {
   background: #1890ff;
-  color: #fff; /* 激活时字体和图标都为白色 */
+  color: #fff;
+  /* 激活时字体和图标都为白色 */
 }
+
 .menu-item.open {
   /* background: #112240; */
 }
+
 .menu-item .icon {
   font-size: 18px;
   width: 24px;
   text-align: center;
 }
+
 .menu-item .text {
   margin-left: 8px;
 }
+
 .menu-item .arrow {
   margin-left: auto;
   font-size: 12px;
   transition: transform 0.2s;
+  width: 12px;
+  text-align: center;
+  margin-right: 16px;
 }
+
 .submenu {
   /* background: #0d1a26; */
   padding-left: 24px;
+  margin-top: 2px;
 }
+
 .submenu-item {
   display: flex;
   align-items: center;
-  padding: 10px 0 10px 8px;
+  padding: 8px 12px 8px 12px;
   cursor: pointer;
   font-size: 14px;
   transition: background 0.2s;
+  color: #333;
+  border-radius: 4px;
+  margin: 1px 0;
 }
+
 .submenu-item.active {
   background: #1890ff;
   color: #fff;
 }
-.submenu.third {
-  background: #09111a;
-  padding-left: 24px;
+
+.submenu-item:hover {
+  background: #f0f5ff;
+  color: #1890ff;
 }
+
+/* 选中状态下的悬浮效果 - 与普通悬浮一致 */
+.submenu-item.active:hover {
+  background: #f0f5ff;
+  color: #1890ff;
+}
+
+.submenu-item .arrow {
+  margin-left: auto;
+  font-size: 12px;
+  transition: transform 0.2s;
+  width: 12px;
+  text-align: center;
+  margin-right: 16px;
+}
+
+.submenu.third {
+  background: transparent;
+  padding-left: 24px;
+  margin-top: 4px;
+  border-left: 1px solid #f0f0f0;
+  margin-left: 0;
+}
+
+.submenu.third .submenu-item {
+  padding: 8px 12px 8px 12px;
+  font-size: 14px;
+  color: #333;
+  position: relative;
+  margin-left: -8px;
+  margin-right: -16px;
+  border-radius: 4px;
+  margin-top: 1px;
+  margin-bottom: 1px;
+}
+
+.submenu.third .submenu-item:hover {
+  background: #f0f5ff !important;
+  color: #1890ff !important;
+}
+
+.submenu.third .submenu-item.active {
+  background: #1890ff !important;
+  color: #fff !important;
+}
+
+/* 确保三级菜单样式优先级最高 */
+.submenu.third li.submenu-item:hover {
+  background: #f0f5ff !important;
+  color: #1890ff !important;
+}
+
+.submenu.third li.submenu-item.active {
+  background: #1890ff !important;
+  color: #fff !important;
+}
+
+/* 选中状态下的悬浮效果 - 与普通悬浮一致 */
+.submenu.third li.submenu-item.active:hover {
+  background: #f0f5ff !important;
+  color: #1890ff !important;
+}
+
 .collapse-btn {
   cursor: pointer;
   padding: 12px 0;
   font-size: 22px;
   text-align: center;
-  color: #333; /* 伸缩按钮字体色与菜单一致 */
-  background: #fafbfc; /* 伸缩按钮背景色与侧边栏一致 */
-  border-top: 1px solid #e5e6eb; /* 分割线更柔和 */
+  color: #333;
+  /* 伸缩按钮字体色与菜单一致 */
+  background: #fafbfc;
+  /* 伸缩按钮背景色与侧边栏一致 */
+  border-top: 1px solid #e5e6eb;
+  /* 分割线更柔和 */
   transition: background 0.2s, color 0.2s;
   width: 100%;
 }
+
 .collapse-btn:hover {
-  background: #f0f5ff; /* 悬浮背景色与菜单一致 */
-  color: #1890ff;      /* 悬浮字体色与菜单一致 */
+  background: #f0f5ff;
+  /* 悬浮背景色与菜单一致 */
+  color: #1890ff;
+  /* 悬浮字体色与菜单一致 */
 }
+
 .collapse-btn :deep(.anticon) {
-  font-size: 18px;      /* 与一级菜单 icon 大小一致 */
-  width: 24px;          /* 与一级菜单 icon 宽度一致 */
+  font-size: 18px;
+  /* 与一级菜单 icon 大小一致 */
+  width: 24px;
+  /* 与一级菜单 icon 宽度一致 */
   vertical-align: middle;
   display: inline-block;
 }
-</style> 
+</style>

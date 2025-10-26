@@ -13,6 +13,7 @@ import java.util.Optional;
 public interface UserService {
     Page<UserResponseDto> users(UserRequestDto query, Pageable pageable);
     Optional<User> findById(Long id);
+    Optional<User> findByUsername(String username);
     User create(User user);
     User update(Long id, User user);
     User createFromDto(UserCreateUpdateDto userDto);

@@ -37,6 +37,7 @@ public class DefaultSecurityConfig {
                         .requestMatchers("/sys/users/batch/**").permitAll() // 临时允许批量操作接口不需要认证，用于测试
                         .requestMatchers("/sys/roles/**").permitAll() // 临时允许角色管理接口不需要认证，用于测试
                         .requestMatchers("/sys/resources/**").permitAll() // 临时允许资源管理接口不需要认证，用于测试
+                        .requestMatchers("/process/**").permitAll() // 临时允许流程管理接口不需要认证，用于测试
                         .anyRequest().authenticated()
                 )
                 .formLogin(Customizer.withDefaults())

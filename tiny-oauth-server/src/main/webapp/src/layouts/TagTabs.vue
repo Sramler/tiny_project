@@ -1,27 +1,16 @@
 <template>
   <!-- 标签页导航容器 -->
-  <div class="tag-tabs">
+  <div class="tag-tabs" v-bind="$attrs">
     <!-- 标签滚动区域 -->
     <div class="tabs-scroll-area" ref="tabScrollRef">
-      <div
-        v-for="(tab, idx) in tabs"
-        :key="tab.path"
-        :class="['tab', { active: tab.path === activePath }]"
-        @click="switchTab(tab.path)"
-        @contextmenu.prevent="openContextMenu($event, idx)"
-        :ref="el => tabRefs[idx] = el"
-      >
+      <div v-for="(tab, idx) in tabs" :key="tab.path" :class="['tab', { active: tab.path === activePath }]"
+        @click="switchTab(tab.path)" @contextmenu.prevent="openContextMenu($event, idx)" :ref="el => tabRefs[idx] = el">
         <!-- 标签标题部分，自动撑开 -->
         <span class="tab-title">{{ tab.title }}</span>
         <!-- 操作区，关闭和刷新按钮固定在右侧 -->
         <span class="tab-actions">
-          <ReloadOutlined
-            v-if="tab.path === '/' || (tab.path !== '/' && tab.path === activePath)"
-            class="refresh-icon"
-            :class="{ spinning: spinningIdx === idx }"
-            @click.stop="handleRefresh(idx)"
-            title="刷新"
-          />
+          <ReloadOutlined v-if="tab.path === '/' || (tab.path !== '/' && tab.path === activePath)" class="refresh-icon"
+            :class="{ spinning: spinningIdx === idx }" @click.stop="handleRefresh(idx)" title="刷新" />
           <CloseOutlined v-if="tab.path !== '/'" class="close" @click.stop="closeTab(idx)" />
         </span>
       </div>
@@ -29,18 +18,10 @@
     <!-- 溢出标签菜单按钮 -->
     <div v-if="overflowTabs.length > 0" class="overflow-menu-btn" @click.stop="toggleOverflowMenu">
       <EllipsisOutlined class="overflow-icon" />
-      <div
-        v-if="overflowMenuVisible"
-        class="context-menu overflow-context-menu"
-        :style="{ left: overflowMenuPos.left + 'px', top: overflowMenuPos.top + 'px' }"
-        @mouseleave="closeOverflowMenu"
-      >
-        <div
-          class="menu-item"
-          v-for="tab in overflowTabs"
-          :key="tab.path"
-          @click="switchTab(tab.path); closeOverflowMenu()"
-        >
+      <div v-if="overflowMenuVisible" class="context-menu overflow-context-menu"
+        :style="{ left: overflowMenuPos.left + 'px', top: overflowMenuPos.top + 'px' }" @mouseleave="closeOverflowMenu">
+        <div class="menu-item" v-for="tab in overflowTabs" :key="tab.path"
+          @click="switchTab(tab.path); closeOverflowMenu()">
           {{ tab.title }}
         </div>
       </div>
@@ -48,35 +29,20 @@
     <!-- 右侧三个点菜单按钮 -->
     <div class="more-menu-btn" ref="moreBtnRef" @click.stop="toggleMoreMenu">
       <MoreOutlined class="more-icon" />
-      <div
-        v-if="moreMenuVisible"
-        class="context-menu more-context-menu"
-        :style="{ left: moreMenuPos.left + 'px', top: moreMenuPos.top + 'px' }"
-        @mouseleave="closeMoreMenu"
-      >
+      <div v-if="moreMenuVisible" class="context-menu more-context-menu"
+        :style="{ left: moreMenuPos.left + 'px', top: moreMenuPos.top + 'px' }" @mouseleave="closeMoreMenu">
         <div class="menu-item" @click="closeOtherTabs(activeTabIdx)">关闭其他</div>
         <div class="menu-item" @click="refreshTab(activeTabIdx)">刷新当前页</div>
       </div>
     </div>
     <!-- 右键菜单 -->
-    <div
-      v-if="contextMenu.visible"
-      class="context-menu"
-      :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
-      @mouseleave="closeContextMenu"
-    >
+    <div v-if="contextMenu.visible" class="context-menu"
+      :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }" @mouseleave="closeContextMenu">
       <div class="menu-item" @click="refreshTab(contextMenu.idx)">刷新当前页</div>
       <div class="menu-item" @click="closeOtherTabs(contextMenu.idx)">关闭其他</div>
-      <div
-        class="menu-item"
-        v-if="contextMenu.idx > 0"
-        @click="closeLeftTabs(contextMenu.idx)"
-      >关闭左侧</div>
-      <div
-        class="menu-item"
-        v-if="contextMenu.idx < tabs.length - 1"
-        @click="closeRightTabs(contextMenu.idx)"
-      >关闭右侧</div>
+      <div class="menu-item" v-if="contextMenu.idx > 0" @click="closeLeftTabs(contextMenu.idx)">关闭左侧</div>
+      <div class="menu-item" v-if="contextMenu.idx < tabs.length - 1" @click="closeRightTabs(contextMenu.idx)">关闭右侧
+      </div>
     </div>
   </div>
 </template>
@@ -85,12 +51,17 @@
 import { ref, watch, nextTick, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 // 引入 Ant Design Icons
-import { 
-  ReloadOutlined, 
-  CloseOutlined, 
-  EllipsisOutlined, 
-  MoreOutlined 
+import {
+  ReloadOutlined,
+  CloseOutlined,
+  EllipsisOutlined,
+  MoreOutlined
 } from '@ant-design/icons-vue'
+
+// 禁用自动属性继承，手动控制属性绑定
+defineOptions({
+  inheritAttrs: false
+})
 
 const router = useRouter()
 const route = useRoute()
@@ -310,11 +281,14 @@ function closeOverflowMenu() {
 .tag-tabs {
   display: flex;
   align-items: center;
-  background: #fafbfc; /* 浅灰背景 */
-  padding: 0 12px 0 0; /* 只保留右侧内边距，左侧为0，确保第一个tab紧贴左侧 */
+  background: #fafbfc;
+  /* 浅灰背景 */
+  padding: 0 12px 0 0;
+  /* 只保留右侧内边距，左侧为0，确保第一个tab紧贴左侧 */
   /* 使用 var() 函数从 theme.css 中读取并应用标签页导航栏高度变量 */
   height: var(--tag-tabs-height);
-  position: relative;  /* 保证子元素定位 */
+  position: relative;
+  /* 保证子元素定位 */
   min-width: 0;
   overflow: hidden;
   width: 100%;
@@ -333,8 +307,10 @@ function closeOverflowMenu() {
   scrollbar-width: none;
   -ms-overflow-style: none;
   padding-bottom: -1px;
-  margin-bottom: -1px; /* 让激活标签底部线和下方分割线重叠 */
+  margin-bottom: -1px;
+  /* 让激活标签底部线和下方分割线重叠 */
 }
+
 .tabs-scroll-area::-webkit-scrollbar {
   display: none;
 }
@@ -345,58 +321,83 @@ function closeOverflowMenu() {
   align-items: center;
   justify-content: space-between;
   padding: 0 18px;
-  margin-right: 2px; /* 标签间隙 */
-  height: var(--tag-tabs-height); /* 标签高度与容器一致 */
-  line-height: var(--tag-tabs-height); /* 让内容垂直居中 */
-  background: #f7f8fa; /* 浅灰色背景 */
+  margin-right: 2px;
+  /* 标签间隙 */
+  height: var(--tag-tabs-height);
+  /* 标签高度与容器一致 */
+  line-height: var(--tag-tabs-height);
+  /* 让内容垂直居中 */
+  background: #f7f8fa;
+  /* 浅灰色背景 */
   color: #222;
-  border: none;        /* 去掉所有边框 */
-  border-bottom: 1px solid #e5e6eb; /* 底部分割线 */
-  border-right: 1px solid #f0f0f0; /* 右侧弱分割线 */
-  border-radius: 0;    /* 去掉圆角 */
+  border: none;
+  /* 去掉所有边框 */
+  border-bottom: 1px solid #e5e6eb;
+  /* 底部分割线 */
+  border-right: 1px solid #f0f0f0;
+  /* 右侧弱分割线 */
+  border-radius: 0;
+  /* 去掉圆角 */
   cursor: pointer;
   position: relative;
   transition: background 0.2s, color 0.2s;
   white-space: nowrap;
-  min-width: 80px; /* 更小的最小宽度 */
+  min-width: 80px;
+  /* 更小的最小宽度 */
   max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 0 0 auto;
-  box-shadow: none;    /* 去掉阴影 */
+  box-shadow: none;
+  /* 去掉阴影 */
   z-index: 1;
 }
+
 /* 第一个标签左侧无间隙，右侧间隙也为0 */
 .tab:first-child {
   margin-left: 0;
-  margin-right: 0; /* 让第一个标签紧贴左侧 */
+  margin-right: 0;
+  /* 让第一个标签紧贴左侧 */
 }
+
 .tab:last-child {
-  border-right: none; /* 最后一个标签不显示右分割线 */
+  border-right: none;
+  /* 最后一个标签不显示右分割线 */
 }
+
 .tab:hover {
-  background: #f0f5ff; /* 悬浮主色浅色 */
+  background: #f0f5ff;
+  /* 悬浮主色浅色 */
   color: #1890ff;
 }
+
 .tab.active {
-  background: #f0f2f5; /* 白色背景 */
-  color: #1890ff;   /* 蓝色文字 */
-  border: none;     /* 去掉所有边框 */
-  border-bottom: none !important; /* 彻底去掉底部线条 */
+  background: #f0f2f5;
+  /* 白色背景 */
+  color: #1890ff;
+  /* 蓝色文字 */
+  border: none;
+  /* 去掉所有边框 */
+  border-bottom: none !important;
+  /* 彻底去掉底部线条 */
   border-radius: 0;
   box-shadow: none;
   z-index: 2;
   position: relative;
 }
+
 .tab.active span,
 .tab.active .refresh-icon {
-  color: #1890ff !important; /* 强制蓝色 */
+  color: #1890ff !important;
+  /* 强制蓝色 */
 }
+
 .tab:focus {
   outline: none;
   background: #e6f7ff;
   color: #1890ff;
 }
+
 .tab:focus span {
   color: #1890ff;
 }
@@ -431,18 +432,28 @@ function closeOverflowMenu() {
   display: flex;
   align-items: center;
 }
+
 .tab.active .refresh-icon {
-  color: #1890ff; /* 激活标签刷新按钮主色 */
+  color: #1890ff;
+  /* 激活标签刷新按钮主色 */
 }
+
 .refresh-icon:hover {
   color: #40a9ff;
 }
+
 .refresh-icon.spinning {
   animation: spin 0.6s linear;
 }
+
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* 关闭按钮样式 */
@@ -453,6 +464,7 @@ function closeOverflowMenu() {
   color: #bfbfbf;
   transition: color 0.2s;
 }
+
 .close:hover {
   color: #ff4d4f;
 }
@@ -475,14 +487,17 @@ function closeOverflowMenu() {
   border-radius: 4px;
   transition: background 0.2s;
 }
+
 .more-menu-btn:hover {
   background: #f0f5ff;
 }
+
 .more-icon {
   font-size: 18px;
   color: #595959;
   transition: color 0.2s;
 }
+
 .more-icon:hover {
   color: #1890ff;
 }
@@ -491,7 +506,7 @@ function closeOverflowMenu() {
 .more-context-menu {
   position: fixed;
   min-width: 120px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
   border-radius: 8px;
   background: #fff;
   border: 1px solid #e5e6eb;
@@ -509,7 +524,7 @@ function closeOverflowMenu() {
   min-width: 120px;
   background: #fff;
   border: 1px solid #e5e6eb;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
   border-radius: 8px;
   padding: 4px 0;
   color: #333;
@@ -525,6 +540,7 @@ function closeOverflowMenu() {
   border-radius: 4px;
   transition: background 0.2s, color 0.2s;
 }
+
 .menu-item:hover {
   background: #e6f7ff;
   color: #1890ff;
@@ -547,14 +563,17 @@ function closeOverflowMenu() {
   border-radius: 4px;
   transition: background 0.2s;
 }
+
 .overflow-menu-btn:hover {
   background: #f0f5ff;
 }
+
 .overflow-icon {
   font-size: 18px;
   color: #595959;
   transition: color 0.2s;
 }
+
 .overflow-icon:hover {
   color: #1890ff;
 }
@@ -563,7 +582,7 @@ function closeOverflowMenu() {
 .overflow-context-menu {
   position: fixed;
   min-width: 140px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
   border-radius: 8px;
   background: #fff;
   border: 1px solid #e5e6eb;
@@ -573,4 +592,4 @@ function closeOverflowMenu() {
   user-select: none;
   z-index: 9999;
 }
-</style> 
+</style>

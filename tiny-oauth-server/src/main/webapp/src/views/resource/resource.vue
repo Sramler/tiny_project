@@ -301,9 +301,7 @@ function resetColumnOrder() {
 function onDragEnd() {}
 
 // 计算最终表格列（去除序号，树形结构不适合分页序号）
-const columns = computed(() => [
-  ...INITIAL_COLUMNS.filter(col => showColumnKeys.value.includes(col.dataIndex))
-])
+const columns = computed(() => INITIAL_COLUMNS.filter(col => showColumnKeys.value.includes(col.dataIndex)))
 
 // 多选配置
 const rowSelection = computed(() => ({

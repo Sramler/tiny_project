@@ -9,14 +9,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { userManager } from '@/auth/oidc.ts'
 import { useAuth } from '@/auth/auth'
 
 const router = useRouter()
-const { isAuthenticated } = useAuth()
-const isRedirecting = ref(false)
+const { isAuthenticated, login } = useAuth()
 
 onMounted(async () => {
   // 如果用户已经认证，直接跳转到首页
@@ -26,41 +24,15 @@ onMounted(async () => {
     return
   }
   
-  // 防止重复重定向
-  if (isRedirecting.value) {
-    console.log('正在重定向中，跳过重复操作')
-    return
-  }
-  
-  // 检查是否已经在 OIDC 流程中
-  const currentUser = await userManager.getUser()
-  if (currentUser && !currentUser.expired) {
-    console.log('检测到有效用户，跳转到首页')
-    router.replace('/')
-    return
-  }
-  
-  // 检查 URL 参数，避免重复重定向
-  const urlParams = new URLSearchParams(window.location.search)
-  if (urlParams.has('code') || urlParams.has('error')) {
-    console.log('检测到 OIDC 回调参数，不进行重定向')
-    return
-  }
-  
-  try {
-    console.log('开始 OIDC 登录重定向')
-    isRedirecting.value = true
-    
-    // 重定向到认证服务器登录
-    await userManager.signinRedirect({
-      state: {
-        returnUrl: window.location.pathname + window.location.search,
-      },
-    })
-  } catch (error) {
-    console.error('OIDC 登录重定向失败:', error)
-    isRedirecting.value = false
-  }
+  // 延迟一下，让用户看到提示信息
+  setTimeout(async () => {
+    try {
+      console.log('开始 OIDC 登录重定向')
+      await login()
+    } catch (error) {
+      console.error('OIDC 登录重定向失败:', error)
+    }
+  }, 1000)
 })
 </script>
 

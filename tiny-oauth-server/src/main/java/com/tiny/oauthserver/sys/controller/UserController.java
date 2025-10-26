@@ -6,6 +6,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
@@ -35,6 +37,39 @@ public class UserController {
         return userService.findById(id)
             .map(ResponseEntity::ok)
             .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * 获取当前登录用户信息
+     */
+    @GetMapping("/current")
+    public ResponseEntity<Map<String, Object>> getCurrentUser() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(401).body(Map.of(
+                    "success", false,
+                    "error", "用户未认证"
+                ));
+            }
+
+            String username = authentication.getName();
+            return userService.findByUsername(username)
+                .map(user -> ResponseEntity.<Map<String, Object>>ok(Map.of(
+                    "id", user.getId().toString(),
+                    "username", user.getUsername(),
+                    "nickname", user.getNickname() != null ? user.getNickname() : ""
+                )))
+                .orElse(ResponseEntity.<Map<String, Object>>status(404).body(Map.of(
+                    "success", false,
+                    "error", "用户不存在"
+                )));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of(
+                "success", false,
+                "error", e.getMessage() != null ? e.getMessage() : "获取用户信息失败"
+            ));
+        }
     }
 
     @PostMapping

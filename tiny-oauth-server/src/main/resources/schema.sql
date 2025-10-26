@@ -79,4 +79,22 @@ CREATE TABLE IF NOT EXISTS `role_resource` (
     KEY `idx_role_resource_resource_id` (`resource_id`),
     FOREIGN KEY (`role_id`) REFERENCES `role` (`id`) ON DELETE CASCADE,
     FOREIGN KEY (`resource_id`) REFERENCES `resource` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='角色-资源关联表'; 
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='角色-资源关联表';
+
+-- 创建用户认证方法表
+CREATE TABLE IF NOT EXISTS `user_authentication_method` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    `user_id` BIGINT NOT NULL COMMENT '用户ID',
+    `authentication_provider` VARCHAR(50) NOT NULL COMMENT '认证提供者',
+    `authentication_type` VARCHAR(50) NOT NULL COMMENT '认证类型',
+    `authentication_configuration` JSON NOT NULL COMMENT '认证配置',
+    `is_primary_method` BOOLEAN DEFAULT FALSE COMMENT '是否主要认证方法',
+    `is_method_enabled` BOOLEAN DEFAULT TRUE COMMENT '是否启用',
+    `authentication_priority` INT DEFAULT 0 COMMENT '认证优先级',
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `expires_at` TIMESTAMP NULL COMMENT '过期时间',
+    FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE,
+    UNIQUE KEY `uk_user_auth_method` (`user_id`, `authentication_provider`, `authentication_type`),
+    KEY `idx_user_provider` (`user_id`, `authentication_provider`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户认证方法表'; 

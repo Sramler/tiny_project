@@ -1,0 +1,5 @@
+{
+  "depcheck": {
+    "ignoreMatches": ["bpmn-js-i18n"]
+  }
+} 

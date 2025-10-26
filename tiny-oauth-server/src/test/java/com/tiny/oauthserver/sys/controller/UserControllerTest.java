@@ -1,8 +1,6 @@
 package com.tiny.oauthserver.sys.controller;
 
 import com.tiny.oauthserver.sys.model.User;
-import com.tiny.oauthserver.sys.model.UserRequestDto;
-import com.tiny.oauthserver.sys.model.UserResponseDto;
 import com.tiny.oauthserver.sys.model.UserCreateUpdateDto;
 import com.tiny.oauthserver.sys.service.UserService;
 import org.junit.jupiter.api.BeforeEach;

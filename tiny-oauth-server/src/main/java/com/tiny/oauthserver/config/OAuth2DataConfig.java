@@ -35,7 +35,7 @@ public class OAuth2DataConfig {
      * 对应表：oauth2_authorization
      */
     @Bean
-    public OAuth2AuthorizationService authorizationService(JdbcTemplate jdbcTemplate, RegisteredClientRepository registeredClientRepository) {
+    public OAuth2AuthorizationService customOAuth2AuthorizationService(JdbcTemplate jdbcTemplate, RegisteredClientRepository registeredClientRepository) {
         return new JdbcOAuth2AuthorizationService(jdbcTemplate, registeredClientRepository);
     }
 
@@ -44,7 +44,7 @@ public class OAuth2DataConfig {
      *对应表：oauth2_authorization_consent
      */
     @Bean
-    public OAuth2AuthorizationConsentService authorizationConsentService(JdbcTemplate jdbcTemplate, RegisteredClientRepository registeredClientRepository) {
+    public OAuth2AuthorizationConsentService customOAuth2AuthorizationConsentService(JdbcTemplate jdbcTemplate, RegisteredClientRepository registeredClientRepository) {
         return new JdbcOAuth2AuthorizationConsentService(jdbcTemplate, registeredClientRepository);
     }
 

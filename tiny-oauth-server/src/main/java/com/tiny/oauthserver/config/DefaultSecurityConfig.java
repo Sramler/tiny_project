@@ -33,7 +33,6 @@ public class DefaultSecurityConfig {
             throws Exception {
         http
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/login.html", "/static/**").permitAll() // 允许访问登录页和静态资源
                         .requestMatchers("/sys/users/test/**").permitAll() // 允许测试接口不需要认证
                         .requestMatchers("/sys/users/batch/**").permitAll() // 临时允许批量操作接口不需要认证，用于测试
                         .requestMatchers("/sys/roles/**").permitAll() // 临时允许角色管理接口不需要认证，用于测试
@@ -42,10 +41,10 @@ public class DefaultSecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form
-                        .loginPage("/login.html") // 自定义登录页面
-                        .loginProcessingUrl("/login") // 登录处理 URL
+                        .loginPage("/login") // 自定义登录页面，保持不变
+                        .loginProcessingUrl("/login") // 登录处理 URL，Spring Security 会自动处理
                         .defaultSuccessUrl("/", true) // 登录成功后的默认跳转
-                        .failureUrl("/login.html?error=BadCredentialsException") // 登录失败后的跳转
+                        .failureUrl("/login?error") // 登录失败后的跳转
                         .permitAll()
                 )
                 //.cors(Customizer.withDefaults()) // 开启 CORS

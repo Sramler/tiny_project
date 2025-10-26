@@ -73,6 +73,33 @@ public class SecurityUser implements UserDetails, Serializable {
         this.enabled = user.isEnabled();
     }
 
+    /**
+     * 构造函数，基于数据库中查询出的 User 实体和自定义密码构建出安全框架使用的对象。
+     * 用于从 user_authentication_method 表获取密码的场景。
+     */
+    public SecurityUser(User user, String password) {
+        this.userId = user.getId();
+        this.username = user.getUsername();
+        this.password = password;
+        this.authorities = user.getRoles().stream()
+                .flatMap(role -> {
+                    // 1. 将 roleName 作为权限（如 "ROLE_ADMIN"）
+                    // 2. 将 resource.code 也作为权限（如 "PERM_READ"）
+                    return java.util.stream.Stream.concat(
+                            java.util.stream.Stream.of(
+                                    new org.springframework.security.core.authority.SimpleGrantedAuthority(role.getName())
+                            ),
+                            role.getResources().stream()
+                                    .map(resource -> new org.springframework.security.core.authority.SimpleGrantedAuthority(resource.getName()))
+                    );
+                })
+                .collect(java.util.stream.Collectors.toSet());
+        this.accountNonExpired = user.isAccountNonExpired();
+        this.accountNonLocked = user.isAccountNonLocked();
+        this.credentialsNonExpired = user.isCredentialsNonExpired();
+        this.enabled = user.isEnabled();
+    }
+
     @JsonCreator
     public SecurityUser(
             @JsonProperty("userId") Long userId,

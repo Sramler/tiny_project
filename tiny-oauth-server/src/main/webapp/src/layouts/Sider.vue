@@ -31,8 +31,8 @@
               </li>
               <!-- 三级菜单 -->
               <ul v-if="sub.children && sub.children.length > 0 && openSubMenu === subIdx" class="submenu third">
-                <li v-for="third in sub.children" :key="third.url"
-                  :class="['submenu-item', { active: isActive(third) }]" @click.stop="goMenu(third.url)">
+                <li v-for="third in sub.children" :key="third.url || third.id || third.name"
+                  :class="['submenu-item', { active: isActive(third) }]" @click.stop="third.url && goMenu(third.url)">
                   <!-- 三级菜单不渲染图标 -->
                   <span class="text">{{ third.title }}</span>
                 </li>
@@ -54,7 +54,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { menuTree } from '@/api/menu'
+import { menuTree, type MenuItem } from '@/api/menu'
 import { message } from 'ant-design-vue'
 import Icon from '@/components/Icon.vue'
 
@@ -66,18 +66,62 @@ defineOptions({
 // 侧边栏是否折叠状态
 const collapsed = ref(false)
 // 菜单项列表，初始为空，后续通过接口加载
-const menuList = ref<any[]>([])
+const menuList = ref<MenuItem[]>([])
 // 当前打开的一级菜单索引，默认工作台（0）
 const openMenu = ref(0)
 // 当前打开的二级菜单索引
 const openSubMenu = ref(-1)
 
+// 递归处理 Jackson 类型信息格式：['java.util.ArrayList', [...]]
+// 处理菜单树中的所有 children 字段，确保它们都是标准数组格式
+function processMenuData(data: unknown): MenuItem[] {
+  if (!data) return []
+
+  // 如果是类型信息格式：['java.util.ArrayList', [...]]
+  if (Array.isArray(data) && data.length === 2 && data[0] === 'java.util.ArrayList' && Array.isArray(data[1])) {
+    console.warn('检测到 Jackson 类型信息格式，提取实际数据:', data[1])
+    data = data[1]
+  }
+
+  // 如果是数组，递归处理每个元素
+  if (Array.isArray(data)) {
+    return data.map(item => {
+      if (item && typeof item === 'object' && item !== null) {
+        const menuItem = item as MenuItem
+        // 处理 children 字段
+        if (menuItem.children) {
+          menuItem.children = processMenuData(menuItem.children)
+        }
+        return menuItem
+      }
+      return item as MenuItem
+    })
+  }
+
+  // 如果是对象，处理其 children 字段
+  if (data && typeof data === 'object' && data !== null) {
+    const menuItem = data as MenuItem
+    if (menuItem.children) {
+      menuItem.children = processMenuData(menuItem.children)
+    }
+  }
+
+  return Array.isArray(data) ? (data as MenuItem[]) : []
+}
+
 // 加载菜单数据
 async function loadMenu() {
   try {
     const data = await menuTree()
-    if (data && Array.isArray(data)) {
-      menuList.value = data
+    console.log('menuTree 返回数据:', data);
+
+    // 递归处理所有类型信息格式的数据（包括顶层和所有 children 字段）
+    const menuData = processMenuData(data)
+
+    if (menuData && Array.isArray(menuData) && menuData.length > 0) {
+      menuList.value = menuData
+      console.log('菜单列表加载成功，数量:', menuList.value.length)
+      console.log('处理后的菜单数据:', menuList.value)
     } else {
       menuList.value = []
       message.warning('未加载到可用菜单')
@@ -100,7 +144,7 @@ function toggleCollapse() {
   collapsed.value = !collapsed.value
 }
 // 一级菜单点击，手风琴效果
-function toggleMenu(idx: number, item: any) {
+function toggleMenu(idx: number, item: MenuItem) {
   // 如果有子菜单
   if (item.children && item.children.length > 0) {
     openMenu.value = openMenu.value === idx ? -1 : idx
@@ -111,18 +155,22 @@ function toggleMenu(idx: number, item: any) {
     }
   } else {
     // 叶子节点直接跳转到 path
-    goMenu(item.url)
-    openMenu.value = idx
-    openSubMenu.value = -1
+    if (item.url) {
+      goMenu(item.url)
+      openMenu.value = idx
+      openSubMenu.value = -1
+    }
   }
 }
 // 二级菜单点击，手风琴效果
-function toggleSubMenu(subIdx: number, sub: any) {
+function toggleSubMenu(subIdx: number, sub: MenuItem) {
   if (sub.children && sub.children.length > 0) {
     openSubMenu.value = openSubMenu.value === subIdx ? -1 : subIdx
   } else {
-    goMenu(sub.url)
-    openSubMenu.value = subIdx
+    if (sub.url) {
+      goMenu(sub.url)
+      openSubMenu.value = subIdx
+    }
   }
 }
 // 跳转菜单
@@ -130,17 +178,17 @@ function goMenu(path: string) {
   router.push(path)
 }
 // 判断当前路由是否激活
-function isActive(item: any) {
+function isActive(item: MenuItem) {
   return route.path === item.url
 }
 // 路由变化时自动展开对应菜单
 watch(() => route.path, (newPath) => {
   // 一级
-  const idx = menuList.value.findIndex((m: any) => m.url === newPath || (m.children && m.children.some((sub: any) => sub.url === newPath || (sub.children && sub.children.some((third: any) => third.url === newPath)))))
+  const idx = menuList.value.findIndex((m: MenuItem) => m.url === newPath || (m.children && m.children.some((sub: MenuItem) => sub.url === newPath || (sub.children && sub.children.some((third: MenuItem) => third.url === newPath)))))
   if (idx !== -1) openMenu.value = idx
   // 二级
   if (idx !== -1 && menuList.value[idx].children && menuList.value[idx].children.length > 0) {
-    const subIdx = menuList.value[idx].children.findIndex((sub: any) => sub.url === newPath || (sub.children && sub.children.some((third: any) => third.url === newPath)))
+    const subIdx = menuList.value[idx].children.findIndex((sub: MenuItem) => sub.url === newPath || (sub.children && sub.children.some((third: MenuItem) => third.url === newPath)))
     openSubMenu.value = subIdx
   } else {
     openSubMenu.value = -1

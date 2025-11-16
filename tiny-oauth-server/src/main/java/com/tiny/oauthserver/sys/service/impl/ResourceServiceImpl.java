@@ -3,9 +3,9 @@ package com.tiny.oauthserver.sys.service.impl;
 import com.tiny.oauthserver.sys.enums.ResourceType;
 import com.tiny.oauthserver.sys.model.*;
 import com.tiny.oauthserver.sys.repository.ResourceRepository;
+import com.tiny.oauthserver.sys.repository.UserRepository;
 import com.tiny.oauthserver.sys.service.ResourceService;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,9 +21,11 @@ import java.util.stream.Collectors;
 public class ResourceServiceImpl implements ResourceService {
 
     private final ResourceRepository resourceRepository;
+    private final UserRepository userRepository;
 
-    public ResourceServiceImpl(ResourceRepository resourceRepository) {
+    public ResourceServiceImpl(ResourceRepository resourceRepository, UserRepository userRepository) {
         this.resourceRepository = resourceRepository;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -355,16 +357,50 @@ public class ResourceServiceImpl implements ResourceService {
 
     @Override
     public List<Resource> findByRoleId(Long roleId) {
-        // TODO: 实现根据角色ID查找资源的逻辑
-        // 这需要关联查询用户-角色-资源表
-        return new ArrayList<>();
+        if (roleId == null) {
+            return Collections.emptyList();
+        }
+        List<Long> resourceIds = resourceRepository.findResourceIdsByRoleId(roleId);
+        if (resourceIds == null || resourceIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<Resource> resources = resourceRepository.findAllById(resourceIds);
+        resources.sort(Comparator.comparing(Resource::getSort, Comparator.nullsLast(Integer::compareTo)));
+        return resources;
     }
 
     @Override
     public List<Resource> findByUserId(Long userId) {
-        // TODO: 实现根据用户ID查找资源的逻辑
-        // 这需要关联查询用户-角色-资源表
-        return new ArrayList<>();
+        return userRepository.findById(userId)
+                .map(user -> {
+                    // 收集用户的角色ID
+                    Set<Long> roleIds = user.getRoles().stream()
+                            .filter(Objects::nonNull)
+                            .map(Role::getId)
+                            .filter(Objects::nonNull)
+                            .collect(Collectors.toSet());
+                    if (roleIds.isEmpty()) {
+                        return Collections.<Resource>emptyList();
+                    }
+
+                    // 通过角色ID查询关联的资源ID
+                    Set<Long> resourceIds = new HashSet<>();
+                    for (Long roleId : roleIds) {
+                        List<Long> ids = resourceRepository.findResourceIdsByRoleId(roleId);
+                        if (ids != null && !ids.isEmpty()) {
+                            resourceIds.addAll(ids);
+                        }
+                    }
+                    if (resourceIds.isEmpty()) {
+                        return Collections.<Resource>emptyList();
+                    }
+
+                    // 查询资源实体并按 sort 升序返回
+                    List<Resource> resources = resourceRepository.findAllById(resourceIds);
+                    resources.sort(Comparator.comparing(Resource::getSort, Comparator.nullsLast(Integer::compareTo)));
+                    return resources;
+                })
+                .orElse(Collections.emptyList());
     }
 
     /**

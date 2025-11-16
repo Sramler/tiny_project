@@ -1,17 +1,24 @@
 package com.tiny.web.config;
 
+import com.tiny.web.sys.security.PasswordAuthenticationProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.config.Customizer;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.server.authorization.token.*;
 import org.springframework.security.web.SecurityFilterChain;
+import com.tiny.web.sys.repository.UserRepository;
+import com.tiny.web.sys.repository.UserAuthenticationMethodRepository;
+
+import java.util.List;
 
 @Configuration
 public class SecurityConfig {
@@ -34,12 +41,22 @@ public class SecurityConfig {
 
     @Bean
     @Order(2)
-    public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http,
+                                                          AuthenticationProvider passwordAuthenticationProvider) throws Exception {
+        // 创建一个只包含我们自定义 AuthenticationProvider 的 AuthenticationManager
+        // 这样可以避免 Spring Security 自动创建 DaoAuthenticationProvider
+        AuthenticationManager authenticationManager = new ProviderManager(List.of(passwordAuthenticationProvider));
+        
         http
                 .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers("/login", "/favicon.ico", "/error").permitAll() // 登录页和错误页放行
                         .anyRequest().authenticated()
                 )
-                .formLogin(Customizer.withDefaults()) // ⭐️ 启用默认表单登录页
+                .formLogin(formLogin -> formLogin
+                        .defaultSuccessUrl("/", true)
+                        .permitAll()
+                ) // ⭐️ 启用表单登录页
+                .authenticationManager(authenticationManager) // 使用我们自定义的 AuthenticationManager（只包含 PasswordAuthenticationProvider）
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(Customizer.withDefaults()) // ⭐️ 启用 JWT 资源服务器
                 );
@@ -48,8 +65,11 @@ public class SecurityConfig {
     }
 
     @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
-        return configuration.getAuthenticationManager();
+    public AuthenticationProvider passwordAuthenticationProvider(UserRepository userRepository,
+                                                                 UserAuthenticationMethodRepository authenticationMethodRepository,
+                                                                 PasswordEncoder passwordEncoder,
+                                                                 UserDetailsService userDetailsService) {
+        return new PasswordAuthenticationProvider(userRepository, authenticationMethodRepository, passwordEncoder, userDetailsService);
     }
 
     /**

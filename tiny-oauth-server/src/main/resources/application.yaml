@@ -1,4 +1,4 @@
-workflow:
+DEBUGworkflow:
   engine: camunda # 或 flowable, activiti
 server:
   port: 9000
@@ -12,6 +12,10 @@ logging:
     com.zaxxer.hikari: DEBUG
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    com.tiny.oauthserver.sys.security.MultiAuthenticationProvider: DEBUG
+    com.tiny.oauthserver.sys.security.UserDetailsServiceImpl: DEBUG
+    com.tiny.oauthserver.sys.service.impl.SecurityServiceImpl: DEBUG
+    com.tiny.oauthserver.config.CustomJdbcOAuth2AuthorizationService: DEBUG
 spring:
   application:
     name: oauth-server
@@ -64,6 +68,14 @@ spring:
       mode: always # 总是执行数据初始化脚本
       data-locations: classpath:data.sql # 指定数据初始化脚本位置
       continue-on-error: true # 遇到错误继续执行
+  profiles:
+    active: dev
+
+  # Jackson 配置
+  #jackson:
+  #  serialization:
+  #    write-dates-as-timestamps: false # 使用 ISO-8601 格式而不是时间戳
+  #  default-property-inclusion: non_null # 不序列化 null 值
 authentication:
   jwt:
     public-key-path: classpath:keys/public.pem
@@ -102,7 +114,7 @@ authentication:
         - offline_access # ✅ 必须启用，否则不会发 refresh_token
       client-setting:
         require-authorization-consent: false
-        require-proof-key: true # 开启 PKCE，是 Authorization Code Flow 安全的关键部分，前端用 code_challenge 和 code_verifier 实现。
+        require-proof-key: false # 暂时关闭 PKCE，简化调试
 # Camunda BPM 配置
 camunda:
   bpm:
@@ -114,7 +126,7 @@ camunda:
       schema-update: false # 强制重新创建所有表
     generic-properties:
       properties:
-        dbIdentityUsed: false        # 关键：不使用 ACT_ID_* 身份表
+        dbIdentityUsed: false # 关键：不使用 ACT_ID_* 身份表
         tenantCheckEnabled: true
     webapp:
       enabled: false # 禁用 Camunda Webapp
@@ -134,4 +146,14 @@ camunda:
     # 流程引擎配置
     process-engine:
       enforce-history-time-to-live: false # 临时禁用 TTL 强制检查
+security:
+  mfa:
+    mode: OPTIONAL # MFA模式: NONE(完全禁用), OPTIONAL(推荐可跳过), REQUIRED(强制必须绑定)
 
+# 前端页面配置
+# 默认配置为生产环境（forward 到打包后的静态文件）
+# 开发环境请使用 application-dev.yaml 覆盖配置
+#frontend:
+#  login-url: forward:/dist/index.html
+#  totp-bind-url: forward:/dist/index.html
+#  totp-verify-url: forward:/dist/index.html

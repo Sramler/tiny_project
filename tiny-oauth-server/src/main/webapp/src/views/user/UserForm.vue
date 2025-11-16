@@ -1,13 +1,8 @@
 <template>
   <div class="edit-user-page">
     <a-card :title="props.mode === 'create' ? '新建用户' : props.mode === 'edit' ? '编辑用户' : '查看用户'" bordered>
-      <a-form
-        :model="form"
-        :rules="rules"
-        :label-col="{ span: 6 }"
-        :wrapper-col="{ span: 16 }"
-        @finish="throttledSubmit"
-      >
+      <a-form :model="form" :rules="rules" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }"
+        @finish="throttledSubmit">
         <a-form-item label="ID" v-if="form.id">
           <a-input v-model:value="form.id" disabled />
         </a-form-item>
@@ -15,25 +10,13 @@
           <a-input v-model:value="form.username" :disabled="props.mode === 'view'" />
         </a-form-item>
         <a-form-item label="密码" name="password" :required="props.mode === 'create'">
-          <a-input 
-            v-model:value="form.password" 
-            type="password" 
-            :disabled="props.mode === 'view'" 
-            :placeholder="props.mode === 'edit' ? '留空表示不修改' : '请输入密码'" 
-          />
+          <a-input v-model:value="form.password" type="password" :disabled="props.mode === 'view'"
+            :placeholder="props.mode === 'edit' ? '留空表示不修改' : '请输入密码'" />
         </a-form-item>
-        <a-form-item 
-          label="确认密码" 
-          name="confirmPassword" 
-          :required="props.mode === 'create' || (props.mode === 'edit' && form.password)"
-          v-if="showConfirmPassword"
-        >
-          <a-input 
-            v-model:value="form.confirmPassword" 
-            type="password" 
-            :disabled="props.mode === 'view'" 
-            :placeholder="props.mode === 'edit' ? '请再次输入密码' : '请再次输入密码'" 
-          />
+        <a-form-item label="确认密码" name="confirmPassword"
+          :required="props.mode === 'create' || (props.mode === 'edit' && form.password)" v-if="showConfirmPassword">
+          <a-input v-model:value="form.confirmPassword" type="password" :disabled="props.mode === 'view'"
+            :placeholder="props.mode === 'edit' ? '请再次输入密码' : '请再次输入密码'" />
         </a-form-item>
         <a-form-item label="昵称" name="nickname" required>
           <a-input v-model:value="form.nickname" :disabled="props.mode === 'view'" />
@@ -55,11 +38,7 @@
         </a-form-item>
         <a-form-item label="分配角色" v-if="props.mode !== 'create'">
           <a-button @click="showRoleTransfer = true">分配角色</a-button>
-          <RoleTransfer
-            v-model:modelValue="selectedRoleIds"
-            :allRoles="roleOptions"
-            v-model:open="showRoleTransfer"
-          />
+          <RoleTransfer v-model:modelValue="selectedRoleIds" :allRoles="roleOptions" v-model:open="showRoleTransfer" />
         </a-form-item>
         <a-form-item :wrapper-col="{ offset: 6, span: 16 }">
           <a-button v-if="props.mode !== 'view'" type="primary" html-type="submit">保存</a-button>
@@ -123,13 +102,13 @@ const rules: Record<string, Rule[]> = {
     { min: 3, max: 20, message: '用户名长度为3-20个字符' }
   ],
   password: [
-    { 
-      required: (props.mode === 'create'), 
-      message: '请输入密码' 
+    {
+      required: (props.mode === 'create'),
+      message: '请输入密码'
     },
-    { 
-      min: 6, 
-      max: 20, 
+    {
+      min: 6,
+      max: 20,
       message: '密码长度为6-20个字符',
       validator: (rule: any, value: string) => {
         // 编辑模式下，密码可以为空
@@ -187,8 +166,8 @@ watch(() => props.userData, (newData) => {
     Object.assign(form.value, newData)
     // 编辑模式下清空密码字段，让用户选择是否修改
     if (props.mode === 'edit') {
-        form.value.password = ''
-        form.value.confirmPassword = ''
+      form.value.password = ''
+      form.value.confirmPassword = ''
     }
   } else {
     // 新建模式或无数据时重置表单
@@ -248,10 +227,27 @@ onMounted(() => {
 
 // 保存时同步角色绑定
 async function onSubmit() {
-  const submitData = {
-    ...form.value,
+  const base = {
+    id: form.value.id || undefined,
+    username: form.value.username,
+    nickname: form.value.nickname,
+    enabled: form.value.enabled,
+    accountNonExpired: form.value.accountNonExpired,
+    accountNonLocked: form.value.accountNonLocked,
+    credentialsNonExpired: form.value.credentialsNonExpired,
     roleIds: selectedRoleIds.value.map(id => Number(id))
   }
+
+  const hasNewPassword = !!form.value.password && form.value.password.trim().length > 0
+
+  const submitData = hasNewPassword
+    ? {
+      ...base,
+      password: form.value.password,
+      confirmPassword: form.value.confirmPassword
+    }
+    : base
+
   console.log('提交数据', submitData)
   emit('submit', submitData)
 }
@@ -290,4 +286,4 @@ const formattedLastLoginAt = computed(() => {
   height: 100%;
   background: #fff;
 }
-</style> 
+</style>

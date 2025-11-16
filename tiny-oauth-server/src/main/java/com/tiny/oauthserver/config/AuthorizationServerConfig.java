@@ -25,6 +25,7 @@ import org.springframework.security.web.authentication.LoginUrlAuthenticationEnt
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 import org.springframework.web.cors.CorsConfigurationSource;
 
+import jakarta.servlet.http.HttpServletResponse;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 
@@ -58,10 +59,36 @@ public class AuthorizationServerConfig {
                 .oidc(Customizer.withDefaults());
         http
                 //将需要认证的请求，重定向到login页面行登录认证。
+                // 注意：只对 HTML 请求重定向到登录页，API 请求（如 /oauth2/token）返回 JSON 错误
                 .exceptionHandling((exceptions) -> exceptions
                         .defaultAuthenticationEntryPointFor(
                                 new LoginUrlAuthenticationEntryPoint("/login"),
                                 new MediaTypeRequestMatcher(MediaType.TEXT_HTML)
+                        )
+                        // 对于非 HTML 请求（如 JSON、表单、OAuth2 端点等），返回 401 JSON 错误而不是重定向
+                        .defaultAuthenticationEntryPointFor(
+                                (request, response, authException) -> {
+                                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                                    response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                                    response.setCharacterEncoding("UTF-8");
+                                    String errorMessage = authException.getMessage() != null 
+                                        ? authException.getMessage().replace("\"", "\\\"") 
+                                        : "Unauthorized";
+                                    response.getWriter().write("{\"error\":\"unauthorized\",\"error_description\":\"" + errorMessage + "\"}");
+                                },
+                                // 匹配所有非 HTML 请求，包括 OAuth2 端点
+                                request -> {
+                                    String uri = request.getRequestURI();
+                                    // OAuth2 端点总是返回 JSON
+                                    if (uri.startsWith("/oauth2/") || uri.startsWith("/.well-known/")) {
+                                        return true;
+                                    }
+                                    String acceptHeader = request.getHeader("Accept");
+                                    String contentType = request.getContentType();
+                                    // 如果 Accept 头包含 JSON，或者 Content-Type 是表单，返回 JSON
+                                    return (acceptHeader != null && acceptHeader.contains(MediaType.APPLICATION_JSON_VALUE)) ||
+                                           (contentType != null && contentType.contains(MediaType.APPLICATION_FORM_URLENCODED_VALUE));
+                                }
                         )
                 )
                 //.headers(headers -> headers.frameOptions(frame -> frame.sameOrigin())) // 👈 添加这行

@@ -39,7 +39,7 @@ public class UserAuthenticationMethod implements Serializable {
     /**
      * 认证配置 JSON 数据
      * 例如：
-     * - PASSWORD: {"passwordHash": "..."}
+     * - PASSWORD: {"password": "{bcrypt}$2a$10$..."}
      * - TOTP: {"secret": "...", "issuer": "..."}
      */
     @Column(name = "authentication_configuration", columnDefinition = "JSON", nullable = false)

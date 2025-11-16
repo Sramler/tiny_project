@@ -1,11 +1,10 @@
 package com.tiny.oauthserver.sys.service.impl;
 
-import com.tiny.oauthserver.sys.model.User;
-import com.tiny.oauthserver.sys.model.UserRequestDto;
-import com.tiny.oauthserver.sys.model.UserResponseDto;
+import com.tiny.oauthserver.sys.model.*;
 import com.tiny.oauthserver.sys.model.UserCreateUpdateDto;
 import com.tiny.oauthserver.sys.repository.UserRepository;
 import com.tiny.oauthserver.sys.repository.RoleRepository;
+import com.tiny.oauthserver.sys.repository.UserAuthenticationMethodRepository;
 import com.tiny.oauthserver.sys.service.UserService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -16,10 +15,13 @@ import org.springframework.util.StringUtils;
 import org.springframework.data.jpa.domain.Specification;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.beans.factory.annotation.Autowired;
 import java.util.HashSet;
+import java.util.HashMap;
+import java.time.LocalDateTime;
 
 @Service
 public class UserServiceImpl implements UserService {
@@ -27,12 +29,15 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final RoleRepository roleRepository;
+    private final UserAuthenticationMethodRepository authenticationMethodRepository;
 
     @Autowired
-    public UserServiceImpl(UserRepository userRepository, PasswordEncoder passwordEncoder, RoleRepository roleRepository) {
+    public UserServiceImpl(UserRepository userRepository, PasswordEncoder passwordEncoder, 
+                          RoleRepository roleRepository, UserAuthenticationMethodRepository authenticationMethodRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.roleRepository = roleRepository;
+        this.authenticationMethodRepository = authenticationMethodRepository;
     }
 
 
@@ -81,7 +86,7 @@ public class UserServiceImpl implements UserService {
         return userRepository.findById(id)
             .map(existing -> {
                 existing.setUsername(user.getUsername());
-                existing.setPassword(user.getPassword());
+                // 不再更新 user.password，密码已迁移到 user_authentication_method 表
                 existing.setNickname(user.getNickname());
                 existing.setEnabled(user.isEnabled());
                 existing.setLastLoginAt(user.getLastLoginAt());
@@ -96,13 +101,14 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional
     public User createFromDto(UserCreateUpdateDto userDto) {
         // 检查用户名是否已存在
         if (userRepository.findUserByUsername(userDto.getUsername()).isPresent()) {
             throw new RuntimeException("用户名已存在");
         }
         
-        // 创建新用户
+        // 创建新用户（不设置密码）
         User user = new User();
         user.setUsername(userDto.getUsername());
         user.setNickname(userDto.getNickname());
@@ -110,9 +116,6 @@ public class UserServiceImpl implements UserService {
         user.setAccountNonExpired(userDto.getAccountNonExpired());
         user.setAccountNonLocked(userDto.getAccountNonLocked());
         user.setCredentialsNonExpired(userDto.getCredentialsNonExpired());
-        
-        // 加密密码
-        user.setPassword(passwordEncoder.encode(userDto.getPassword()));
         
         // 处理角色
         if (userDto.getRoleIds() != null && !userDto.getRoleIds().isEmpty()) {
@@ -123,10 +126,17 @@ public class UserServiceImpl implements UserService {
             user.setRoles(new HashSet<>(roles));
         }
         
-        return userRepository.save(user);
+        // 保存用户，获取用户ID
+        user = userRepository.save(user);
+        
+        // 创建认证方法（将密码存储在 user_authentication_method 表中）
+        createPasswordAuthenticationMethod(user.getId(), userDto.getPassword());
+        
+        return user;
     }
 
     @Override
+    @Transactional
     public User updateFromDto(UserCreateUpdateDto userDto) {
         User existingUser = userRepository.findById(userDto.getId())
             .orElseThrow(() -> new RuntimeException("用户不存在"));
@@ -145,9 +155,9 @@ public class UserServiceImpl implements UserService {
         existingUser.setAccountNonLocked(userDto.getAccountNonLocked());
         existingUser.setCredentialsNonExpired(userDto.getCredentialsNonExpired());
         
-        // 如果提供了新密码，则更新密码
+        // 如果提供了新密码，则更新认证方法表中的密码
         if (userDto.needUpdatePassword()) {
-            existingUser.setPassword(passwordEncoder.encode(userDto.getPassword()));
+            updatePasswordAuthenticationMethod(userDto.getId(), userDto.getPassword());
         }
         
         // 处理角色
@@ -162,6 +172,64 @@ public class UserServiceImpl implements UserService {
         return userRepository.save(existingUser);
     }
     
+    /**
+     * 创建密码认证方法
+     * @param userId 用户ID
+     * @param plainPassword 明文密码
+     */
+    private void createPasswordAuthenticationMethod(Long userId, String plainPassword) {
+        // 加密密码（DelegatingPasswordEncoder 会自动添加 {bcrypt} 前缀）
+        String encodedPassword = passwordEncoder.encode(plainPassword);
+        
+        // 创建认证配置
+        Map<String, Object> config = new HashMap<>();
+        config.put("password", encodedPassword);
+        
+        // 创建认证方法
+        UserAuthenticationMethod method = new UserAuthenticationMethod();
+        method.setUserId(userId);
+        method.setAuthenticationProvider("LOCAL");
+        method.setAuthenticationType("PASSWORD");
+        method.setAuthenticationConfiguration(config);
+        method.setIsPrimaryMethod(true);
+        method.setIsMethodEnabled(true);
+        method.setAuthenticationPriority(0);
+        method.setCreatedAt(LocalDateTime.now());
+        method.setUpdatedAt(LocalDateTime.now());
+        
+        // 保存认证方法
+        authenticationMethodRepository.save(method);
+    }
+    
+    /**
+     * 更新密码认证方法
+     * @param userId 用户ID
+     * @param plainPassword 新明文密码
+     */
+    private void updatePasswordAuthenticationMethod(Long userId, String plainPassword) {
+        // 查找现有的认证方法
+        Optional<UserAuthenticationMethod> existingMethod = authenticationMethodRepository
+                .findByUserIdAndAuthenticationProviderAndAuthenticationType(userId, "LOCAL", "PASSWORD");
+        
+        if (existingMethod.isPresent()) {
+            // 更新现有认证方法
+            UserAuthenticationMethod method = existingMethod.get();
+            Map<String, Object> config = method.getAuthenticationConfiguration();
+            if (config == null) {
+                config = new HashMap<>();
+            }
+            // 加密新密码（DelegatingPasswordEncoder 会自动添加 {bcrypt} 前缀）
+            String encodedPassword = passwordEncoder.encode(plainPassword);
+            config.put("password", encodedPassword);
+            method.setAuthenticationConfiguration(config);
+            method.setUpdatedAt(LocalDateTime.now());
+            authenticationMethodRepository.save(method);
+        } else {
+            // 如果不存在，则创建新的认证方法
+            createPasswordAuthenticationMethod(userId, plainPassword);
+        }
+    }
+
     @Override
     @Transactional
     public void batchEnable(List<Long> ids) {

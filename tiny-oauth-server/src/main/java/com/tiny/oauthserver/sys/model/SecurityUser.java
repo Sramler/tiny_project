@@ -44,11 +44,14 @@ public class SecurityUser implements UserDetails, Serializable {
     /**
      * 构造函数，基于数据库中查询出的 User 实体构建出安全框架使用的对象。
      * 这样可以避免将 User 实体（含懒加载字段）直接放入 Session。
+     * 注意：User 表的 password 字段已废弃，实际密码在 user_authentication_method 表中。
      */
     public SecurityUser(User user) {
         this.userId = user.getId();
         this.username = user.getUsername();
-        this.password = user.getPassword();
+        // User 表的 password 字段已废弃，使用空字符串
+        // 实际密码验证在 MultiAuthenticationProvider 中通过 user_authentication_method 表完成
+        this.password = user.getPassword() != null ? user.getPassword() : "";
 //        this.authorities = user.getRoles().stream()
 //                .map(role -> new SimpleGrantedAuthority(role.getName()))
 //                .collect(Collectors.toSet()); // 将角色名转为权限

@@ -12,25 +12,52 @@ const error = ref<string | null>(null)
 onMounted(async () => {
   try {
     // 检查是否是 OIDC 回调
-    if (window.location.search.includes('code=') && window.location.search.includes('state=')) {
+    const urlParams = new URLSearchParams(window.location.search)
+    const hasCode = urlParams.has('code')
+    const hasState = urlParams.has('state')
+    
+    if (hasCode && hasState) {
       console.log('检测到 OIDC 回调参数，开始处理登录回调')
       
-      const user = await userManager.signinRedirectCallback()
-      console.log('✅ OIDC 登录回调成功')
-      console.log('👤 用户信息:', user)
-      
-      // 等待用户状态更新
-      await new Promise(resolve => setTimeout(resolve, 100))
-      
-      // 登录成功后跳转回主页或原始路径
-      const returnUrl = (user?.state as any)?.returnUrl || '/'
-      console.log('跳转到:', returnUrl)
-      
-      // 使用 replace 避免历史记录问题
-      await router.replace(returnUrl)
-    } else if (window.location.search.includes('error=')) {
+      try {
+        const user = await userManager.signinRedirectCallback()
+        console.log('✅ OIDC 登录回调成功')
+        console.log('👤 用户信息:', user)
+        
+        // 等待用户状态更新
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+        // 登录成功后跳转回主页或原始路径
+        const returnUrl = (user?.state as any)?.returnUrl || '/'
+        console.log('跳转到:', returnUrl)
+        
+        // 使用 replace 避免历史记录问题
+        await router.replace(returnUrl)
+      } catch (callbackError: any) {
+        // 检查是否是 state 不匹配的错误
+        if (callbackError?.message?.includes('No matching state') || 
+            callbackError?.message?.includes('state')) {
+          console.warn('⚠️ State 不匹配，可能是直接访问回调页面或表单登录后的重定向')
+          console.warn('错误详情:', callbackError.message)
+          
+          // 清除可能存在的无效 state
+          try {
+            await userManager.removeUser()
+          } catch (e) {
+            console.warn('清除用户状态失败:', e)
+          }
+          
+          // 跳转到登录页，让用户重新登录
+          error.value = '登录状态已失效，请重新登录'
+          setTimeout(() => {
+            router.replace('/login')
+          }, 3000)
+        } else {
+          throw callbackError
+        }
+      }
+    } else if (urlParams.has('error')) {
       // 处理 OIDC 错误
-      const urlParams = new URLSearchParams(window.location.search)
       const errorParam = urlParams.get('error')
       const errorDescription = urlParams.get('error_description')
       

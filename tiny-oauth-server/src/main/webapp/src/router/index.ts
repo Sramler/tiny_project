@@ -15,6 +15,8 @@ import Debug from '@/views/OIDCDebug.vue' // 引入调试页面
 import Modeling from '@/views/process/Modeling.vue' // 引入工作流设计页面
 import Definition from '@/views/process/Definition.vue' // 引入流程定义页面
 import Deployment from '@/views/process/Deployment.vue' // 引入流程部署页面
+import TotpBind from '@/views/security/TotpBind.vue'
+import TotpVerify from '@/views/security/TotpVerify.vue'
 
 import { defineAsyncComponent } from 'vue' // 引入 defineAsyncComponent 用于动态加载组件
 
@@ -59,10 +61,44 @@ function generateMenuRoutes(menuList: MenuItem[]) {
 
 const menuRoutes = generateMenuRoutes(menuData)
 
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:9000'
+const baseUrl = apiBaseUrl.endsWith('/') ? apiBaseUrl.slice(0, -1) : apiBaseUrl
+
+async function checkBackendSession(): Promise<boolean> {
+  try {
+    const resp = await fetch(`${baseUrl}/self/security/status`, {
+      method: 'GET',
+      credentials: 'include',
+    })
+    if (resp.ok) {
+      const data = await resp.json()
+      const valid = !('success' in data) || data.success !== false
+      console.debug('[Auth] 后端会话检测成功:', { valid, data })
+      return valid
+    }
+    console.warn('[Auth] 后端会话检测失败，状态码:', resp.status)
+  } catch (error) {
+    console.error('检查后端会话失败:', error)
+  }
+  return false
+}
+
 // 路由配置
 const routes = [
   // 登录页和回调页不使用主布局
   { path: '/login', name: 'Login', component: Login, meta: { title: '登录' } },
+  {
+    path: '/self/security/totp-bind',
+    name: 'TotpBind',
+    component: TotpBind,
+    meta: { title: '绑定二步验证' },
+  },
+  {
+    path: '/self/security/totp-verify',
+    name: 'TotpVerify',
+    component: TotpVerify,
+    meta: { title: '二步验证' },
+  },
   { path: '/callback', name: 'OidcCallback', component: OidcCallback },
 
   // 主框架路由，所有需要布局的页面作为子路由
@@ -152,6 +188,28 @@ router.beforeEach(async (to, from, next) => {
   if (to.meta.requiresAuth && !isAuthenticated.value) {
     console.log('用户未认证，重定向到登录页')
 
+    // 检查后端会话
+    const backendSession = await checkBackendSession()
+    if (backendSession) {
+      console.log('检测到有效的后端会话，但缺少 OIDC token，尝试自动完成授权流程')
+
+      const urlParams = new URLSearchParams(window.location.search)
+      if (urlParams.has('code') || urlParams.has('error')) {
+        console.log('检测到 OIDC 回调参数，不进行重定向')
+        next()
+        return
+      }
+
+      try {
+        await login()
+        return
+      } catch (error) {
+        console.error('基于后端会话触发 OIDC 授权失败:', error)
+        next('/login')
+        return
+      }
+    }
+
     // 检查是否已经在登录流程中
     const urlParams = new URLSearchParams(window.location.search)
     if (urlParams.has('code') || urlParams.has('error')) {
@@ -160,7 +218,6 @@ router.beforeEach(async (to, from, next) => {
       return
     }
 
-    // 保存原始路径，登录成功后跳转回去
     const returnUrl = to.fullPath
     try {
       await login()

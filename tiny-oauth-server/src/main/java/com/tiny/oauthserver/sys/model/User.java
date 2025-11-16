@@ -19,7 +19,13 @@ public class User implements Serializable {
     @Column(unique = true, nullable = false, length = 50)
     private String username;
 
-    @Column(nullable = false)
+    /**
+     * 密码字段（已废弃，保留用于兼容）
+     * 实际密码存储在 user_authentication_method 表中
+     * @deprecated 使用 user_authentication_method 表存储密码
+     */
+    @Deprecated
+    @Column(nullable = true)
     private String password;
 
     private String nickname;

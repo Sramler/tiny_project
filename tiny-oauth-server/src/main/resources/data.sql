@@ -44,3 +44,11 @@ INSERT INTO `role_resource` (`role_id`, `resource_id`) VALUES
 (1, 5), -- ADMIN -> resource
 -- USER角色只有用户管理
 (2, 2); -- USER -> user 
+
+-- 插入用户认证方法数据
+-- 为每个用户添加 LOCAL + PASSWORD 认证方法
+INSERT INTO `user_authentication_method` 
+    (`user_id`, `authentication_provider`, `authentication_type`, `authentication_configuration`, `is_primary_method`, `is_method_enabled`, `authentication_priority`, `created_at`, `updated_at`)
+VALUES
+    (1, 'LOCAL', 'PASSWORD', '{"passwordHash":"$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVEFDa"}', true, true, 0, NOW(), NOW()),
+    (2, 'LOCAL', 'PASSWORD', '{"passwordHash":"$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVEFDa"}', true, true, 0, NOW(), NOW());

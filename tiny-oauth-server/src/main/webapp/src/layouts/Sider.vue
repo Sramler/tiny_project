@@ -72,56 +72,15 @@ const openMenu = ref(0)
 // 当前打开的二级菜单索引
 const openSubMenu = ref(-1)
 
-// 递归处理 Jackson 类型信息格式：['java.util.ArrayList', [...]]
-// 处理菜单树中的所有 children 字段，确保它们都是标准数组格式
-function processMenuData(data: unknown): MenuItem[] {
-  if (!data) return []
-
-  // 如果是类型信息格式：['java.util.ArrayList', [...]]
-  if (Array.isArray(data) && data.length === 2 && data[0] === 'java.util.ArrayList' && Array.isArray(data[1])) {
-    console.warn('检测到 Jackson 类型信息格式，提取实际数据:', data[1])
-    data = data[1]
-  }
-
-  // 如果是数组，递归处理每个元素
-  if (Array.isArray(data)) {
-    return data.map(item => {
-      if (item && typeof item === 'object' && item !== null) {
-        const menuItem = item as MenuItem
-        // 处理 children 字段
-        if (menuItem.children) {
-          menuItem.children = processMenuData(menuItem.children)
-        }
-        return menuItem
-      }
-      return item as MenuItem
-    })
-  }
-
-  // 如果是对象，处理其 children 字段
-  if (data && typeof data === 'object' && data !== null) {
-    const menuItem = data as MenuItem
-    if (menuItem.children) {
-      menuItem.children = processMenuData(menuItem.children)
-    }
-  }
-
-  return Array.isArray(data) ? (data as MenuItem[]) : []
-}
-
 // 加载菜单数据
 async function loadMenu() {
   try {
     const data = await menuTree()
     console.log('menuTree 返回数据:', data);
 
-    // 递归处理所有类型信息格式的数据（包括顶层和所有 children 字段）
-    const menuData = processMenuData(data)
-
-    if (menuData && Array.isArray(menuData) && menuData.length > 0) {
-      menuList.value = menuData
+    if (data && Array.isArray(data) && data.length > 0) {
+      menuList.value = data
       console.log('菜单列表加载成功，数量:', menuList.value.length)
-      console.log('处理后的菜单数据:', menuList.value)
     } else {
       menuList.value = []
       message.warning('未加载到可用菜单')

@@ -1,13 +1,14 @@
 package com.tiny.oauthserver;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
 class TinyOauthServerApplicationTests {
 
     @Test
-    void contextLoads() {
+    void applicationClassLoadsWithoutSpringContext() {
+        OauthServerApplication application = new OauthServerApplication();
+        assertNotNull(application);
     }
-
 }

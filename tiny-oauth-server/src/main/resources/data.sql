@@ -1,7 +1,7 @@
 -- 插入用户数据
-INSERT INTO `user` (`username`, `password`, `nickname`, `enabled`, `account_non_expired`, `account_non_locked`, `credentials_non_expired`) VALUES
-('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVEFDa', '管理员', true, true, true, true),
-('user', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVEFDa', '普通用户', true, true, true, true);
+INSERT INTO `user` (`username`, `nickname`, `enabled`, `account_non_expired`, `account_non_locked`, `credentials_non_expired`) VALUES
+('admin', '管理员', true, true, true, true),
+('user', '普通用户', true, true, true, true);
 
 -- 插入角色数据
 INSERT INTO `role` (`code`, `name`, `description`, `builtin`, `enabled`) VALUES
@@ -49,6 +49,24 @@ INSERT INTO `role_resource` (`role_id`, `resource_id`) VALUES
 -- 为每个用户添加 LOCAL + PASSWORD 认证方法
 INSERT INTO `user_authentication_method` 
     (`user_id`, `authentication_provider`, `authentication_type`, `authentication_configuration`, `is_primary_method`, `is_method_enabled`, `authentication_priority`, `created_at`, `updated_at`)
-VALUES
-    (1, 'LOCAL', 'PASSWORD', '{"passwordHash":"$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVEFDa"}', true, true, 0, NOW(), NOW()),
-    (2, 'LOCAL', 'PASSWORD', '{"passwordHash":"$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVEFDa"}', true, true, 0, NOW(), NOW());
+SELECT
+    u.id,
+    'LOCAL',
+    'PASSWORD',
+    JSON_OBJECT(
+        'password', CASE WHEN u.username = 'admin'
+                        THEN '{bcrypt}$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVEFDa'
+                        ELSE '{bcrypt}$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVEFDa'
+                   END,
+        'password_changed_at', DATE_FORMAT(NOW(), '%Y-%m-%dT%H:%i:%sZ'),
+        'hash_algorithm', 'bcrypt',
+        'password_version', 1,
+        'created_by', 'data.sql'
+    ),
+    true,
+    true,
+    0,
+    NOW(),
+    NOW()
+FROM user u
+WHERE u.username IN ('admin', 'user');

@@ -14,13 +14,14 @@ import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.WebAuthenticationDetails;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.web.cors.CorsConfigurationSource;
 
 import jakarta.servlet.http.HttpServletRequest;
 
 import com.tiny.oauthserver.sys.repository.UserRepository;
-import com.tiny.oauthserver.sys.security.PartialAuthenticationAuthorizationManager;
-import com.tiny.oauthserver.sys.security.PartialAuthenticationFilter;
+import com.tiny.oauthserver.sys.security.MultiFactorAuthenticationSessionManager;
 import com.tiny.oauthserver.sys.service.SecurityService;
 
 @Configuration
@@ -42,8 +43,7 @@ public class DefaultSecurityConfig {
     @Order(2)
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http,
                                                           AuthenticationProvider authenticationProvider,
-                                                          CustomLoginSuccessHandler customLoginSuccessHandler,
-                                                          PartialAuthenticationAuthorizationManager partialAuthManager)
+                                                          CustomLoginSuccessHandler customLoginSuccessHandler)
             throws Exception {
         http
                 .authorizeHttpRequests(authorize -> authorize
@@ -57,17 +57,6 @@ public class DefaultSecurityConfig {
                                 "/js/**"
                         ).permitAll()
                         .requestMatchers("/sys/users/**").permitAll()
-                        // 允许部分认证的 Token 访问 TOTP 相关端点
-                        .requestMatchers("/self/security/totp-bind", 
-                                        "/self/security/totp-verify",
-                                        "/self/security/totp/bind",
-                                        "/self/security/totp/bind-form",
-                                        "/self/security/totp/pre-bind",
-                                        "/self/security/totp/check",
-                                        "/self/security/totp/check-form",
-                                        "/self/security/skip-mfa-remind",
-                                        "/self/security/status")
-                                .access(partialAuthManager)
                         .anyRequest().authenticated()
                 )
                 .formLogin(formLogin -> formLogin
@@ -97,21 +86,24 @@ public class DefaultSecurityConfig {
         return new CustomWebAuthenticationDetailsSource();
     }
 
+    /**
+     * 配置 SecurityContextRepository
+     * <p>
+     * Spring Boot 默认不会自动创建 SecurityContextRepository bean，
+     * 需要手动创建。使用 HttpSessionSecurityContextRepository 作为默认实现。
+     *
+     * @return SecurityContextRepository bean
+     */
+    @Bean
+    public SecurityContextRepository securityContextRepository() {
+        return new HttpSessionSecurityContextRepository();
+    }
+
     @Bean
     public CustomLoginSuccessHandler customLoginSuccessHandler(SecurityService securityService,
                                                                UserRepository userRepository,
-                                                               FrontendProperties frontendProperties) {
-        return new CustomLoginSuccessHandler(securityService, userRepository, frontendProperties);
-    }
-    
-    @Bean
-    public PartialAuthenticationAuthorizationManager partialAuthenticationAuthorizationManager() {
-        return new PartialAuthenticationAuthorizationManager();
-    }
-    
-    @Bean
-    public PartialAuthenticationFilter partialAuthenticationFilter(SecurityService securityService,
-                                                                  UserRepository userRepository) {
-        return new PartialAuthenticationFilter(securityService, userRepository);
+                                                               FrontendProperties frontendProperties,
+                                                               MultiFactorAuthenticationSessionManager sessionManager) {
+        return new CustomLoginSuccessHandler(securityService, userRepository, frontendProperties, sessionManager);
     }
 }

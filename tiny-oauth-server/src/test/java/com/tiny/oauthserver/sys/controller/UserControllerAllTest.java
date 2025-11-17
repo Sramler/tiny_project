@@ -10,6 +10,7 @@ import org.mockito.Mockito;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.web.PageableHandlerMethodArgumentResolver;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -29,7 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class UserControllerAllTest {
 
     private MockMvc mockMvc;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
     private UserService userService;
     private UserController userController;
 
@@ -37,7 +38,9 @@ class UserControllerAllTest {
     void setup() {
         userService = mock(UserService.class);
         userController = new UserController(userService);
-        mockMvc = MockMvcBuilders.standaloneSetup(userController).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(userController)
+                .setCustomArgumentResolvers(new PageableHandlerMethodArgumentResolver())
+                .build();
     }
 
     // 正则示例（当前未使用）
@@ -46,7 +49,7 @@ class UserControllerAllTest {
     @Test
     @DisplayName("GET /sys/users 分页列表，lastLoginAt 为 ISO 字符串")
     void users_paged_and_iso_date() throws Exception {
-        UserResponseDto u = new UserResponseDto(1L, "alice", "", "Alice", true, true, true, true, LocalDateTime.now());
+        UserResponseDto u = new UserResponseDto(1L, "alice", "Alice", true, true, true, true, LocalDateTime.now());
         Page<UserResponseDto> page = new PageImpl<>(List.of(u), PageRequest.of(0, 10), 1);
         Mockito.when(userService.users(any(UserRequestDto.class), any())).thenReturn(page);
 
@@ -74,11 +77,15 @@ class UserControllerAllTest {
         SecurityContextHolder.clearContext();
         mockMvc.perform(get("/sys/users/current")).andExpect(status().isUnauthorized());
 
-        SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken("bob", "N/A"));
+        TestingAuthenticationToken bobAuth = new TestingAuthenticationToken("bob", "N/A");
+        bobAuth.setAuthenticated(true);
+        SecurityContextHolder.getContext().setAuthentication(bobAuth);
         Mockito.when(userService.findByUsername("bob")).thenReturn(Optional.empty());
         mockMvc.perform(get("/sys/users/current")).andExpect(status().isNotFound());
 
-        SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken("carol", "N/A"));
+        TestingAuthenticationToken carolAuth = new TestingAuthenticationToken("carol", "N/A");
+        carolAuth.setAuthenticated(true);
+        SecurityContextHolder.getContext().setAuthentication(carolAuth);
         User user = new User(); user.setId(7L); user.setUsername("carol");
         Mockito.when(userService.findByUsername("carol")).thenReturn(Optional.of(user));
         mockMvc.perform(get("/sys/users/current")).andExpect(status().isOk());
@@ -89,6 +96,13 @@ class UserControllerAllTest {
     void create_update_delete() throws Exception {
         UserCreateUpdateDto createDto = new UserCreateUpdateDto();
         createDto.setUsername("dave");
+        createDto.setNickname("Nick");
+        createDto.setEnabled(true);
+        createDto.setAccountNonExpired(true);
+        createDto.setAccountNonLocked(true);
+        createDto.setCredentialsNonExpired(true);
+        createDto.setPassword("secret123");
+        createDto.setConfirmPassword("secret123");
         User saved = new User(); saved.setId(8L); saved.setUsername("dave");
         Mockito.when(userService.createFromDto(any(UserCreateUpdateDto.class))).thenReturn(saved);
         mockMvc.perform(post("/sys/users").contentType(MediaType.APPLICATION_JSON)
@@ -96,7 +110,15 @@ class UserControllerAllTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(8L));
 
-        UserCreateUpdateDto updateDto = new UserCreateUpdateDto(); updateDto.setUsername("neo");
+        UserCreateUpdateDto updateDto = new UserCreateUpdateDto();
+        updateDto.setUsername("neo");
+        updateDto.setNickname("Neo");
+        updateDto.setEnabled(true);
+        updateDto.setAccountNonExpired(true);
+        updateDto.setAccountNonLocked(true);
+        updateDto.setCredentialsNonExpired(true);
+        updateDto.setPassword("newSecret123");
+        updateDto.setConfirmPassword("newSecret123");
         User updated = new User(); updated.setId(8L); updated.setUsername("neo");
         Mockito.when(userService.updateFromDto(any(UserCreateUpdateDto.class))).thenReturn(updated);
         mockMvc.perform(put("/sys/users/8").contentType(MediaType.APPLICATION_JSON)

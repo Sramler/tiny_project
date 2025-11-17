@@ -1,0 +1,52 @@
+# 生产环境配置
+# 使用方式: spring.profiles.active=prod
+# 
+# 在生产环境中，前端静态文件已经打包到 /dist 目录
+# 后端通过 forward 将请求转发到打包后的静态文件
+#
+# 重要说明：为什么所有路径都指向 index.html？
+# ============================================
+# 这是一个 SPA (Single Page Application) 应用，使用 Vue Router 的 History 模式。
+# 
+# SPA 的工作原理：
+# 1. 所有前端路由（如 /login, /self/security/totp-bind）都映射到同一个 HTML 入口文件
+# 2. Vue Router 会根据浏览器 URL 路径，在前端动态渲染对应的 Vue 组件
+# 3. 这是 SPA 的标准做法，不是错误
+#
+# Vue Router History 模式的要求：
+# - URL 路径是真实的（不是 hash 路由，如 #/login）
+# - 后端必须配置为：所有路径都返回 index.html
+# - 然后由 Vue Router 根据 URL 路径渲染对应的组件
+#
+# 如果不同路径指向不同的 HTML 文件，会破坏 SPA 的路由机制，导致：
+# - 页面刷新时出现 404 错误
+# - 路由无法正常工作
+# - 无法利用 Vue Router 的客户端路由功能
+#
+# 因此，所有前端路由都应该指向同一个入口文件（index.html），
+# 然后由 Vue Router 处理路由逻辑。
+
+# Session Cookie 安全配置（生产环境）
+server:
+  servlet:
+    session:
+      cookie:
+        secure: true       # Secure：生产环境使用 HTTPS，必须启用
+        same-site: Strict  # SameSite：生产环境使用 Strict，提供最高安全性
+
+frontend:
+  # 登录页面 - 转发到打包后的静态文件
+  # 注意：虽然路径是 /login，但实际返回的是 index.html
+  # Vue Router 会根据 URL 路径渲染 Login 组件
+  login-url: forward:/dist/index.html
+  
+  # TOTP 绑定页面 - 转发到打包后的静态文件
+  # 注意：虽然路径是 /self/security/totp-bind，但实际返回的是 index.html
+  # Vue Router 会根据 URL 路径渲染 TotpBind 组件
+  totp-bind-url: forward:/dist/index.html
+  
+  # TOTP 验证页面 - 转发到打包后的静态文件
+  # 注意：虽然路径是 /self/security/totp-verify，但实际返回的是 index.html
+  # Vue Router 会根据 URL 路径渲染 TotpVerify 组件
+  totp-verify-url: forward:/dist/index.html
+

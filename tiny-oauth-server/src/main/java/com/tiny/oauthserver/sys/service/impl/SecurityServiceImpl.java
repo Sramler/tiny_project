@@ -1,19 +1,14 @@
 package com.tiny.oauthserver.sys.service.impl;
 
-import com.eatthepath.otp.TimeBasedOneTimePasswordGenerator;
 import com.tiny.oauthserver.config.MfaProperties;
 import com.tiny.oauthserver.sys.model.User;
 import com.tiny.oauthserver.sys.model.UserAuthenticationMethod;
 import com.tiny.oauthserver.sys.repository.UserAuthenticationMethodRepository;
+import com.tiny.oauthserver.sys.security.TotpService;
 import com.tiny.oauthserver.sys.service.SecurityService;
-import org.apache.commons.codec.binary.Base32;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-
-import javax.crypto.spec.SecretKeySpec;
-import java.security.Key;
-import java.time.Instant;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
@@ -28,14 +23,17 @@ public class SecurityServiceImpl implements SecurityService {
     private final UserAuthenticationMethodRepository authenticationMethodRepository;
     private final PasswordEncoder passwordEncoder;
     private final MfaProperties mfaProperties;
+    private final TotpService totpService;
 
     @Autowired
     public SecurityServiceImpl(UserAuthenticationMethodRepository authenticationMethodRepository,
                                PasswordEncoder passwordEncoder,
-                               MfaProperties mfaProperties) {
+                               MfaProperties mfaProperties,
+                               TotpService totpService) {
         this.authenticationMethodRepository = authenticationMethodRepository;
         this.passwordEncoder = passwordEncoder;
         this.mfaProperties = mfaProperties;
+        this.totpService = totpService;
     }
 
     @Override
@@ -315,23 +313,10 @@ public class SecurityServiceImpl implements SecurityService {
 
     /**
      * 真实 TOTP 校验，兼容1步偏移，6位Code
+     * 使用 TotpService 进行验证
      */
     private boolean validateTotpCode(String secret, String submittedCode) {
-        try {
-            Base32 base32 = new Base32();
-            byte[] keyBytes = base32.decode(secret);
-            Key key = new SecretKeySpec(keyBytes, "HmacSHA1");
-            TimeBasedOneTimePasswordGenerator generator = new TimeBasedOneTimePasswordGenerator();
-            long now = System.currentTimeMillis();
-            for (int step = -1; step <= 1; step++) {
-                long time = now + step * generator.getTimeStep().toMillis();
-                String code = String.format("%06d", generator.generateOneTimePassword(key, Instant.ofEpochMilli(time)));
-                if (code.equals(submittedCode)) return true;
-            }
-            return false;
-        } catch (Exception e) {
-            return false;
-        }
+        return totpService.verify(secret, submittedCode);
     }
 
     private String urlEncode(String str) {

@@ -8,8 +8,6 @@ public class UserResponseDto {
 
     private String username;
 
-    private String password;
-
     private String nickname;
 
     private boolean enabled = true; // 是否启用
@@ -22,10 +20,9 @@ public class UserResponseDto {
 
     private LocalDateTime lastLoginAt;
 
-    public UserResponseDto(Long id, String username, String password, String nickname, boolean enabled, boolean accountNonExpired, boolean accountNonLocked, boolean credentialsNonExpired, LocalDateTime lastLoginAt) {
+    public UserResponseDto(Long id, String username, String nickname, boolean enabled, boolean accountNonExpired, boolean accountNonLocked, boolean credentialsNonExpired, LocalDateTime lastLoginAt) {
         this.id = id;
         this.username = username;
-        this.password = password;
         this.nickname = nickname;
         this.enabled = enabled;
         this.accountNonExpired = accountNonExpired;
@@ -40,10 +37,6 @@ public class UserResponseDto {
 
     public String getUsername() {
         return username;
-    }
-
-    public String getPassword() {
-        return password;
     }
 
     public String getNickname() {

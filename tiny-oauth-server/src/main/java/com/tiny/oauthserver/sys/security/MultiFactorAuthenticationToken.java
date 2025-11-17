@@ -1,212 +1,307 @@
 package com.tiny.oauthserver.sys.security;
 
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 
 /**
- * 多因素认证令牌
- * 封装了用户名、凭证（密码/TOTP码等）、认证提供者和认证类型
- * 支持多步骤认证流程（如 PASSWORD + TOTP）
- * 
- * 优势：
- * 1. 类型安全：直接在 Token 中包含 provider 和 type，无需通过 Details 获取
- * 2. 易于扩展：可以轻松添加新的认证方式相关字段
- * 3. 清晰的设计：明确表达多认证方式的意图
- * 4. 更好的可维护性：减少类型转换和空值检查
- * 5. 支持多步骤认证：可以标记已完成的认证步骤，支持双因子认证
- * 
- * @author Auto Generated
- * @since 1.0.0
+ * MultiFactorAuthenticationToken - 完整重构版
+ *
+ * 改进：
+ * - 枚举名称改为 AuthenticationProviderType 和 AuthenticationFactorType，更直观
+ * - 使用 EnumSet 表示已完成认证因子
+ * - credentials 可被擦除，@JsonIgnore 避免序列化到前端
+ * - 不依赖 mutable 字段实现 equals/hashCode
+ * - 提供 promoteToFullyAuthenticated 方法升级为完全认证
  */
-@JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, property = "@class")
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class MultiFactorAuthenticationToken extends AbstractAuthenticationToken {
 
-    private final String username;
-    private final Object credentials;
-    private final String authenticationProvider;
-    private final String authenticationType;
-    
-    /**
-     * 已完成的认证步骤（用于多步骤认证）
-     * 例如：["PASSWORD"] 表示已完成密码验证，等待 TOTP 验证
-     * 例如：["PASSWORD", "TOTP"] 表示已完成所有认证步骤
-     */
-    private final java.util.Set<String> completedFactors;
+    private static final long serialVersionUID = 1L;
 
     /**
-     * 创建未认证的 MultiFactorAuthenticationToken
-     * 
-     * @param username 用户名
-     * @param credentials 凭证（密码、TOTP码等，可以是多个凭证的组合，如 Map<String, String>）
-     * @param authenticationProvider 认证提供者（如 LOCAL, GITHUB, GOOGLE 等）
-     * @param authenticationType 认证类型（如 PASSWORD, TOTP, OAUTH2 等）
+     * 认证提供者类型
      */
-    public MultiFactorAuthenticationToken(String username, 
-                                         Object credentials,
-                                         String authenticationProvider,
-                                         String authenticationType) {
-        super(Collections.emptyList());
-        this.username = username;
-        this.credentials = credentials;
-        this.authenticationProvider = authenticationProvider != null ? authenticationProvider.toUpperCase() : null;
-        this.authenticationType = authenticationType != null ? authenticationType.toUpperCase() : null;
-        this.completedFactors = new java.util.HashSet<>();
-        setAuthenticated(false); // 初始状态为未认证
+    public enum AuthenticationProviderType {
+        LOCAL, GITHUB, GOOGLE, LDAP, UNKNOWN;
+
+        public static AuthenticationProviderType from(String s) {
+            if (s == null) return UNKNOWN;
+            try {
+                return AuthenticationProviderType.valueOf(s.trim().toUpperCase());
+            } catch (Exception e) {
+                return UNKNOWN;
+            }
+        }
     }
-    
+
     /**
-     * 创建未认证的 MultiFactorAuthenticationToken（支持多步骤认证）
-     * 
-     * @param username 用户名
-     * @param credentials 凭证（可以是单个凭证或多个凭证的组合）
-     * @param authenticationProvider 认证提供者
-     * @param authenticationType 认证类型
-     * @param completedFactors 已完成的认证步骤（用于多步骤认证）
+     * 认证因子类型
      */
-    public MultiFactorAuthenticationToken(String username,
-                                         Object credentials,
-                                         String authenticationProvider,
-                                         String authenticationType,
-                                         java.util.Set<String> completedFactors) {
+    public enum AuthenticationFactorType {
+        PASSWORD, TOTP, OAUTH2, EMAIL, MFA, UNKNOWN;
+
+        public static AuthenticationFactorType from(String s) {
+            if (s == null) return UNKNOWN;
+            try {
+                return AuthenticationFactorType.valueOf(s.trim().toUpperCase());
+            } catch (Exception e) {
+                return UNKNOWN;
+            }
+        }
+    }
+
+    // --- 核心字段 ---
+
+    private final String username;
+
+    /**
+     * credentials 标记为可被清除（非 final）
+     * 且对 Jackson 隐藏，避免不小心序列化到前端/日志
+     */
+    @JsonIgnore
+    private Object credentials;
+
+    private final AuthenticationProviderType provider;
+    private final EnumSet<AuthenticationFactorType> completedFactors;
+
+    // --- constructors ---
+
+    /** 未认证构造器（字符串兼容） */
+    public MultiFactorAuthenticationToken(String username, Object credentials, String provider, String initialFactor) {
+        this(username, credentials,
+                AuthenticationProviderType.from(provider),
+                AuthenticationFactorType.from(initialFactor));
+    }
+
+    /** 未认证构造器（枚举） */
+    public MultiFactorAuthenticationToken(String username, Object credentials,
+                                          AuthenticationProviderType provider,
+                                          AuthenticationFactorType initialFactor) {
         super(Collections.emptyList());
-        this.username = username;
+        this.username = Objects.requireNonNull(username, "username");
         this.credentials = credentials;
-        this.authenticationProvider = authenticationProvider != null ? authenticationProvider.toUpperCase() : null;
-        this.authenticationType = authenticationType != null ? authenticationType.toUpperCase() : null;
-        this.completedFactors = completedFactors != null ? new java.util.HashSet<>(completedFactors) : new java.util.HashSet<>();
+        this.provider = provider == null ? AuthenticationProviderType.UNKNOWN : provider;
+        this.completedFactors = EnumSet.noneOf(AuthenticationFactorType.class);
+        if (initialFactor != null && initialFactor != AuthenticationFactorType.UNKNOWN) {
+            this.completedFactors.add(initialFactor);
+        }
         setAuthenticated(false);
     }
 
-    /**
-     * 创建已认证的 MultiFactorAuthenticationToken
-     * 
-     * @param username 用户名
-     * @param credentials 凭证（通常为 null，认证成功后清空敏感信息）
-     * @param authenticationProvider 认证提供者
-     * @param authenticationType 认证类型
-     * @param authorities 用户权限
-     */
+    /** 已认证构造器（带 authorities, 支持多个因子） */
     public MultiFactorAuthenticationToken(String username,
-                                         Object credentials,
-                                         String authenticationProvider,
-                                         String authenticationType,
-                                         Collection<? extends GrantedAuthority> authorities) {
-        super(authorities);
-        this.username = username;
+                                          Object credentials,
+                                          AuthenticationProviderType provider,
+                                          Set<AuthenticationFactorType> completedFactors,
+                                          Collection<? extends GrantedAuthority> authorities) {
+        super(authorities == null ? Collections.emptyList() : List.copyOf(authorities));
+        this.username = Objects.requireNonNull(username, "username");
         this.credentials = credentials;
-        this.authenticationProvider = authenticationProvider != null ? authenticationProvider.toUpperCase() : null;
-        this.authenticationType = authenticationType != null ? authenticationType.toUpperCase() : null;
-        this.completedFactors = new java.util.HashSet<>();
-        setAuthenticated(true); // 标记为已认证
-    }
-    
-    /**
-     * 创建已认证的 MultiFactorAuthenticationToken（支持多步骤认证）
-     * 
-     * @param username 用户名
-     * @param credentials 凭证（通常为 null，认证成功后清空敏感信息）
-     * @param authenticationProvider 认证提供者
-     * @param authenticationType 认证类型
-     * @param completedFactors 已完成的认证步骤
-     * @param authorities 用户权限
-     */
-    public MultiFactorAuthenticationToken(String username,
-                                         Object credentials,
-                                         String authenticationProvider,
-                                         String authenticationType,
-                                         java.util.Set<String> completedFactors,
-                                         Collection<? extends GrantedAuthority> authorities) {
-        super(authorities);
-        this.username = username;
-        this.credentials = credentials;
-        this.authenticationProvider = authenticationProvider != null ? authenticationProvider.toUpperCase() : null;
-        this.authenticationType = authenticationType != null ? authenticationType.toUpperCase() : null;
-        this.completedFactors = completedFactors != null ? new java.util.HashSet<>(completedFactors) : new java.util.HashSet<>();
+        this.provider = provider == null ? AuthenticationProviderType.UNKNOWN : provider;
+        this.completedFactors = completedFactors == null || completedFactors.isEmpty()
+                ? EnumSet.noneOf(AuthenticationFactorType.class)
+                : EnumSet.copyOf(completedFactors);
         setAuthenticated(true);
     }
 
-    @Override
-    public Object getPrincipal() {
-        return this.username;
+    /** 已认证构造器（单因子） */
+    public MultiFactorAuthenticationToken(String username,
+                                          Object credentials,
+                                          AuthenticationProviderType provider,
+                                          AuthenticationFactorType initialFactor,
+                                          Collection<? extends GrantedAuthority> authorities) {
+        super(authorities == null ? Collections.emptyList() : List.copyOf(authorities));
+        this.username = Objects.requireNonNull(username, "username");
+        this.credentials = credentials;
+        this.provider = provider == null ? AuthenticationProviderType.UNKNOWN : provider;
+        this.completedFactors = EnumSet.noneOf(AuthenticationFactorType.class);
+        if (initialFactor != null && initialFactor != AuthenticationFactorType.UNKNOWN) {
+            this.completedFactors.add(initialFactor);
+        }
+        setAuthenticated(true);
     }
 
+    /**
+     * JSON 反序列化友好构造（仅用于需要把 token 存/取到 DB 的专用 mapper）
+     * 注意：默认 webObjectMapper 不应序列化/反序列化 token。如果需要，请只在专用 mapper 上启用。
+     */
+    @JsonCreator
+    public static MultiFactorAuthenticationToken createForJackson(
+            @JsonProperty("username") String username,
+            @JsonProperty("credentials") Object credentials,
+            @JsonProperty("provider") String providerStr,
+            @JsonProperty("completedFactors") Set<String> completedFactors,
+            @JsonProperty("authorities") Collection<? extends GrantedAuthority> authorities
+    ) {
+        Set<AuthenticationFactorType> factorSet = null;
+        if (completedFactors != null) {
+            factorSet = completedFactors.stream()
+                    .filter(Objects::nonNull)
+                    .map(AuthenticationFactorType::from)
+                    .collect(java.util.stream.Collectors.toSet());
+        }
+        return new MultiFactorAuthenticationToken(username, credentials,
+                AuthenticationProviderType.from(providerStr),
+                factorSet,
+                authorities);
+    }
+
+
+    // --- getters / override ---
+
+    @Override
+    public Object getPrincipal() {
+        return username;
+    }
+
+    /**
+     * credentials 对外接口仍然存在，但被 @JsonIgnore 标记，不会被默认 Jackson 输出
+     */
     @Override
     public Object getCredentials() {
-        return this.credentials;
+        return credentials;
     }
 
     /**
      * 获取用户名
      */
     public String getUsername() {
-        return this.username;
+        return username;
     }
 
     /**
-     * 获取认证提供者
+     * 获取字符串形式的 provider（向后兼容）
      */
     public String getAuthenticationProvider() {
-        return this.authenticationProvider;
+        return provider == null ? null : provider.name();
     }
 
     /**
-     * 获取认证类型
+     * 获取枚举形式的 provider（类型安全）
+     */
+    public AuthenticationProviderType getProvider() {
+        return provider;
+    }
+
+    /**
+     * 获取字符串形式的认证类型（向后兼容）
      */
     public String getAuthenticationType() {
-        return this.authenticationType;
-    }
-    
-    /**
-     * 获取已完成的认证步骤
-     */
-    public java.util.Set<String> getCompletedFactors() {
-        return java.util.Collections.unmodifiableSet(this.completedFactors);
-    }
-    
-    /**
-     * 检查是否已完成指定的认证步骤
-     */
-    public boolean hasCompletedFactor(String factor) {
-        return this.completedFactors.contains(factor != null ? factor.toUpperCase() : null);
-    }
-    
-    /**
-     * 检查是否已完成所有必需的认证步骤
-     * @param requiredFactors 必需的认证步骤列表
-     */
-    public boolean hasCompletedAllFactors(java.util.Set<String> requiredFactors) {
-        if (requiredFactors == null || requiredFactors.isEmpty()) {
-            return true;
+        // 返回第一个已完成的因子，如果没有则返回 UNKNOWN
+        synchronized (completedFactors) {
+            if (completedFactors.isEmpty()) {
+                return AuthenticationFactorType.UNKNOWN.name();
+            }
+            // 优先返回 PASSWORD，然后是 TOTP，最后是其他
+            if (completedFactors.contains(AuthenticationFactorType.PASSWORD)) {
+                return AuthenticationFactorType.PASSWORD.name();
+            }
+            if (completedFactors.contains(AuthenticationFactorType.TOTP)) {
+                return AuthenticationFactorType.TOTP.name();
+            }
+            return completedFactors.iterator().next().name();
         }
-        return this.completedFactors.containsAll(
-            requiredFactors.stream()
-                .map(f -> f != null ? f.toUpperCase() : null)
-                .collect(java.util.stream.Collectors.toSet())
+    }
+
+    /**
+     * 返回已完成因子的不可变视图（线程安全）
+     */
+    public Set<AuthenticationFactorType> getCompletedFactors() {
+        synchronized (completedFactors) {
+            return Collections.unmodifiableSet(EnumSet.copyOf(completedFactors));
+        }
+    }
+
+    public boolean hasCompletedFactor(AuthenticationFactorType factor) {
+        if (factor == null || factor == AuthenticationFactorType.UNKNOWN) return false;
+        synchronized (completedFactors) {
+            return completedFactors.contains(factor);
+        }
+    }
+
+    public boolean hasCompletedFactor(String factorStr) {
+        return hasCompletedFactor(AuthenticationFactorType.from(factorStr));
+    }
+
+    public boolean hasCompletedAllFactors(Set<AuthenticationFactorType> required) {
+        if (required == null || required.isEmpty()) return true;
+        synchronized (completedFactors) {
+            return completedFactors.containsAll(required);
+        }
+    }
+
+    public MultiFactorAuthenticationToken addCompletedFactor(AuthenticationFactorType factor) {
+        if (factor == null || factor == AuthenticationFactorType.UNKNOWN) return this;
+        synchronized (completedFactors) {
+            completedFactors.add(factor);
+        }
+        return this;
+    }
+
+    public MultiFactorAuthenticationToken addCompletedFactor(String factorStr) {
+        return addCompletedFactor(AuthenticationFactorType.from(factorStr));
+    }
+
+    public MultiFactorAuthenticationToken promoteToFullyAuthenticated(Collection<? extends GrantedAuthority> authorities) {
+        EnumSet<AuthenticationFactorType> newCompletedFactors = EnumSet.copyOf(this.completedFactors);
+        if (!newCompletedFactors.contains(AuthenticationFactorType.TOTP)) {
+            newCompletedFactors.add(AuthenticationFactorType.TOTP);
+        }
+        MultiFactorAuthenticationToken newToken = new MultiFactorAuthenticationToken(
+                this.username,
+                null,
+                this.provider,
+                newCompletedFactors,
+                authorities == null ? Collections.emptyList() : List.copyOf(authorities)
         );
+        if (this.getDetails() != null) {
+            newToken.setDetails(this.getDetails());
+        }
+        return newToken;
     }
 
     @Override
     public void eraseCredentials() {
         super.eraseCredentials();
-        // 注意：credentials 是 final 的，无法直接修改
-        // Spring Security 的最佳实践是在创建已认证的 Token 时传入 null 作为 credentials
-        // 这样可以防止敏感信息（如密码）在内存中保留过长时间
+        this.credentials = null;
     }
 
     @Override
     public String toString() {
-        return "MultiFactorAuthenticationToken{" +
-                "username='" + username + '\'' +
-                ", authenticationProvider='" + authenticationProvider + '\'' +
-                ", authenticationType='" + authenticationType + '\'' +
-                ", completedFactors=" + completedFactors +
-                ", authenticated=" + isAuthenticated() +
-                ", authorities=" + getAuthorities() +
-                '}';
+        synchronized (completedFactors) {
+            return "MultiFactorAuthenticationToken{" +
+                    "username='" + username + '\'' +
+                    ", provider=" + provider +
+                    ", completedFactors=" + completedFactors +
+                    ", authenticated=" + isAuthenticated() +
+                    ", authorities=" + getAuthorities() +
+                    '}';
+        }
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(username, provider, EnumSet.copyOf(completedFactors), getAuthorities());
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (!(obj instanceof MultiFactorAuthenticationToken other)) return false;
+        return Objects.equals(username, other.username)
+                && Objects.equals(provider, other.provider)
+                && Objects.equals(EnumSet.copyOf(completedFactors), EnumSet.copyOf(other.completedFactors))
+                && Objects.equals(getAuthorities(), other.getAuthorities());
     }
 }
-

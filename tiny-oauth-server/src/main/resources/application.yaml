@@ -2,6 +2,13 @@ DEBUGworkflow:
   engine: camunda # 或 flowable, activiti
 server:
   port: 9000
+  servlet:
+    session:
+      cookie:
+        name: JSESSIONID
+        http-only: true    # HttpOnly：防止 XSS 攻击，JavaScript 无法访问 Cookie
+        secure: false      # Secure：开发环境使用 HTTP，设为 false；生产环境在 application-prod.yaml 中设为 true
+        same-site: Lax     # SameSite：Lax 允许从外部链接跳转时携带 Cookie，Strict 更严格但可能影响用户体验
 logging:
   level:
     org.camunda.bpm.engine.persistence: DEBUG
@@ -107,6 +114,7 @@ authentication:
         - http://localhost:5173/callback
         - http://localhost:5173/silent-renew.html # silent renew 时用于隐式授权流程的 iframe 回调页面。
       post-logout-redirect-uris:
+        - http://localhost:5173/
         - http://127.0.0.1:8080/
       scopes:
         - openid

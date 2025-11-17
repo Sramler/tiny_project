@@ -1,6 +1,7 @@
 package com.tiny.oauthserver.sys.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tiny.oauthserver.sys.enums.ResourceType;
 import com.tiny.oauthserver.sys.model.*;
 import com.tiny.oauthserver.sys.service.ResourceService;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,6 +11,7 @@ import org.mockito.Mockito;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.web.PageableHandlerMethodArgumentResolver;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -25,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ResourceControllerAllTest {
 
     private MockMvc mockMvc;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
     private ResourceService resourceService;
     private ResourceController resourceController;
 
@@ -33,7 +35,9 @@ class ResourceControllerAllTest {
     void setup() {
         resourceService = mock(ResourceService.class);
         resourceController = new ResourceController(resourceService);
-        mockMvc = MockMvcBuilders.standaloneSetup(resourceController).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(resourceController)
+                .setCustomArgumentResolvers(new PageableHandlerMethodArgumentResolver())
+                .build();
     }
 
     @Test
@@ -56,15 +60,31 @@ class ResourceControllerAllTest {
     @Test
     @DisplayName("POST/PUT/DELETE 资源创建/更新/删除")
     void create_update_delete() throws Exception {
-        Resource body = new Resource(); body.setName("api_user");
+        ResourceCreateUpdateDto createDto = new ResourceCreateUpdateDto();
+        createDto.setName("api_user");
+        createDto.setTitle("用户接口");
+        createDto.setUrl("/user");
+        createDto.setUri("/api/user");
+        createDto.setMethod("GET");
+        createDto.setPermission("user:list");
+        createDto.setType(ResourceType.API.getCode());
+
         Resource saved = new Resource(); saved.setId(5L); saved.setName("api_user");
-        Mockito.when(resourceService.create(any(Resource.class))).thenReturn(saved);
+        Mockito.when(resourceService.createFromDto(any(ResourceCreateUpdateDto.class))).thenReturn(saved);
         mockMvc.perform(post("/sys/resources").contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(body)))
+                        .content(objectMapper.writeValueAsString(createDto)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(5L));
 
-        ResourceCreateUpdateDto dto = new ResourceCreateUpdateDto(); dto.setName("api_users");
+        ResourceCreateUpdateDto dto = new ResourceCreateUpdateDto();
+        dto.setName("api_users");
+        dto.setTitle("用户接口-更新");
+        dto.setUrl("/user");
+        dto.setUri("/api/user");
+        dto.setMethod("POST");
+        dto.setPermission("user:update");
+        dto.setType(ResourceType.API.getCode());
+
         Resource updated = new Resource(); updated.setId(1L); updated.setName("api_users");
         Mockito.when(resourceService.updateFromDto(any(ResourceCreateUpdateDto.class))).thenReturn(updated);
         mockMvc.perform(put("/sys/resources/1").contentType(MediaType.APPLICATION_JSON)

@@ -319,7 +319,6 @@ const paginationConfig = computed(() => {
 const INITIAL_COLUMNS = [
   { title: 'ID', dataIndex: 'id', sorter: true },
   { title: '用户名', dataIndex: 'username', sorter: true },
-  { title: '密码', dataIndex: 'password' },
   { title: '昵称', dataIndex: 'nickname', sorter: true },
   { title: '是否启用', dataIndex: 'enabled', sorter: true },
   { title: '账号未过期', dataIndex: 'accountNonExpired', sorter: true },

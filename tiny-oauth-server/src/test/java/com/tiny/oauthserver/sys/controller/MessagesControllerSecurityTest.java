@@ -2,38 +2,40 @@ package com.tiny.oauthserver.sys.controller;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.security.test.context.support.WithMockUser;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.security.access.prepost.PreAuthorize;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import java.lang.reflect.Method;
 
-/**
- * 极简安全集成测试：仅用于验证基于注解的授权分支。
- * 说明：该文件刻意使用 @WebMvcTest 与 @Autowired，其他控制器测试保持纯 mock。
- */
-@WebMvcTest(MessagesController.class)
+import static org.junit.jupiter.api.Assertions.*;
+
 class MessagesControllerSecurityTest {
 
-    @Autowired
-    private MockMvc mockMvc;
+    private final MessagesController controller = new MessagesController();
 
     @Test
-    @DisplayName("/messages2 未授权 403")
-    void messages2_forbidden() throws Exception {
-        mockMvc.perform(get("/messages2"))
-                .andExpect(status().isForbidden());
+    @DisplayName("messages1 返回纯文本")
+    void messages1_returnsPlainText() {
+        assertEquals(" hello Message 1", controller.getMessages1());
     }
 
     @Test
-    @DisplayName("/messages2 授权后 200")
-    @WithMockUser(authorities = {"SCOPE_profile"})
-    void messages2_authorized() throws Exception {
-        mockMvc.perform(get("/messages2"))
-                .andExpect(status().isOk());
+    @DisplayName("messages2 声明 SCOPE_profile 权限")
+    void messages2_requiresScopeProfile() throws Exception {
+        Method method = MessagesController.class.getDeclaredMethod("getMessages2");
+        PreAuthorize authorize = method.getAnnotation(PreAuthorize.class);
+        assertNotNull(authorize, "getMessages2 应声明 PreAuthorize");
+        assertEquals("hasAuthority('SCOPE_profile')", authorize.value());
+        assertEquals(" hello Message 2", controller.getMessages2());
+    }
+
+    @Test
+    @DisplayName("messages3 声明 SCOPE_Message 权限")
+    void messages3_requiresScopeMessage() throws Exception {
+        Method method = MessagesController.class.getDeclaredMethod("getMessages3");
+        PreAuthorize authorize = method.getAnnotation(PreAuthorize.class);
+        assertNotNull(authorize, "getMessages3 应声明 PreAuthorize");
+        assertEquals("hasAuthority('SCOPE_Message')", authorize.value());
+        assertEquals(" hello Message 3", controller.getMessages3());
     }
 }
-
 

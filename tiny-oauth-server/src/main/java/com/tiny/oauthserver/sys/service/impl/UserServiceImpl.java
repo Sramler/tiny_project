@@ -61,8 +61,7 @@ public class UserServiceImpl implements UserService {
     }
 
     private UserResponseDto toDto(User user) {
-        // Long id, String username, String password, String nickname, boolean enabled, boolean accountNonExpired, boolean accountNonLocked, boolean credentialsNonExpired, LocalDateTime lastLoginAt)
-        return new UserResponseDto(user.getId(),user.getUsername(),"",user.getNickname(),user.isEnabled(),
+        return new UserResponseDto(user.getId(),user.getUsername(),user.getNickname(),user.isEnabled(),
                 user.isAccountNonExpired(),user.isAccountNonLocked(),user.isCredentialsNonExpired(),user.getLastLoginAt());
     }
 

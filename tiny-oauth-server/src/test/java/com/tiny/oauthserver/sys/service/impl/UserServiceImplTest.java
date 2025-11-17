@@ -1,9 +1,12 @@
 package com.tiny.oauthserver.sys.service.impl;
 
 import com.tiny.oauthserver.sys.model.User;
+import com.tiny.oauthserver.sys.model.UserAuthenticationMethod;
 import com.tiny.oauthserver.sys.model.UserCreateUpdateDto;
 import com.tiny.oauthserver.sys.model.UserRequestDto;
 import com.tiny.oauthserver.sys.model.UserResponseDto;
+import com.tiny.oauthserver.sys.repository.RoleRepository;
+import com.tiny.oauthserver.sys.repository.UserAuthenticationMethodRepository;
 import com.tiny.oauthserver.sys.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +32,12 @@ class UserServiceImplTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
+    @Mock
+    private RoleRepository roleRepository;
+
+    @Mock
+    private UserAuthenticationMethodRepository authenticationMethodRepository;
+
     private User user;
 
     @BeforeEach
@@ -36,7 +45,6 @@ class UserServiceImplTest {
         user = new User();
         user.setId(1L);
         user.setUsername("test");
-        user.setPassword("pwd");
         user.setNickname("nick");
         user.setEnabled(true);
         user.setAccountNonExpired(true);
@@ -78,7 +86,6 @@ class UserServiceImplTest {
         User updated = new User();
         updated.setId(1L);
         updated.setUsername("new");
-        updated.setPassword("newpwd");
         updated.setNickname("newnick");
         updated.setEnabled(false);
         updated.setLastLoginAt(LocalDateTime.now());
@@ -107,6 +114,8 @@ class UserServiceImplTest {
         when(userRepository.findUserByUsername("test")).thenReturn(Optional.empty());
         when(passwordEncoder.encode("pwd")).thenReturn("encoded");
         when(userRepository.save(any(User.class))).thenReturn(user);
+        when(authenticationMethodRepository.save(any(UserAuthenticationMethod.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
         User result = userService.createFromDto(dto);
         assertEquals(user, result);

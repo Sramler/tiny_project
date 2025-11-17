@@ -1,0 +1,14 @@
+# 开发环境配置
+# 使用方式: spring.profiles.active=dev
+# 
+# 在开发环境中，前端运行在 Vite dev server (http://localhost:5173)
+# 后端通过重定向将请求转发到前端开发服务器
+
+frontend:
+  # 登录页面 - 重定向到 Vite dev server
+  login-url: redirect:http://localhost:5173/login
+  # TOTP 绑定页面 - 重定向到 Vite dev server
+  totp-bind-url: redirect:http://localhost:5173/self/security/totp-bind
+  # TOTP 验证页面 - 重定向到 Vite dev server
+  totp-verify-url: redirect:http://localhost:5173/self/security/totp-verify
+

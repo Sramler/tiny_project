@@ -47,33 +47,7 @@ public class SecurityUser implements UserDetails, Serializable {
      * 注意：User 表的 password 字段已废弃，实际密码在 user_authentication_method 表中。
      */
     public SecurityUser(User user) {
-        this.userId = user.getId();
-        this.username = user.getUsername();
-        // User 表的 password 字段已废弃，使用空字符串
-        // 实际密码验证在 MultiAuthenticationProvider 中通过 user_authentication_method 表完成
-        this.password = user.getPassword() != null ? user.getPassword() : "";
-//        this.authorities = user.getRoles().stream()
-//                .map(role -> new SimpleGrantedAuthority(role.getName()))
-//                .collect(Collectors.toSet()); // 将角色名转为权限
-
-
-        this.authorities = user.getRoles().stream()
-                .flatMap(role -> {
-                    // 1. 将 roleName 作为权限（如 "ROLE_ADMIN"）
-                    // 2. 将 resource.code 也作为权限（如 "PERM_READ"）
-                    return java.util.stream.Stream.concat(
-                            java.util.stream.Stream.of(
-                                    new org.springframework.security.core.authority.SimpleGrantedAuthority(role.getName())
-                            ),
-                            role.getResources().stream()
-                                    .map(resource -> new org.springframework.security.core.authority.SimpleGrantedAuthority(resource.getName()))
-                    );
-                })
-                .collect(java.util.stream.Collectors.toSet());
-        this.accountNonExpired = user.isAccountNonExpired();
-        this.accountNonLocked = user.isAccountNonLocked();
-        this.credentialsNonExpired = user.isCredentialsNonExpired();
-        this.enabled = user.isEnabled();
+        this(user, "");
     }
 
     /**
@@ -83,7 +57,7 @@ public class SecurityUser implements UserDetails, Serializable {
     public SecurityUser(User user, String password) {
         this.userId = user.getId();
         this.username = user.getUsername();
-        this.password = password;
+        this.password = password != null ? password : "";
         this.authorities = user.getRoles().stream()
                 .flatMap(role -> {
                     // 1. 将 roleName 作为权限（如 "ROLE_ADMIN"）

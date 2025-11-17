@@ -2,7 +2,6 @@
 CREATE TABLE IF NOT EXISTS `user` (
     `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '用户ID',
     `username` VARCHAR(50) NOT NULL COMMENT '用户名',
-    `password` VARCHAR(100) NOT NULL COMMENT '密码',
     `nickname` VARCHAR(50) DEFAULT NULL COMMENT '昵称',
     `enabled` BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否启用',
     `account_non_expired` BOOLEAN NOT NULL DEFAULT TRUE COMMENT '账号是否未过期',

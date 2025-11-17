@@ -8,8 +8,8 @@
       <!-- 右侧用户信息区域 -->
       <div class="right">
         <!-- 用户信息下拉菜单 -->
-        <div class="dropdown" ref="dropdownRef">
-          <div class="user-info" @mouseenter="showDropdown" @mouseleave="hideDropdown">
+        <div class="dropdown" ref="dropdownRef" @mouseenter="showDropdown" @mouseleave="hideDropdown">
+          <div class="user-info">
             <!-- 用户头像 -->
             <img class="avatar" src="https://i.pravatar.cc/40" alt="avatar" />
             <!-- 用户名和下拉箭头 -->
@@ -17,16 +17,16 @@
             <DownOutlined class="dropdown-icon" :class="{ 'rotated': dropdownVisible }" />
           </div>
           <!-- 下拉菜单内容 -->
-          <ul class="dropdown-menu" v-show="dropdownVisible" :style="dropdownStyle">
-            <li>
+          <ul class="dropdown-menu" v-show="dropdownVisible" :style="dropdownStyle" @click.stop>
+            <li @click.stop="handleMenuClick('profile')">
               <UserOutlined class="menu-icon" />
               个人中心
             </li>
-            <li>
+            <li @click.stop="handleMenuClick('settings')">
               <SettingOutlined class="menu-icon" />
               个人设置
             </li>
-            <li>
+            <li @click.stop="handleMenuClick('logout')">
               <LogoutOutlined class="menu-icon" />
               退出登录
             </li>
@@ -43,11 +43,17 @@
 // 引入 Ant Design Icons
 import { UserOutlined, SettingOutlined, LogoutOutlined, DownOutlined } from '@ant-design/icons-vue'
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuth } from '@/auth/auth'
 
 // 禁用自动属性继承，手动控制属性绑定
 defineOptions({
   inheritAttrs: false
 })
+
+// 路由和认证
+const router = useRouter()
+const { logout } = useAuth()
 
 // 下拉菜单状态
 const dropdownVisible = ref(false)
@@ -72,6 +78,35 @@ const showDropdown = () => {
 // 隐藏下拉菜单
 const hideDropdown = () => {
   dropdownVisible.value = false
+}
+
+// 处理菜单项点击
+const handleMenuClick = async (action: string) => {
+  console.log('菜单项被点击:', action)
+  // 点击后隐藏菜单
+  dropdownVisible.value = false
+
+  // 根据不同的操作执行相应逻辑
+  switch (action) {
+    case 'profile':
+      // 跳转到个人中心页面
+      router.push('/profile/center')
+      break
+    case 'settings':
+      // 跳转到个人设置页面
+      router.push('/profile/setting')
+      break
+    case 'logout':
+      // 执行退出登录逻辑
+      try {
+        await logout()
+      } catch (error) {
+        console.error('退出登录失败:', error)
+      }
+      break
+    default:
+      console.warn('未知的菜单操作:', action)
+  }
 }
 </script>
 
@@ -198,11 +233,16 @@ const hideDropdown = () => {
   color: rgba(0, 0, 0, 0.85);
   font-size: 14px;
   line-height: 1.5715;
+  user-select: none;
   /* 使用与系统UI一致的字体和颜色 */
 }
 
 .dropdown-menu li:hover {
   background: #f5f5f5;
+}
+
+.dropdown-menu li:active {
+  background: #e6f7ff;
 }
 
 .menu-icon {

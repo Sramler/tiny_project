@@ -33,7 +33,13 @@
 --     1,
 --     'LOCAL',
 --     'PASSWORD',
---     '{"password_hash":"$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVEFDa","password_changed_at":"2024-01-01T00:00:00Z"}',
+--     JSON_OBJECT(
+--         'password', '{bcrypt}$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVEFDa',
+--         'password_changed_at', '2024-01-01T00:00:00Z',
+--         'hash_algorithm', 'bcrypt',
+--         'password_version', 1,
+--         'created_by', 'manual-example'
+--     ),
 --     true,
 --     true,
 --     0

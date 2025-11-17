@@ -5,12 +5,12 @@ import com.tiny.oauthserver.config.FrontendProperties;
 import com.tiny.oauthserver.sys.model.User;
 import com.tiny.oauthserver.sys.repository.UserRepository;
 import com.tiny.oauthserver.sys.repository.UserAuthenticationMethodRepository;
+import com.tiny.oauthserver.sys.security.MultiFactorAuthenticationSessionManager;
+import com.tiny.oauthserver.sys.security.MultiFactorAuthenticationToken;
 import com.tiny.oauthserver.sys.service.SecurityService;
 import com.tiny.oauthserver.util.QrCodeUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Controller;
@@ -23,7 +23,7 @@ import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * 用户安全与TOTP相关接口 Controller层，所有业务逻辑由 SecurityService 负责
- * 
+ *
  * 根据配置区分开发环境和生产环境：
  * - 开发环境：重定向到 Vite dev server (http://localhost:5173)
  * - 生产环境：转发到打包后的静态文件 (/dist/index.html)
@@ -34,20 +34,20 @@ public class SecurityController {
     private final UserRepository userRepository;
     private final SecurityService securityService;
     private final UserAuthenticationMethodRepository authenticationMethodRepository;
-    private final UserDetailsService userDetailsService;
     private final FrontendProperties frontendProperties;
+    private final MultiFactorAuthenticationSessionManager sessionManager;
 
     @Autowired
-    public SecurityController(UserRepository userRepository, 
+    public SecurityController(UserRepository userRepository,
                              SecurityService securityService,
                              UserAuthenticationMethodRepository authenticationMethodRepository,
-                             UserDetailsService userDetailsService,
-                             FrontendProperties frontendProperties) {
+                             FrontendProperties frontendProperties,
+                             MultiFactorAuthenticationSessionManager sessionManager) {
         this.userRepository = userRepository;
         this.securityService = securityService;
         this.authenticationMethodRepository = authenticationMethodRepository;
-        this.userDetailsService = userDetailsService;
         this.frontendProperties = frontendProperties;
+        this.sessionManager = sessionManager;
     }
 
     /** 查询当前用户的安全状态 */
@@ -59,7 +59,7 @@ public class SecurityController {
         return ResponseEntity.ok(securityService.getSecurityStatus(user));
     }
 
-    /** 
+    /**
      * 绑定TOTP
      * 说明：用户已登录（已通过密码或其他方式验证），绑定 TOTP 时仅需要 TOTP 码验证
      * 理由：
@@ -73,18 +73,18 @@ public class SecurityController {
     public ResponseEntity<Map<String, Object>> bindTotp(@RequestBody Map<String, String> req) {
         User user = getCurrentUser();
         if (user == null) return ResponseEntity.status(401).body(Map.of("success", false, "error", "未登录"));
-        
+
         // 用户已登录，不需要再次验证密码，仅需要 TOTP 码
         String totpCode = req.get("totpCode");
         if (totpCode == null || totpCode.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("success", false, "error", "缺少TOTP验证码"));
         }
-        
+
         // 传递 null 作为密码，表示不需要密码验证
         return ResponseEntity.ok(securityService.bindTotp(user, null, totpCode));
     }
 
-    /** 
+    /**
      * 解绑TOTP
      * 说明：解绑是敏感操作（会降低账户安全性），需要更强的验证
      * - 必须验证 TOTP 码
@@ -99,12 +99,12 @@ public class SecurityController {
     public ResponseEntity<Map<String, Object>> unbindTotp(@RequestBody Map<String, String> req) {
         User user = getCurrentUser();
         if (user == null) return ResponseEntity.status(401).body(Map.of("success", false, "error", "未登录"));
-        
+
         // 获取用户当前的登录方式
         String[] loginMethod = getCurrentLoginMethod();
         String provider = loginMethod[0];  // authenticationProvider
         String type = loginMethod[1];      // authenticationType
-        
+
         // 如果用户是通过 LOCAL + PASSWORD 登录的，且数据库中有本地密码记录，推荐验证密码
         // 但为了兼容性，如果用户不提供密码，也可以仅通过 TOTP 码解绑
         String plainPassword = null;
@@ -118,7 +118,7 @@ public class SecurityController {
                 // 如果用户提供了密码，则验证；如果没有提供，仅通过 TOTP 码解绑
             }
         }
-        
+
         String totpCode = req.get("totpCode");
         if (totpCode == null || totpCode.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("success", false, "error", "缺少TOTP验证码"));
@@ -172,7 +172,7 @@ public class SecurityController {
     /**
      * GET TOTP绑定页（页面渲染）
      * 支持部分认证 Token（已完成 PASSWORD 验证，等待 TOTP 验证）
-     * 
+     *
      * 根据配置区分开发环境和生产环境：
      * - 开发环境：重定向到 Vite dev server (http://localhost:5173/self/security/totp-bind)
      * - 生产环境：转发到打包后的静态文件 (/dist/index.html)
@@ -192,15 +192,17 @@ public class SecurityController {
     @PostMapping("/totp/bind-form")
     public String bindTotpForm(@RequestParam String totpCode,
                                @RequestParam(required = false) String password,
-                               @RequestParam String redirect) {
+                               @RequestParam String redirect,
+                               HttpServletRequest request,
+                               jakarta.servlet.http.HttpServletResponse response) {
         User user = getCurrentUser();
         if (user == null) {
             return "redirect:/login?error=" + URLEncoder.encode("未登录", StandardCharsets.UTF_8);
         }
-        
+
         Map<String, Object> result = securityService.bindTotp(user, password, totpCode);
         if(Boolean.TRUE.equals(result.get("success"))) {
-            promoteToFullyAuthenticated(user);
+            promoteToFullyAuthenticated(user, request, response);
             return buildRedirectUrl(redirect);
         } else {
             String error = String.valueOf(result.getOrDefault("error", "绑定失败"));
@@ -226,7 +228,7 @@ public class SecurityController {
 
     /**
      * GET 二步验证step-up页面（页面渲染）
-     * 
+     *
      * 根据配置区分开发环境和生产环境：
      * - 开发环境：重定向到 Vite dev server (http://localhost:5173/self/security/totp-verify)
      * - 生产环境：转发到打包后的静态文件 (/dist/index.html)
@@ -244,17 +246,19 @@ public class SecurityController {
      */
     @PostMapping("/totp/check-form")
     public String checkTotpForm(@RequestParam String totpCode,
-                                @RequestParam String redirect) {
+                                @RequestParam String redirect,
+                                HttpServletRequest request,
+                                jakarta.servlet.http.HttpServletResponse response) {
         User user = getCurrentUser();
         if (user == null) {
             String encodedRedirect = URLEncoder.encode(redirect, StandardCharsets.UTF_8);
             String encodedError = URLEncoder.encode("未登录", StandardCharsets.UTF_8);
             return "redirect:/self/security/totp-verify?redirect=" + encodedRedirect + "&error=" + encodedError;
         }
-        
+
         Map<String, Object> result = securityService.checkTotp(user, totpCode);
         if(Boolean.TRUE.equals(result.get("success"))) {
-            promoteToFullyAuthenticated(user);
+            promoteToFullyAuthenticated(user, request, response);
             return buildRedirectUrl(redirect);
         } else {
             String error = String.valueOf(result.getOrDefault("error", "验证失败"));
@@ -270,7 +274,7 @@ public class SecurityController {
         if (authentication == null) {
             return null;
         }
-        
+
         // 支持部分认证 Token（MultiFactorAuthenticationToken with completedFactors）
         // 即使 authenticated=false，只要有已完成因子，也应该允许获取用户信息
         if (authentication instanceof com.tiny.oauthserver.sys.security.MultiFactorAuthenticationToken mfaToken) {
@@ -280,39 +284,57 @@ public class SecurityController {
                 return userRepository.findUserByUsername(username).orElse(null);
             }
         }
-        
+
         // 完全认证的 Token
         if (authentication.isAuthenticated()) {
             String username = authentication.getName();
             return userRepository.findUserByUsername(username).orElse(null);
         }
-        
+
         return null;
     }
-    
+
     /**
      * 获取当前用户的登录方式
+     * <p>
+     * 支持部分认证的 {@link MultiFactorAuthenticationToken}（即使 {@code authenticated=false}，
+     * 只要有已完成因子，也能获取登录方式，与 {@link #getCurrentUser()} 保持一致）。
+     *
      * @return [authenticationProvider, authenticationType]，如果无法确定则返回 [null, null]
      */
     private String[] getCurrentLoginMethod() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated()) {
+        if (authentication == null) {
             return new String[]{null, null};
         }
-        
+
+        // 优先处理 MultiFactorAuthenticationToken（允许部分认证）
+        // 即使 authenticated=false，只要有已完成因子，也应该允许获取登录方式
+        if (authentication instanceof com.tiny.oauthserver.sys.security.MultiFactorAuthenticationToken mfa) {
+            String provider = mfa.getAuthenticationProvider();
+            String type = mfa.getAuthenticationType();
+            // 如果 provider 为 null 或 type 为 UNKNOWN，表示无法确定登录方式
+            if (provider == null || "UNKNOWN".equals(type)) {
+                return new String[]{null, null};
+            }
+            return new String[]{provider, type};
+        }
+
+        // 对于其他 Token，确保已认证再返回
+        if (!authentication.isAuthenticated()) {
+            return new String[]{null, null};
+        }
+
         // 尝试从 Authentication.getDetails() 中获取登录方式
         Object details = authentication.getDetails();
         if (details instanceof CustomWebAuthenticationDetailsSource.CustomWebAuthenticationDetails) {
-            CustomWebAuthenticationDetailsSource.CustomWebAuthenticationDetails customDetails = 
-                (CustomWebAuthenticationDetailsSource.CustomWebAuthenticationDetails) details;
+            CustomWebAuthenticationDetailsSource.CustomWebAuthenticationDetails customDetails =
+                    (CustomWebAuthenticationDetailsSource.CustomWebAuthenticationDetails) details;
             String provider = customDetails.getAuthenticationProvider();
             String type = customDetails.getAuthenticationType();
             return new String[]{provider, type};
         }
-        
-        // 如果无法从 Details 中获取，尝试从 Authentication.getAuthorities() 或其他方式判断
-        // 这里可以根据实际需求扩展，比如通过 OAuth2 的 token 信息判断
-        
+
         // 默认返回 null，表示无法确定登录方式
         // 这种情况下，Service 层会回退到检查数据库中是否存在 LOCAL + PASSWORD 记录
         return new String[]{null, null};
@@ -320,23 +342,10 @@ public class SecurityController {
 
     /**
      * 升级当前会话为完全认证（完成 PASSWORD + TOTP）
+     * 委托给 MultiFactorAuthenticationSessionManager，并持久化到 session
      */
-    private void promoteToFullyAuthenticated(User user) {
-        try {
-            UserDetails userDetails = userDetailsService.loadUserByUsername(user.getUsername());
-            com.tiny.oauthserver.sys.security.MultiFactorAuthenticationToken authenticated =
-                    new com.tiny.oauthserver.sys.security.MultiFactorAuthenticationToken(
-                            user.getUsername(),
-                            null,
-                            "LOCAL",
-                            "MFA",
-                            java.util.Set.of("PASSWORD", "TOTP"),
-                            userDetails.getAuthorities()
-                    );
-            authenticated.setAuthenticated(true); // 设置为完全认证
-            SecurityContextHolder.getContext().setAuthentication(authenticated);
-        } catch (Exception ignored) {
-        }
+    private void promoteToFullyAuthenticated(User user, HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) {
+        sessionManager.promoteToFullyAuthenticated(user, request, response);
     }
 
     /**
@@ -374,7 +383,7 @@ public class SecurityController {
         if (isBackendOnlyPath(redirect)) {
             return "redirect:" + redirect;
         }
-        
+
         // 获取登录页面配置，用于判断环境
         String loginUrl = frontendProperties.getLoginUrl();
         if (loginUrl.startsWith("redirect:")) {

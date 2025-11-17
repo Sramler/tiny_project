@@ -31,19 +31,27 @@ public class MultiFactorAuthenticationTokenJacksonDeserializer
         String username = jsonNode.has("username") ? jsonNode.get("username").asText() : null;
         Object credentials = jsonNode.has("credentials") && !jsonNode.get("credentials").isNull() 
             ? jsonNode.get("credentials").asText() : null;
-        String authenticationProvider = jsonNode.has("authenticationProvider") 
-            ? jsonNode.get("authenticationProvider").asText() : null;
-        String authenticationType = jsonNode.has("authenticationType") 
-            ? jsonNode.get("authenticationType").asText() : null;
+        String providerStr = jsonNode.has("provider") 
+            ? jsonNode.get("provider").asText() : (jsonNode.has("authenticationProvider") 
+                ? jsonNode.get("authenticationProvider").asText() : null);
         
-        // 解析 completedFactors
-        Set<String> completedFactors = new HashSet<>();
+        // 解析 completedFactors（支持 Factor 枚举或字符串）
+        Set<MultiFactorAuthenticationToken.AuthenticationFactorType> completedFactors = new HashSet<>();
         if (jsonNode.has("completedFactors") && jsonNode.get("completedFactors").isArray()) {
             for (JsonNode factor : jsonNode.get("completedFactors")) {
                 if (factor.isTextual()) {
-                    completedFactors.add(factor.asText());
+                    MultiFactorAuthenticationToken.AuthenticationFactorType f = MultiFactorAuthenticationToken.AuthenticationFactorType.from(factor.asText());
+                    if (f != MultiFactorAuthenticationToken.AuthenticationFactorType.UNKNOWN) {
+                        completedFactors.add(f);
+                    }
                 }
             }
+        }
+        
+        // 如果没有 completedFactors，尝试从 authenticationType 获取初始因子
+        String initialFactorStr = null;
+        if (completedFactors.isEmpty() && jsonNode.has("authenticationType")) {
+            initialFactorStr = jsonNode.get("authenticationType").asText();
         }
         
         // 解析 authorities
@@ -62,35 +70,38 @@ public class MultiFactorAuthenticationTokenJacksonDeserializer
         
         try {
             // 使用合适的构造函数创建实例
-            // 由于字段是 final 的，我们需要根据 JSON 数据选择合适的构造函数
             MultiFactorAuthenticationToken token;
             if (authenticated && !authorities.isEmpty()) {
                 // 使用已认证的构造器
                 token = new MultiFactorAuthenticationToken(
                     username,
                     credentials,
-                    authenticationProvider,
-                    authenticationType,
-                    completedFactors,
+                    MultiFactorAuthenticationToken.AuthenticationProviderType.from(providerStr),
+                    completedFactors.isEmpty() ? null : completedFactors,
                     authorities
                 );
-            } else if (!completedFactors.isEmpty()) {
-                // 使用带 completedFactors 的未认证构造器
-                token = new MultiFactorAuthenticationToken(
-                    username,
-                    credentials,
-                    authenticationProvider,
-                    authenticationType,
-                    completedFactors
-                );
             } else {
-                // 使用基本的未认证构造器
+                // 使用未认证的构造器
+                MultiFactorAuthenticationToken.AuthenticationFactorType initialFactor = null;
+                if (!completedFactors.isEmpty()) {
+                    initialFactor = completedFactors.iterator().next();
+                } else if (initialFactorStr != null) {
+                    initialFactor = MultiFactorAuthenticationToken.AuthenticationFactorType.from(initialFactorStr);
+                }
                 token = new MultiFactorAuthenticationToken(
                     username,
                     credentials,
-                    authenticationProvider,
-                    authenticationType
+                    MultiFactorAuthenticationToken.AuthenticationProviderType.from(providerStr),
+                    initialFactor
                 );
+                // 如果还有其他因子，添加进去
+                if (completedFactors.size() > 1) {
+                    for (MultiFactorAuthenticationToken.AuthenticationFactorType f : completedFactors) {
+                        if (f != initialFactor) {
+                            token.addCompletedFactor(f);
+                        }
+                    }
+                }
             }
             
             // 如果 authenticated 状态与构造器不一致，使用反射修改

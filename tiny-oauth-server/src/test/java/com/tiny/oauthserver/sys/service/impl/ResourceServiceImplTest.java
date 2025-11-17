@@ -3,6 +3,7 @@ package com.tiny.oauthserver.sys.service.impl;
 import com.tiny.oauthserver.sys.model.Resource;
 import com.tiny.oauthserver.sys.model.ResourceCreateUpdateDto;
 import com.tiny.oauthserver.sys.repository.ResourceRepository;
+import com.tiny.oauthserver.sys.repository.UserRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -17,7 +18,8 @@ import static org.mockito.Mockito.*;
 class ResourceServiceImplTest {
 
     private final ResourceRepository resourceRepository = Mockito.mock(ResourceRepository.class);
-    private final ResourceServiceImpl service = new ResourceServiceImpl(resourceRepository);
+    private final UserRepository userRepository = Mockito.mock(UserRepository.class);
+    private final ResourceServiceImpl service = new ResourceServiceImpl(resourceRepository, userRepository);
 
     @Test
     @DisplayName("createFromDto: 名称重复抛出异常")

@@ -37,7 +37,6 @@ class UserRepositoryTest {
 
         User user = new User();
         user.setUsername("test");
-        user.setPassword("password");
         user.setRoles(Set.of(role));
 
         when(userRepository.findUserByUsername("test"))

@@ -45,7 +45,6 @@ class UserDetailsServiceImplTest {
         User user = new User();
         user.setId(100L);
         user.setUsername("testuser");
-        user.setPassword("encodedPassword");
         user.setRoles(Set.of(role));
         user.setAccountNonExpired(true);
         user.setAccountNonLocked(true);
@@ -61,7 +60,7 @@ class UserDetailsServiceImplTest {
         // 验证
         assertThat(userDetails).isInstanceOf(SecurityUser.class);
         assertThat(userDetails.getUsername()).isEqualTo("testuser");
-        assertThat(userDetails.getPassword()).isEqualTo("encodedPassword");
+        assertThat(userDetails.getPassword()).isEmpty();
 
         // 角色和资源权限
         assertThat(userDetails.getAuthorities())

@@ -11,7 +11,18 @@ SELECT
     u.id AS user_id,
     'LOCAL' AS authentication_provider,
     'PASSWORD' AS authentication_type,
-    JSON_OBJECT('passwordHash', u.password) AS authentication_configuration,
+    JSON_OBJECT(
+        'password', u.password,
+        'password_changed_at', DATE_FORMAT(NOW(), '%Y-%m-%dT%H:%i:%sZ'),
+        'hash_algorithm', 
+            CASE 
+                WHEN u.password LIKE '{bcrypt}%' THEN 'bcrypt'
+                WHEN u.password LIKE '{noop}%' THEN 'noop'
+                ELSE 'unknown'
+            END,
+        'password_version', 1,
+        'created_by', 'complete_migration_password_field.sql'
+    ) AS authentication_configuration,
     TRUE AS is_primary_method,
     TRUE AS is_method_enabled,
     0 AS authentication_priority,

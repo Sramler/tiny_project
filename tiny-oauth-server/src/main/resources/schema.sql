@@ -142,3 +142,42 @@ CREATE TABLE IF NOT EXISTS `user_avatar` (
     KEY `idx_content_hash` (`content_hash`) COMMENT '索引：用于去重查询',
     CONSTRAINT `chk_file_size` CHECK (`file_size` <= 1048576) COMMENT '文件大小限制：最大1MB'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户头像表'; 
+
+-- 创建 HTTP 请求日志表
+CREATE TABLE IF NOT EXISTS `http_request_log` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键，自增ID',
+    `trace_id` CHAR(32) NOT NULL COMMENT '全链路 trace id（十六进制）',
+    `span_id` CHAR(32) DEFAULT NULL COMMENT '当前 span id（可选）',
+    `request_id` CHAR(32) NOT NULL COMMENT '本服务内请求ID（唯一）',
+    `service_name` VARCHAR(64) NOT NULL COMMENT '服务名，如 user-service',
+    `env` VARCHAR(32) NOT NULL COMMENT '环境：dev/test/pre/prod',
+    `module` VARCHAR(64) DEFAULT NULL COMMENT '业务模块/分组，如 order/payment',
+    `user_id` VARCHAR(128) DEFAULT NULL COMMENT '用户ID（若未登录则空）',
+    `client_ip` VARCHAR(45) DEFAULT NULL COMMENT '客户端IP（支持 IPv6）',
+    `host` VARCHAR(128) DEFAULT NULL COMMENT '请求的 Host/域名',
+    `user_agent` VARCHAR(512) DEFAULT NULL COMMENT 'User-Agent（建议截断）',
+    `http_version` VARCHAR(16) DEFAULT NULL COMMENT 'HTTP/1.1, HTTP/2 等',
+    `method` VARCHAR(10) NOT NULL COMMENT 'GET/POST/PUT/DELETE 等',
+    `path_template` VARCHAR(256) NOT NULL COMMENT '路径模板，如 /orders/{id}',
+    `raw_path` VARCHAR(1024) DEFAULT NULL COMMENT '原始请求路径，如 /orders/123?x=1',
+    `query_string` VARCHAR(1024) DEFAULT NULL COMMENT '原始 query string（脱敏/限长）',
+    `request_size` BIGINT DEFAULT NULL COMMENT '请求体大小（字节）',
+    `response_size` BIGINT DEFAULT NULL COMMENT '响应体大小（字节）',
+    `status` SMALLINT DEFAULT NULL COMMENT 'HTTP 状态码',
+    `success` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否成功：1=成功，0=失败',
+    `duration_ms` INT DEFAULT NULL COMMENT '耗时（毫秒）',
+    `error` VARCHAR(512) DEFAULT NULL COMMENT '错误摘要（message），不要存堆栈',
+    `request_body` MEDIUMTEXT DEFAULT NULL COMMENT '请求体（按需开启；脱敏+限长）',
+    `response_body` MEDIUMTEXT DEFAULT NULL COMMENT '响应体（按需开启；脱敏+限长）',
+    `request_at` TIMESTAMP NOT NULL COMMENT '请求发生时间',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '日志写入时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_request_id` (`request_id`),
+    KEY `idx_created_at` (`created_at`),
+    KEY `idx_service_env_created` (`service_name`, `env`, `created_at`),
+    KEY `idx_path_template_created` (`path_template`, `created_at`),
+    KEY `idx_user_created` (`user_id`, `created_at`),
+    KEY `idx_status_created` (`status`, `created_at`),
+    KEY `idx_trace` (`trace_id`),
+    KEY `idx_request_at` (`request_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='HTTP 请求/响应日志（面向数据分析，body 可选，注意脱敏与限长）';

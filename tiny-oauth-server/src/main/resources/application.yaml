@@ -158,6 +158,18 @@ security:
   mfa:
     mode: OPTIONAL # MFA模式: NONE(完全禁用), OPTIONAL(推荐可跳过), REQUIRED(强制必须绑定)
 
+http:
+  request-log:
+    enabled: true
+    include-request-body: true
+    include-response-body: true
+    max-body-length: 1048576
+    excluded-path-prefixes:
+      - /actuator
+      - /dist
+      - /static
+      - /webjars
+
 # 前端页面配置
 # 默认配置为生产环境（forward 到打包后的静态文件）
 # 开发环境请使用 application-dev.yaml 覆盖配置

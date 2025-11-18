@@ -12,6 +12,7 @@ import org.springframework.security.oauth2.server.authorization.settings.ClientS
 import org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat;
 import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -46,8 +47,7 @@ public class RegisteredClientConfig {
         return args -> {
             for (ClientProperties.Client config : properties.getClients()) {
 
-                // 防止重复注册：若已存在同名 clientId，则跳过注册
-                if (repository.findByClientId(config.getClientId()) != null) continue;
+                RegisteredClient existing = repository.findByClientId(config.getClientId());
 
                 // === 构建 Token 设置 ===
                 // 令牌有效期、类型（JWT / Reference）、是否重用 refresh token 等
@@ -70,8 +70,14 @@ public class RegisteredClientConfig {
                         .build();
 
                 // === 构建 RegisteredClient 对象 ===
-                RegisteredClient.Builder builder = RegisteredClient.withId(UUID.randomUUID().toString())
+                String registeredId = existing != null ? existing.getId() : UUID.randomUUID().toString();
+                Instant clientIdIssuedAt = existing != null && existing.getClientIdIssuedAt() != null
+                        ? existing.getClientIdIssuedAt()
+                        : Instant.now();
+
+                RegisteredClient.Builder builder = RegisteredClient.withId(registeredId)
                         .clientId(config.getClientId())                                   // 客户端 ID
+                        .clientIdIssuedAt(clientIdIssuedAt)
                         .clientSecret(config.getClientSecret() != null
                                 ? "{noop}" + config.getClientSecret()                     // {noop} 表示明文，开发环境用
                                 : null)

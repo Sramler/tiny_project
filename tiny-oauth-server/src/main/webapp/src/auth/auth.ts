@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
-import { userManager } from './oidc'
+import { userManager, settings } from './oidc'
 import type { User } from 'oidc-client-ts'
 import { jwtVerify, createRemoteJWKSet } from 'jose'
 
@@ -90,10 +90,23 @@ export const login = async () => {
 }
 
 export const logout = async () => {
-  await userManager.removeUser() // 本地清除 user
+  try {
+    const currentUser = await userManager.getUser()
+    if (currentUser && currentUser.id_token) {
+      await userManager.signoutRedirect({
+        id_token_hint: currentUser.id_token,
+        post_logout_redirect_uri: settings.post_logout_redirect_uri,
+      })
+      return
+    }
+  } catch (error) {
+    console.error('OIDC 注销重定向失败，使用本地回退逻辑:', error)
+  }
+
+  await userManager.removeUser()
   user.value = null
-  loginInProgress = false // 重置登录状态
-  await userManager.signoutRedirect()
+  loginInProgress = false
+  window.location.href = settings.post_logout_redirect_uri
 }
 
 let renewInProgress = false

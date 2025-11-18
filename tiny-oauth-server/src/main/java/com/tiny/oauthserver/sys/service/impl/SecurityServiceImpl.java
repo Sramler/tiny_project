@@ -6,9 +6,15 @@ import com.tiny.oauthserver.sys.model.UserAuthenticationMethod;
 import com.tiny.oauthserver.sys.repository.UserAuthenticationMethodRepository;
 import com.tiny.oauthserver.sys.security.TotpService;
 import com.tiny.oauthserver.sys.service.SecurityService;
+import com.tiny.oauthserver.util.IpUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import jakarta.servlet.http.HttpServletRequest;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
@@ -20,6 +26,8 @@ import java.util.*;
  */
 @Service
 public class SecurityServiceImpl implements SecurityService {
+    private static final Logger logger = LoggerFactory.getLogger(SecurityServiceImpl.class);
+    
     private final UserAuthenticationMethodRepository authenticationMethodRepository;
     private final PasswordEncoder passwordEncoder;
     private final MfaProperties mfaProperties;
@@ -220,6 +228,11 @@ public class SecurityServiceImpl implements SecurityService {
         if (!validateTotpCode(secret, totpCode)) {
             return Map.of("success", false, "error", "验证码错误");
         }
+        
+        // 记录认证方法验证成功的信息
+        UserAuthenticationMethod totpMethod = totpMethodOpt.get();
+        recordAuthenticationMethodVerification(totpMethod);
+        
         return Map.of("success", true, "message", "验证码校验通过");
     }
 
@@ -321,5 +334,38 @@ public class SecurityServiceImpl implements SecurityService {
 
     private String urlEncode(String str) {
         return URLEncoder.encode(str, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 记录认证方法验证成功的信息（最后验证时间和IP）
+     */
+    private void recordAuthenticationMethodVerification(UserAuthenticationMethod method) {
+        try {
+            // 尝试从 RequestContextHolder 获取当前请求
+            ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attributes != null) {
+                HttpServletRequest request = attributes.getRequest();
+                String clientIp = IpUtils.getClientIp(request);
+                
+                method.setLastVerifiedAt(LocalDateTime.now());
+                method.setLastVerifiedIp(clientIp);
+                authenticationMethodRepository.save(method);
+                
+                logger.debug("认证方法 {} (id={}) 验证信息已记录: IP={}, Time={}", 
+                        method.getAuthenticationProvider() + "+" + method.getAuthenticationType(),
+                        method.getId(), clientIp, method.getLastVerifiedAt());
+            } else {
+                // 如果无法获取请求（例如非HTTP请求），只记录时间
+                method.setLastVerifiedAt(LocalDateTime.now());
+                authenticationMethodRepository.save(method);
+                logger.debug("认证方法 {} (id={}) 验证信息已记录: Time={} (无IP信息)", 
+                        method.getAuthenticationProvider() + "+" + method.getAuthenticationType(),
+                        method.getId(), method.getLastVerifiedAt());
+            }
+        } catch (Exception e) {
+            // 记录验证信息失败不应该影响认证流程，只记录日志
+            logger.warn("记录认证方法 {} 验证信息失败: {}", 
+                    method.getAuthenticationProvider() + "+" + method.getAuthenticationType(), e.getMessage());
+        }
     }
 }

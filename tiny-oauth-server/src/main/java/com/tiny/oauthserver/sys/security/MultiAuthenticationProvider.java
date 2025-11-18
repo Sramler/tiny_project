@@ -5,6 +5,7 @@ import com.tiny.oauthserver.sys.model.User;
 import com.tiny.oauthserver.sys.model.UserAuthenticationMethod;
 import com.tiny.oauthserver.sys.repository.UserAuthenticationMethodRepository;
 import com.tiny.oauthserver.sys.repository.UserRepository;
+import com.tiny.oauthserver.util.IpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -16,7 +17,11 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
+import jakarta.servlet.http.HttpServletRequest;
+import java.time.LocalDateTime;
 import java.util.*;
 
 /**
@@ -242,6 +247,8 @@ public class MultiAuthenticationProvider implements AuthenticationProvider {
                 throw new BadCredentialsException(methodType + " 验证失败");
             }
             
+            // 记录认证方法验证成功的信息（在 authenticateFactor 中已记录，这里不需要重复记录）
+            
             MultiFactorAuthenticationToken.AuthenticationFactorType factor = MultiFactorAuthenticationToken.AuthenticationFactorType.from(methodType);
             if (factor != MultiFactorAuthenticationToken.AuthenticationFactorType.UNKNOWN) {
                 completed.add(factor);
@@ -345,6 +352,9 @@ public class MultiAuthenticationProvider implements AuthenticationProvider {
             throw new BadCredentialsException("密码错误");
         }
 
+        // 记录认证方法验证成功的信息
+        recordAuthenticationMethodVerification(method);
+
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getUsername());
 
         // 返回 MultiFactorAuthenticationToken 以携带 provider/type 信息（向后兼容）
@@ -386,6 +396,9 @@ public class MultiAuthenticationProvider implements AuthenticationProvider {
             throw new BadCredentialsException("TOTP 验证失败");
         }
 
+        // 记录认证方法验证成功的信息
+        recordAuthenticationMethodVerification(method);
+
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getUsername());
 
         MultiFactorAuthenticationToken.AuthenticationFactorType initialFactor = MultiFactorAuthenticationToken.AuthenticationFactorType.from(type);
@@ -398,6 +411,39 @@ public class MultiAuthenticationProvider implements AuthenticationProvider {
             );
     }
 
+
+    /**
+     * 记录认证方法验证成功的信息（最后验证时间和IP）
+     */
+    private void recordAuthenticationMethodVerification(UserAuthenticationMethod method) {
+        try {
+            // 尝试从 RequestContextHolder 获取当前请求
+            ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attributes != null) {
+                HttpServletRequest request = attributes.getRequest();
+                String clientIp = IpUtils.getClientIp(request);
+                
+                method.setLastVerifiedAt(LocalDateTime.now());
+                method.setLastVerifiedIp(clientIp);
+                authenticationMethodRepository.save(method);
+                
+                logger.debug("认证方法 {} (id={}) 验证信息已记录: IP={}, Time={}", 
+                        method.getAuthenticationProvider() + "+" + method.getAuthenticationType(),
+                        method.getId(), clientIp, method.getLastVerifiedAt());
+            } else {
+                // 如果无法获取请求（例如非HTTP请求），只记录时间
+                method.setLastVerifiedAt(LocalDateTime.now());
+                authenticationMethodRepository.save(method);
+                logger.debug("认证方法 {} (id={}) 验证信息已记录: Time={} (无IP信息)", 
+                        method.getAuthenticationProvider() + "+" + method.getAuthenticationType(),
+                        method.getId(), method.getLastVerifiedAt());
+            }
+        } catch (Exception e) {
+            // 记录验证信息失败不应该影响认证流程，只记录日志
+            logger.warn("记录认证方法 {} 验证信息失败: {}", 
+                    method.getAuthenticationProvider() + "+" + method.getAuthenticationType(), e.getMessage());
+        }
+    }
 
     /**
      * 简单掩码函数（避免在日志中泄露敏感字符串）

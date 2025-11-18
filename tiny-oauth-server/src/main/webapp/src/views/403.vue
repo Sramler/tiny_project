@@ -1,28 +1,147 @@
 <template>
   <div class="error-page">
-    <h1>403</h1>
-    <p>抱歉，您没有权限访问该页面。</p>
+    <a-card class="error-card" :bordered="false">
+      <div class="error-content">
+        <div class="error-icon-wrapper">
+          <StopOutlined class="error-icon" />
+        </div>
+        <h1 class="error-code">403</h1>
+        <h2 class="error-title">访问被拒绝</h2>
+        <p class="error-description">抱歉，您没有权限访问该页面。如有疑问，请联系系统管理员。</p>
+        <div class="error-actions">
+          <a-button type="primary" size="large" @click="goHome">
+            <template #icon>
+              <HomeOutlined />
+            </template>
+            返回首页
+          </a-button>
+        </div>
+      </div>
+    </a-card>
   </div>
 </template>
 
 <script setup lang="ts">
-// 403 无权限页面，无需特殊逻辑
+import { useRouter } from 'vue-router'
+import { StopOutlined, HomeOutlined } from '@ant-design/icons-vue'
+
+const router = useRouter()
+
+const goHome = () => {
+  // 触发关闭当前标签页事件
+  window.dispatchEvent(new CustomEvent('close-current-tab'))
+  // 跳转到首页
+  router.push('/')
+}
 </script>
 
 <style scoped>
 .error-page {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 60vh;
+  min-height: calc(100vh - 200px);
+  padding: 24px;
+  background: #f0f2f5;
+}
+
+.error-card {
+  max-width: 600px;
+  width: 100%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+}
+
+.error-content {
+  text-align: center;
+  padding: 40px 24px;
+}
+
+.error-icon-wrapper {
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: center;
+}
+
+.error-icon {
+  font-size: 80px;
   color: #ff4d4f;
+  animation: float 3s ease-in-out infinite;
 }
-h1 {
-  font-size: 72px;
-  margin-bottom: 16px;
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
 }
-p {
-  font-size: 20px;
+
+.error-code {
+  font-size: 96px;
+  font-weight: 700;
+  line-height: 1;
+  margin: 0 0 16px;
+  background: linear-gradient(135deg, #ff4d4f 0%, #ff7875 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.error-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.85);
+  margin: 0 0 16px;
+}
+
+.error-description {
+  font-size: 16px;
+  color: rgba(0, 0, 0, 0.65);
+  line-height: 1.6;
+  margin: 0 0 32px;
+}
+
+.error-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+:deep(.ant-btn-primary) {
+  height: 44px;
+  padding: 0 32px;
+  font-size: 16px;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(255, 77, 79, 0.2);
+}
+
+:deep(.ant-btn-primary:hover) {
+  box-shadow: 0 4px 8px rgba(255, 77, 79, 0.3);
+  transform: translateY(-1px);
+  transition: all 0.3s ease;
+}
+
+@media (max-width: 768px) {
+  .error-code {
+    font-size: 64px;
+  }
+
+  .error-icon {
+    font-size: 60px;
+  }
+
+  .error-title {
+    font-size: 20px;
+  }
+
+  .error-description {
+    font-size: 14px;
+  }
+
+  .error-content {
+    padding: 32px 16px;
+  }
 }
 </style> 

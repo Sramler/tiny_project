@@ -232,12 +232,23 @@ function calcOverflowTabs() {
     return right > containerRight || left < containerLeft
   })
 }
+// 监听关闭当前标签页事件
+const handleCloseCurrentTab = () => {
+  const currentIdx = activeTabIdx.value
+  // 如果当前标签不是首页（'/'），则关闭它
+  if (currentIdx >= 0 && tabs.value[currentIdx].path !== '/') {
+    closeTab(currentIdx)
+  }
+}
+
 // 监听窗口变化和标签变化
 onMounted(() => {
   window.addEventListener('resize', calcOverflowTabs)
   if (tabScrollRef.value) {
     tabScrollRef.value.addEventListener('scroll', calcOverflowTabs)
   }
+  // 监听关闭当前标签页事件
+  window.addEventListener('close-current-tab', handleCloseCurrentTab)
   watch([tabs, activePath], async () => {
     await nextTick()
     calcOverflowTabs()
@@ -248,6 +259,8 @@ onBeforeUnmount(() => {
   if (tabScrollRef.value) {
     tabScrollRef.value.removeEventListener('scroll', calcOverflowTabs)
   }
+  // 移除关闭当前标签页事件监听
+  window.removeEventListener('close-current-tab', handleCloseCurrentTab)
 })
 // 溢出菜单显示/隐藏
 function toggleOverflowMenu(e: MouseEvent) {

@@ -43,7 +43,8 @@ public class DefaultSecurityConfig {
     @Order(2)
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http,
                                                           AuthenticationProvider authenticationProvider,
-                                                          CustomLoginSuccessHandler customLoginSuccessHandler)
+                                                          CustomLoginSuccessHandler customLoginSuccessHandler,
+                                                          CustomLoginFailureHandler customLoginFailureHandler)
             throws Exception {
         http
                 .authorizeHttpRequests(authorize -> authorize
@@ -63,7 +64,7 @@ public class DefaultSecurityConfig {
                         .loginPage("/login")
                         .loginProcessingUrl("/login")
                         .successHandler(customLoginSuccessHandler)
-                        .failureUrl("/login?error=true")
+                        .failureHandler(customLoginFailureHandler)
                         .authenticationDetailsSource(customAuthenticationDetailsSource())
                         .permitAll()
                 )
@@ -103,7 +104,14 @@ public class DefaultSecurityConfig {
     public CustomLoginSuccessHandler customLoginSuccessHandler(SecurityService securityService,
                                                                UserRepository userRepository,
                                                                FrontendProperties frontendProperties,
-                                                               MultiFactorAuthenticationSessionManager sessionManager) {
-        return new CustomLoginSuccessHandler(securityService, userRepository, frontendProperties, sessionManager);
+                                                               MultiFactorAuthenticationSessionManager sessionManager,
+                                                               com.tiny.oauthserver.sys.service.AuthenticationAuditService auditService) {
+        return new CustomLoginSuccessHandler(securityService, userRepository, frontendProperties, sessionManager, auditService);
+    }
+
+    @Bean
+    public CustomLoginFailureHandler customLoginFailureHandler(UserRepository userRepository,
+                                                               com.tiny.oauthserver.sys.service.AuthenticationAuditService auditService) {
+        return new CustomLoginFailureHandler(userRepository, auditService);
     }
 }

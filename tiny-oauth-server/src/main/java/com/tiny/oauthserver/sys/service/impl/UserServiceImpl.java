@@ -149,6 +149,14 @@ public class UserServiceImpl implements UserService {
         // 更新基本信息
         existingUser.setUsername(userDto.getUsername());
         existingUser.setNickname(userDto.getNickname());
+        // 更新邮箱（允许设置为null来清空）
+        existingUser.setEmail(userDto.getEmail() != null && !userDto.getEmail().trim().isEmpty() 
+            ? userDto.getEmail().trim() 
+            : null);
+        // 更新手机号（允许设置为null来清空）
+        existingUser.setPhone(userDto.getPhone() != null && !userDto.getPhone().trim().isEmpty() 
+            ? userDto.getPhone().trim() 
+            : null);
         existingUser.setEnabled(userDto.getEnabled());
         existingUser.setAccountNonExpired(userDto.getAccountNonExpired());
         existingUser.setAccountNonLocked(userDto.getAccountNonLocked());

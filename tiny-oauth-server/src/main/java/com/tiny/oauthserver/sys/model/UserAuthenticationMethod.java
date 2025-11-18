@@ -64,6 +64,12 @@ public class UserAuthenticationMethod implements Serializable {
     @Column(name = "authentication_priority")
     private Integer authenticationPriority = 0;
 
+    @Column(name = "last_verified_at")
+    private LocalDateTime lastVerifiedAt;
+
+    @Column(name = "last_verified_ip", length = 50)
+    private String lastVerifiedIp;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -145,6 +151,22 @@ public class UserAuthenticationMethod implements Serializable {
 
     public void setAuthenticationPriority(Integer authenticationPriority) {
         this.authenticationPriority = authenticationPriority;
+    }
+
+    public LocalDateTime getLastVerifiedAt() {
+        return lastVerifiedAt;
+    }
+
+    public void setLastVerifiedAt(LocalDateTime lastVerifiedAt) {
+        this.lastVerifiedAt = lastVerifiedAt;
+    }
+
+    public String getLastVerifiedIp() {
+        return lastVerifiedIp;
+    }
+
+    public void setLastVerifiedIp(String lastVerifiedIp) {
+        this.lastVerifiedIp = lastVerifiedIp;
     }
 
     public LocalDateTime getCreatedAt() {

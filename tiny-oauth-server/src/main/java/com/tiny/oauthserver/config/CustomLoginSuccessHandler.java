@@ -4,7 +4,10 @@ import com.tiny.oauthserver.sys.model.User;
 import com.tiny.oauthserver.sys.repository.UserRepository;
 import com.tiny.oauthserver.sys.security.MultiFactorAuthenticationToken;
 import com.tiny.oauthserver.sys.security.MultiFactorAuthenticationSessionManager;
+import com.tiny.oauthserver.sys.service.AuthenticationAuditService;
 import com.tiny.oauthserver.sys.service.SecurityService;
+import com.tiny.oauthserver.util.IpUtils;
+import com.tiny.oauthserver.util.DeviceUtils;
 import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,6 +23,7 @@ import org.springframework.security.web.savedrequest.SavedRequest;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.Map;
 
 public class CustomLoginSuccessHandler implements AuthenticationSuccessHandler {
@@ -30,16 +34,19 @@ public class CustomLoginSuccessHandler implements AuthenticationSuccessHandler {
     private final UserRepository userRepository;
     private final FrontendProperties frontendProperties;
     private final MultiFactorAuthenticationSessionManager sessionManager;
+    private final AuthenticationAuditService auditService;
     private final RequestCache requestCache = new HttpSessionRequestCache();
 
     public CustomLoginSuccessHandler(SecurityService securityService, 
                                     UserRepository userRepository,
                                     FrontendProperties frontendProperties,
-                                    MultiFactorAuthenticationSessionManager sessionManager) {
+                                    MultiFactorAuthenticationSessionManager sessionManager,
+                                    AuthenticationAuditService auditService) {
         this.securityService = securityService;
         this.userRepository = userRepository;
         this.frontendProperties = frontendProperties;
         this.sessionManager = sessionManager;
+        this.auditService = auditService;
     }
 
     @Override
@@ -78,9 +85,17 @@ public class CustomLoginSuccessHandler implements AuthenticationSuccessHandler {
         }
         String encodedUrl = URLEncoder.encode(intendedUrl, StandardCharsets.UTF_8);
 
+        // 提取认证提供者和因子类型
+        String authProvider = extractAuthenticationProvider(authentication);
+        String authFactor = extractAuthenticationFactor(authentication);
+
         // 1️⃣ 完全关闭 MFA，直接跳转
         if (disableMfa) {
             logger.debug("用户 {} 已关闭 MFA，直接跳转 {}", user.getUsername(), intendedUrl);
+            // 记录登录IP和登录时间
+            recordLoginInfo(user, request);
+            // 记录登录成功审计
+            auditService.recordLoginSuccess(user.getUsername(), user.getId(), authProvider, authFactor, request);
             sessionManager.promoteToFullyAuthenticated(user, request, response);
             response.sendRedirect(intendedUrl);
             return;
@@ -116,6 +131,11 @@ public class CustomLoginSuccessHandler implements AuthenticationSuccessHandler {
         }
 
         // 5️⃣ 已完成所有认证或无需 MFA → 升级为完全认证并跳转目标页面
+        // 记录登录IP和登录时间
+        recordLoginInfo(user, request);
+        // 记录登录成功审计
+        auditService.recordLoginSuccess(user.getUsername(), user.getId(), authProvider, authFactor, request);
+        
         sessionManager.promoteToFullyAuthenticated(user, request, response);
         
         if (intendedUrl.startsWith("/") && !intendedUrl.startsWith("/api/") && !intendedUrl.startsWith("/oauth2/")) {
@@ -170,6 +190,66 @@ public class CustomLoginSuccessHandler implements AuthenticationSuccessHandler {
             dispatcher.forward(request, response);
         } else {
             response.sendRedirect(url);
+        }
+    }
+
+    /**
+     * 从 Authentication 对象中提取认证提供者
+     */
+    private String extractAuthenticationProvider(Authentication authentication) {
+        if (authentication instanceof MultiFactorAuthenticationToken mfaToken) {
+            MultiFactorAuthenticationToken.AuthenticationProviderType provider = mfaToken.getProvider();
+            return provider != null && provider != MultiFactorAuthenticationToken.AuthenticationProviderType.UNKNOWN
+                ? provider.name() 
+                : "LOCAL";
+        } else if (authentication.getDetails() instanceof com.tiny.oauthserver.config.CustomWebAuthenticationDetailsSource.CustomWebAuthenticationDetails details) {
+            return details.getAuthenticationProvider() != null ? details.getAuthenticationProvider() : "LOCAL";
+        }
+        return "LOCAL"; // 默认值
+    }
+
+    /**
+     * 从 Authentication 对象中提取认证因子类型
+     */
+    private String extractAuthenticationFactor(Authentication authentication) {
+        if (authentication instanceof MultiFactorAuthenticationToken mfaToken) {
+            // 如果已完成多个因子，返回主要因子或组合因子
+            if (mfaToken.hasCompletedFactor(MultiFactorAuthenticationToken.AuthenticationFactorType.TOTP) &&
+                mfaToken.hasCompletedFactor(MultiFactorAuthenticationToken.AuthenticationFactorType.PASSWORD)) {
+                return "MFA"; // 多因素认证
+            } else if (mfaToken.hasCompletedFactor(MultiFactorAuthenticationToken.AuthenticationFactorType.TOTP)) {
+                return "TOTP";
+            } else if (mfaToken.hasCompletedFactor(MultiFactorAuthenticationToken.AuthenticationFactorType.PASSWORD)) {
+                return "PASSWORD";
+            }
+            return mfaToken.getAuthenticationType() != null ? mfaToken.getAuthenticationType() : "PASSWORD";
+        } else if (authentication.getDetails() instanceof com.tiny.oauthserver.config.CustomWebAuthenticationDetailsSource.CustomWebAuthenticationDetails details) {
+            return details.getAuthenticationType() != null ? details.getAuthenticationType() : "PASSWORD";
+        }
+        return "PASSWORD"; // 默认值
+    }
+
+    /**
+     * 记录用户登录信息（IP地址、登录时间、设备信息）
+     * 登录成功时重置失败登录次数
+     */
+    private void recordLoginInfo(User user, HttpServletRequest request) {
+        try {
+            String clientIp = IpUtils.getClientIp(request);
+            String deviceInfo = DeviceUtils.getDeviceInfo(request);
+            
+            user.setLastLoginIp(clientIp);
+            user.setLastLoginAt(LocalDateTime.now());
+            user.setLastLoginDevice(deviceInfo);
+            // 登录成功，重置失败登录次数
+            user.setFailedLoginCount(0);
+            
+            userRepository.save(user);
+            logger.debug("用户 {} 登录信息已记录: IP={}, Device={}, Time={}", 
+                    user.getUsername(), clientIp, deviceInfo, user.getLastLoginAt());
+        } catch (Exception e) {
+            // 记录登录信息失败不应该影响登录流程，只记录日志
+            logger.warn("记录用户 {} 登录信息失败: {}", user.getUsername(), e.getMessage(), e);
         }
     }
 }

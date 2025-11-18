@@ -7,7 +7,10 @@ import com.tiny.oauthserver.sys.repository.UserRepository;
 import com.tiny.oauthserver.sys.repository.UserAuthenticationMethodRepository;
 import com.tiny.oauthserver.sys.security.MultiFactorAuthenticationSessionManager;
 import com.tiny.oauthserver.sys.security.MultiFactorAuthenticationToken;
+import com.tiny.oauthserver.sys.service.AuthenticationAuditService;
 import com.tiny.oauthserver.sys.service.SecurityService;
+import com.tiny.oauthserver.util.IpUtils;
+import com.tiny.oauthserver.util.DeviceUtils;
 import com.tiny.oauthserver.util.QrCodeUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -36,18 +39,21 @@ public class SecurityController {
     private final UserAuthenticationMethodRepository authenticationMethodRepository;
     private final FrontendProperties frontendProperties;
     private final MultiFactorAuthenticationSessionManager sessionManager;
+    private final AuthenticationAuditService auditService;
 
     @Autowired
     public SecurityController(UserRepository userRepository,
                              SecurityService securityService,
                              UserAuthenticationMethodRepository authenticationMethodRepository,
                              FrontendProperties frontendProperties,
-                             MultiFactorAuthenticationSessionManager sessionManager) {
+                             MultiFactorAuthenticationSessionManager sessionManager,
+                             AuthenticationAuditService auditService) {
         this.userRepository = userRepository;
         this.securityService = securityService;
         this.authenticationMethodRepository = authenticationMethodRepository;
         this.frontendProperties = frontendProperties;
         this.sessionManager = sessionManager;
+        this.auditService = auditService;
     }
 
     /** 查询当前用户的安全状态 */
@@ -96,7 +102,8 @@ public class SecurityController {
      */
     @PostMapping("/totp/unbind")
     @ResponseBody
-    public ResponseEntity<Map<String, Object>> unbindTotp(@RequestBody Map<String, String> req) {
+    public ResponseEntity<Map<String, Object>> unbindTotp(@RequestBody Map<String, String> req,
+                                                          HttpServletRequest request) {
         User user = getCurrentUser();
         if (user == null) return ResponseEntity.status(401).body(Map.of("success", false, "error", "未登录"));
 
@@ -123,7 +130,13 @@ public class SecurityController {
         if (totpCode == null || totpCode.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("success", false, "error", "缺少TOTP验证码"));
         }
-        return ResponseEntity.ok(securityService.unbindTotp(user, plainPassword, totpCode));
+        
+        Map<String, Object> result = securityService.unbindTotp(user, plainPassword, totpCode);
+        if (Boolean.TRUE.equals(result.get("success"))) {
+            // 记录MFA解绑审计
+            auditService.recordMfaUnbind(user.getUsername(), user.getId(), "TOTP", request);
+        }
+        return ResponseEntity.ok(result);
     }
 
     /** step-up、敏感操作TOTP校验 */
@@ -202,6 +215,10 @@ public class SecurityController {
 
         Map<String, Object> result = securityService.bindTotp(user, password, totpCode);
         if(Boolean.TRUE.equals(result.get("success"))) {
+            // 记录登录IP和登录时间
+            recordLoginInfo(user, request);
+            // 记录MFA绑定审计
+            auditService.recordMfaBind(user.getUsername(), user.getId(), "TOTP", request);
             promoteToFullyAuthenticated(user, request, response);
             return buildRedirectUrl(redirect);
         } else {
@@ -258,6 +275,10 @@ public class SecurityController {
 
         Map<String, Object> result = securityService.checkTotp(user, totpCode);
         if(Boolean.TRUE.equals(result.get("success"))) {
+            // 记录登录IP和登录时间
+            recordLoginInfo(user, request);
+            // 记录登录成功审计（TOTP验证完成，完全登录）
+            auditService.recordLoginSuccess(user.getUsername(), user.getId(), "LOCAL", "MFA", request);
             promoteToFullyAuthenticated(user, request, response);
             return buildRedirectUrl(redirect);
         } else {
@@ -409,5 +430,28 @@ public class SecurityController {
                 || redirect.startsWith("/error")
                 || redirect.startsWith("/actuator")
                 || redirect.startsWith("/self/security/status");
+    }
+
+    /**
+     * 记录用户登录信息（IP地址、登录时间、设备信息）
+     * 登录成功时重置失败登录次数
+     */
+    private void recordLoginInfo(User user, HttpServletRequest request) {
+        try {
+            String clientIp = IpUtils.getClientIp(request);
+            String deviceInfo = DeviceUtils.getDeviceInfo(request);
+            
+            user.setLastLoginIp(clientIp);
+            user.setLastLoginAt(java.time.LocalDateTime.now());
+            user.setLastLoginDevice(deviceInfo);
+            // 登录成功，重置失败登录次数
+            user.setFailedLoginCount(0);
+            
+            userRepository.save(user);
+        } catch (Exception e) {
+            // 记录登录信息失败不应该影响登录流程，只记录日志
+            org.slf4j.LoggerFactory.getLogger(SecurityController.class)
+                .warn("记录用户 {} 登录信息失败: {}", user.getUsername(), e.getMessage());
+        }
     }
 }

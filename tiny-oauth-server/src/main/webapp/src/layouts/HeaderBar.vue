@@ -7,13 +7,15 @@
       <div class="left"></div>
       <!-- 右侧用户信息区域 -->
       <div class="right">
-        <!-- 用户信息下拉菜单 -->
         <div class="dropdown" ref="dropdownRef" @mouseenter="showDropdown" @mouseleave="hideDropdown">
           <div class="user-info">
             <!-- 用户头像 -->
-            <img class="avatar" src="https://i.pravatar.cc/40" alt="avatar" />
+            <img v-if="avatarUrl" class="avatar" :src="avatarUrl" alt="avatar" @error="handleAvatarError" />
+            <div v-else class="avatar-icon" :style="avatarStyle">
+              <UserOutlined />
+            </div>
             <!-- 用户名和下拉箭头 -->
-            <span class="username">管理员</span>
+            <span class="username">{{ username }}</span>
             <DownOutlined class="dropdown-icon" :class="{ 'rotated': dropdownVisible }" />
           </div>
           <!-- 下拉菜单内容 -->
@@ -42,9 +44,11 @@
 <script setup lang="ts">
 // 引入 Ant Design Icons
 import { UserOutlined, SettingOutlined, LogoutOutlined, DownOutlined } from '@ant-design/icons-vue'
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/auth/auth'
+import { userApi } from '@/api/process'
+import { generateAvatarStyleObject } from '@/utils/avatar'
 
 // 禁用自动属性继承，手动控制属性绑定
 defineOptions({
@@ -55,18 +59,30 @@ defineOptions({
 const router = useRouter()
 const { logout } = useAuth()
 
+// 用户信息
+const username = ref('管理员')
+const avatarUrl = ref<string>('')
+const userId = ref<string>('')
+
 // 下拉菜单状态
 const dropdownVisible = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
 
 // 计算下拉菜单位置
 const dropdownStyle = computed(() => {
-  if (!dropdownRef.value) return {}
+  if (!dropdownRef.value || !dropdownVisible.value) return {}
 
-  const rect = dropdownRef.value.getBoundingClientRect()
-  return {
-    top: rect.bottom + 4 + 'px',
-    right: window.innerWidth - rect.right + 'px'
+  try {
+    const rect = dropdownRef.value.getBoundingClientRect()
+    if (!rect) return {}
+
+    return {
+      top: rect.bottom + 4 + 'px',
+      right: window.innerWidth - rect.right + 'px'
+    }
+  } catch (error) {
+    console.warn('计算下拉菜单位置失败:', error)
+    return {}
   }
 })
 
@@ -108,6 +124,64 @@ const handleMenuClick = async (action: string) => {
       console.warn('未知的菜单操作:', action)
   }
 }
+
+// 加载用户信息
+const loadUserInfo = async () => {
+  try {
+    const data = await userApi.getCurrentUser()
+    username.value = data.nickname || data.username || '用户'
+    userId.value = data.id
+    // 更新头像URL
+    if (userId.value) {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:9000'
+      const baseUrl = apiBaseUrl.endsWith('/') ? apiBaseUrl.slice(0, -1) : apiBaseUrl
+      avatarUrl.value = `${baseUrl}/sys/users/${userId.value}/avatar?t=${Date.now()}`
+    }
+  } catch (error) {
+    console.error('加载用户信息失败:', error)
+  }
+}
+
+// 处理头像加载错误
+const handleAvatarError = () => {
+  // 头像加载失败时，使用默认图标和随机颜色
+  avatarUrl.value = ''
+}
+
+// 计算头像样式（当没有头像时使用随机颜色）
+const avatarStyle = computed(() => {
+  if (avatarUrl.value) {
+    // 有头像时不使用样式
+    return {}
+  }
+  // 没有头像时使用基于用户ID的随机颜色
+  return generateAvatarStyleObject(userId.value, username.value)
+})
+
+// 监听头像上传成功事件
+const handleAvatarUploaded = (event: Event) => {
+  const customEvent = event as CustomEvent
+  // 如果事件中包含 userId，且与当前用户ID匹配，则更新头像
+  if (!customEvent.detail?.userId || customEvent.detail.userId === userId.value) {
+    // 重新加载头像（添加时间戳避免缓存）
+    if (userId.value) {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:9000'
+      const baseUrl = apiBaseUrl.endsWith('/') ? apiBaseUrl.slice(0, -1) : apiBaseUrl
+      avatarUrl.value = `${baseUrl}/sys/users/${userId.value}/avatar?t=${Date.now()}`
+    }
+  }
+}
+
+// 组件挂载时加载用户信息和监听事件
+onMounted(() => {
+  loadUserInfo()
+  window.addEventListener('avatar-uploaded', handleAvatarUploaded)
+})
+
+// 组件卸载时移除事件监听
+onUnmounted(() => {
+  window.removeEventListener('avatar-uploaded', handleAvatarUploaded)
+})
 </script>
 
 <style scoped>
@@ -186,6 +260,21 @@ const handleMenuClick = async (action: string) => {
   border-radius: 50%;
   margin-right: 8px;
   flex-shrink: 0;
+  object-fit: cover;
+}
+
+.avatar-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  margin-right: 8px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 14px;
+  /* 背景色由 avatarStyle 动态设置 */
 }
 
 .username {

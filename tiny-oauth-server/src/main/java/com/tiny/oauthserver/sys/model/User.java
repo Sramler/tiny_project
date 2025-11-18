@@ -42,6 +42,24 @@ public class User implements Serializable {
     
     @Column(name = "last_login_at")
     private LocalDateTime lastLoginAt;
+    
+    @Column(name = "last_login_ip", length = 50)
+    private String lastLoginIp;
+    
+    @Column(length = 100)
+    private String email;
+    
+    @Column(length = 20)
+    private String phone;
+    
+    @Column(name = "last_login_device", length = 200)
+    private String lastLoginDevice;
+    
+    @Column(name = "failed_login_count", nullable = false)
+    private Integer failedLoginCount = 0;
+    
+    @Column(name = "last_failed_login_at")
+    private LocalDateTime lastFailedLoginAt;
 
     // === UserDetails 接口实现 ===
 
@@ -128,5 +146,53 @@ public class User implements Serializable {
 
     public void setLastLoginAt(LocalDateTime lastLoginAt) {
         this.lastLoginAt = lastLoginAt;
+    }
+
+    public String getLastLoginIp() {
+        return lastLoginIp;
+    }
+
+    public void setLastLoginIp(String lastLoginIp) {
+        this.lastLoginIp = lastLoginIp;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public String getLastLoginDevice() {
+        return lastLoginDevice;
+    }
+
+    public void setLastLoginDevice(String lastLoginDevice) {
+        this.lastLoginDevice = lastLoginDevice;
+    }
+
+    public Integer getFailedLoginCount() {
+        return failedLoginCount;
+    }
+
+    public void setFailedLoginCount(Integer failedLoginCount) {
+        this.failedLoginCount = failedLoginCount;
+    }
+
+    public LocalDateTime getLastFailedLoginAt() {
+        return lastFailedLoginAt;
+    }
+
+    public void setLastFailedLoginAt(LocalDateTime lastFailedLoginAt) {
+        this.lastFailedLoginAt = lastFailedLoginAt;
     }
 }

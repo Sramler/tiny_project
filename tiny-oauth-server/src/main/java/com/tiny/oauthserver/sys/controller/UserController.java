@@ -1,27 +1,42 @@
 package com.tiny.oauthserver.sys.controller;
 
 import com.tiny.oauthserver.sys.model.*;
+import com.tiny.oauthserver.sys.repository.UserAuthenticationAuditRepository;
+import com.tiny.oauthserver.sys.service.AvatarService;
 import com.tiny.oauthserver.sys.service.UserService;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import java.io.ByteArrayInputStream;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/sys/users")
 public class UserController {
     
     private final UserService userService;
+    private final UserAuthenticationAuditRepository auditRepository;
+    private final AvatarService avatarService;
     
-    public UserController(UserService userService) {
+    public UserController(UserService userService, 
+                         UserAuthenticationAuditRepository auditRepository,
+                         AvatarService avatarService) {
         this.userService = userService;
+        this.auditRepository = auditRepository;
+        this.avatarService = avatarService;
     }
 
     @GetMapping
@@ -55,12 +70,34 @@ public class UserController {
 
             String username = authentication.getName();
             return userService.findByUsername(username)
-                .map(user -> ResponseEntity.<Map<String, Object>>ok(Map.of(
-                    "id", user.getId().toString(),
-                    "username", user.getUsername(),
-                    "nickname", user.getNickname() != null ? user.getNickname() : ""
-                )))
-                .orElse(ResponseEntity.<Map<String, Object>>status(404).body(Map.of(
+                .map(user -> {
+                    // 返回完整的用户信息，包括所有状态字段
+                    Map<String, Object> userInfo = new java.util.HashMap<>();
+                    userInfo.put("id", user.getId().toString());
+                    userInfo.put("username", user.getUsername());
+                    userInfo.put("nickname", user.getNickname() != null ? user.getNickname() : "");
+                    userInfo.put("enabled", user.isEnabled());
+                    userInfo.put("accountNonExpired", user.isAccountNonExpired());
+                    userInfo.put("accountNonLocked", user.isAccountNonLocked());
+                    userInfo.put("credentialsNonExpired", user.isCredentialsNonExpired());
+                    userInfo.put("email", user.getEmail() != null ? user.getEmail() : "");
+                    userInfo.put("phone", user.getPhone() != null ? user.getPhone() : "");
+                    if (user.getLastLoginAt() != null) {
+                        userInfo.put("lastLoginAt", user.getLastLoginAt().toString());
+                    }
+                    if (user.getLastLoginIp() != null) {
+                        userInfo.put("lastLoginIp", user.getLastLoginIp());
+                    }
+                    if (user.getLastLoginDevice() != null) {
+                        userInfo.put("lastLoginDevice", user.getLastLoginDevice());
+                    }
+                    userInfo.put("failedLoginCount", user.getFailedLoginCount() != null ? user.getFailedLoginCount() : 0);
+                    if (user.getLastFailedLoginAt() != null) {
+                        userInfo.put("lastFailedLoginAt", user.getLastFailedLoginAt().toString());
+                    }
+                    return ResponseEntity.ok(userInfo);
+                })
+                .orElse(ResponseEntity.status(404).body(Map.of(
                     "success", false,
                     "error", "用户不存在"
                 )));
@@ -152,6 +189,264 @@ public class UserController {
             return ResponseEntity.ok(Map.of("success", true, "message", "用户角色已更新"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("success", false, "message", e.getMessage()));
+        }
+    }
+
+    /**
+     * 获取当前用户的登录历史（认证审计记录）
+     */
+    @GetMapping("/current/login-history")
+    public ResponseEntity<Map<String, Object>> getCurrentUserLoginHistory(
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(401).body(Map.of(
+                    "success", false,
+                    "error", "用户未认证"
+                ));
+            }
+
+            String username = authentication.getName();
+            return userService.findByUsername(username)
+                .<ResponseEntity<Map<String, Object>>>map(user -> {
+                    // 查询登录事件（LOGIN 类型）
+                    var auditPage = auditRepository.findByUserIdAndEventTypeOrderByCreatedAtDesc(
+                        user.getId(), "LOGIN", pageable);
+                    
+                    // 转换为前端需要的格式
+                    List<Map<String, Object>> historyList = auditPage.getContent().stream()
+                        .map(audit -> {
+                            Map<String, Object> record = new java.util.HashMap<>();
+                            record.put("id", audit.getId());
+                            record.put("eventType", audit.getEventType());
+                            record.put("success", audit.getSuccess());
+                            record.put("authenticationProvider", audit.getAuthenticationProvider() != null ? audit.getAuthenticationProvider() : "");
+                            record.put("authenticationFactor", audit.getAuthenticationFactor() != null ? audit.getAuthenticationFactor() : "");
+                            record.put("ipAddress", audit.getIpAddress() != null ? audit.getIpAddress() : "");
+                            record.put("userAgent", audit.getUserAgent() != null ? audit.getUserAgent() : "");
+                            record.put("createdAt", audit.getCreatedAt().toString());
+                            return record;
+                        })
+                        .collect(Collectors.toList());
+                    
+                    Map<String, Object> result = new java.util.HashMap<>();
+                    result.put("success", true);
+                    result.put("content", historyList);
+                    result.put("totalElements", auditPage.getTotalElements());
+                    result.put("totalPages", auditPage.getTotalPages());
+                    result.put("number", auditPage.getNumber());
+                    result.put("size", auditPage.getSize());
+                    return ResponseEntity.ok(result);
+                })
+                .orElse(ResponseEntity.status(404).body(Map.of(
+                    "success", false,
+                    "error", "用户不存在"
+                )));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of(
+                "success", false,
+                "error", e.getMessage() != null ? e.getMessage() : "获取登录历史失败"
+                ));
+        }
+    }
+
+    /**
+     * 上传当前用户头像
+     */
+    @PostMapping("/current/avatar")
+    public ResponseEntity<Map<String, Object>> uploadCurrentUserAvatar(@RequestParam("file") MultipartFile file) {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(401).body(Map.of(
+                    "success", false,
+                    "error", "用户未认证"
+                ));
+            }
+
+            String username = authentication.getName();
+            return userService.findByUsername(username)
+                .<ResponseEntity<Map<String, Object>>>map(user -> {
+                    try {
+                        // 验证文件
+                        if (file.isEmpty()) {
+                            Map<String, Object> errorBody = Map.of(
+                                "success", false,
+                                "error", "文件不能为空"
+                            );
+                            return ResponseEntity.badRequest().body(errorBody);
+                        }
+
+                        // 上传头像
+                        boolean success = avatarService.uploadAvatar(
+                            user.getId(),
+                            file.getInputStream(),
+                            file.getContentType(),
+                            file.getOriginalFilename(),
+                            file.getSize()
+                        );
+
+                        if (success) {
+                            Map<String, Object> successBody = Map.of(
+                                "success", true,
+                                "message", "头像上传成功"
+                            );
+                            return ResponseEntity.ok(successBody);
+                        } else {
+                            Map<String, Object> errorBody = Map.of(
+                                "success", false,
+                                "error", "头像上传失败"
+                            );
+                            return ResponseEntity.badRequest().body(errorBody);
+                        }
+                    } catch (IllegalArgumentException e) {
+                        Map<String, Object> errorBody = Map.of(
+                            "success", false,
+                            "error", e.getMessage()
+                        );
+                        return ResponseEntity.badRequest().body(errorBody);
+                    } catch (Exception e) {
+                        Map<String, Object> errorBody = Map.of(
+                            "success", false,
+                            "error", "头像上传失败: " + e.getMessage()
+                        );
+                        return ResponseEntity.status(500).body(errorBody);
+                    }
+                })
+                .orElse(ResponseEntity.status(404).body(Map.of(
+                    "success", false,
+                    "error", "用户不存在"
+                )));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of(
+                "success", false,
+                "error", "头像上传失败: " + e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * 获取用户头像（支持缓存和ETag）
+     */
+    @GetMapping("/{id}/avatar")
+    public ResponseEntity<StreamingResponseBody> getUserAvatar(
+            @PathVariable("id") Long userId,
+            HttpServletRequest request,
+            HttpServletResponse response) {
+        try {
+            // 获取头像元信息
+            AvatarService.AvatarMetadata metadata = avatarService.getAvatarMetadata(userId);
+            if (metadata == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            // 获取头像数据
+            byte[] avatarData = avatarService.getAvatarData(userId);
+            if (avatarData == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            // 设置ETag（使用content_hash）
+            String etag = "\"" + metadata.getContentHash() + "\"";
+            String ifNoneMatch = request.getHeader("If-None-Match");
+            if (ifNoneMatch != null && ifNoneMatch.equals(etag)) {
+                // 304 Not Modified
+                return ResponseEntity.status(HttpStatus.NOT_MODIFIED)
+                    .eTag(etag)
+                    .build();
+            }
+
+            // 构建响应头
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.parseMediaType(metadata.getContentType()));
+            headers.setContentLength(metadata.getFileSize());
+            headers.setETag(etag);
+            // 缓存控制：public，最大缓存7天
+            headers.setCacheControl(CacheControl.maxAge(Duration.ofDays(7))
+                .cachePublic()
+                .mustRevalidate()
+                .getHeaderValue());
+
+            // 流式返回
+            StreamingResponseBody responseBody = outputStream -> {
+                try (ByteArrayInputStream bis = new ByteArrayInputStream(avatarData)) {
+                    bis.transferTo(outputStream);
+                }
+            };
+
+            return ResponseEntity.ok()
+                .headers(headers)
+                .body(responseBody);
+
+        } catch (Exception e) {
+            return ResponseEntity.status(500).build();
+        }
+    }
+
+    /**
+     * 获取当前用户头像
+     */
+    @GetMapping("/current/avatar")
+    public ResponseEntity<StreamingResponseBody> getCurrentUserAvatar(
+            HttpServletRequest request,
+            HttpServletResponse response) {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(401).build();
+            }
+
+            String username = authentication.getName();
+            return userService.findByUsername(username)
+                .map(user -> getUserAvatar(user.getId(), request, response))
+                .orElse(ResponseEntity.notFound().build());
+        } catch (Exception e) {
+            return ResponseEntity.status(500).build();
+        }
+    }
+
+    /**
+     * 删除当前用户头像
+     */
+    @DeleteMapping("/current/avatar")
+    public ResponseEntity<Map<String, Object>> deleteCurrentUserAvatar() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(401).body(Map.of(
+                    "success", false,
+                    "error", "用户未认证"
+                ));
+            }
+
+            String username = authentication.getName();
+            return userService.findByUsername(username)
+                .<ResponseEntity<Map<String, Object>>>map(user -> {
+                    boolean success = avatarService.deleteAvatar(user.getId());
+                    if (success) {
+                        Map<String, Object> successBody = Map.of(
+                            "success", true,
+                            "message", "头像删除成功"
+                        );
+                        return ResponseEntity.ok(successBody);
+                    } else {
+                        Map<String, Object> errorBody = Map.of(
+                            "success", false,
+                            "error", "头像不存在"
+                        );
+                        return ResponseEntity.badRequest().body(errorBody);
+                    }
+                })
+                .orElse(ResponseEntity.status(404).body(Map.of(
+                    "success", false,
+                    "error", "用户不存在"
+                )));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of(
+                "success", false,
+                "error", "头像删除失败: " + e.getMessage()
+            ));
         }
     }
 }

@@ -7,33 +7,36 @@
       <div class="left"></div>
       <!-- 右侧用户信息区域 -->
       <div class="right">
-        <div class="dropdown" ref="dropdownRef" @mouseenter="showDropdown" @mouseleave="hideDropdown">
-          <div class="user-info">
-            <!-- 用户头像 -->
-            <img v-if="avatarUrl" class="avatar" :src="avatarUrl" alt="avatar" @error="handleAvatarError" />
-            <div v-else class="avatar-icon" :style="avatarStyle">
-              <UserOutlined />
+        <a-dropdown trigger="hover" placement="bottomRight">
+          <div class="dropdown" @click.stop>
+            <div class="user-info">
+              <!-- 用户头像 -->
+              <img v-if="avatarUrl" class="avatar" :src="avatarUrl" alt="avatar" @error="handleAvatarError" />
+              <div v-else class="avatar-icon" :style="avatarStyle">
+                <UserOutlined />
+              </div>
+              <!-- 用户名和下拉箭头 -->
+              <span class="username">{{ username }}</span>
+              <DownOutlined class="dropdown-icon" />
             </div>
-            <!-- 用户名和下拉箭头 -->
-            <span class="username">{{ username }}</span>
-            <DownOutlined class="dropdown-icon" :class="{ 'rotated': dropdownVisible }" />
           </div>
-          <!-- 下拉菜单内容 -->
-          <ul class="dropdown-menu" v-show="dropdownVisible" :style="dropdownStyle" @click.stop>
-            <li @click.stop="handleMenuClick('profile')">
-              <UserOutlined class="menu-icon" />
-              个人中心
-            </li>
-            <li @click.stop="handleMenuClick('settings')">
-              <SettingOutlined class="menu-icon" />
-              个人设置
-            </li>
-            <li @click.stop="handleMenuClick('logout')">
-              <LogoutOutlined class="menu-icon" />
-              退出登录
-            </li>
-          </ul>
-        </div>
+          <template #overlay>
+            <a-menu class="dropdown-menu" @click="handleMenuSelect">
+              <a-menu-item key="profile">
+                <UserOutlined class="menu-icon" />
+                个人中心
+              </a-menu-item>
+              <a-menu-item key="settings">
+                <SettingOutlined class="menu-icon" />
+                个人设置
+              </a-menu-item>
+              <a-menu-item key="logout">
+                <LogoutOutlined class="menu-icon" />
+                退出登录
+              </a-menu-item>
+            </a-menu>
+          </template>
+        </a-dropdown>
       </div>
     </div>
     <!-- 标签页导航插槽 -->
@@ -49,6 +52,7 @@ import { useRouter } from 'vue-router'
 import { useAuth } from '@/auth/auth'
 import { userApi } from '@/api/process'
 import { generateAvatarStyleObject } from '@/utils/avatar'
+import type { MenuProps } from 'ant-design-vue'
 
 // 禁用自动属性继承，手动控制属性绑定
 defineOptions({
@@ -64,43 +68,9 @@ const username = ref('管理员')
 const avatarUrl = ref<string>('')
 const userId = ref<string>('')
 
-// 下拉菜单状态
-const dropdownVisible = ref(false)
-const dropdownRef = ref<HTMLElement | null>(null)
-
-// 计算下拉菜单位置
-const dropdownStyle = computed(() => {
-  if (!dropdownRef.value || !dropdownVisible.value) return {}
-
-  try {
-    const rect = dropdownRef.value.getBoundingClientRect()
-    if (!rect) return {}
-
-    return {
-      top: rect.bottom + 4 + 'px',
-      right: window.innerWidth - rect.right + 'px'
-    }
-  } catch (error) {
-    console.warn('计算下拉菜单位置失败:', error)
-    return {}
-  }
-})
-
-// 显示下拉菜单
-const showDropdown = () => {
-  dropdownVisible.value = true
-}
-
-// 隐藏下拉菜单
-const hideDropdown = () => {
-  dropdownVisible.value = false
-}
-
 // 处理菜单项点击
 const handleMenuClick = async (action: string) => {
   console.log('菜单项被点击:', action)
-  // 点击后隐藏菜单
-  dropdownVisible.value = false
 
   // 根据不同的操作执行相应逻辑
   switch (action) {
@@ -125,6 +95,10 @@ const handleMenuClick = async (action: string) => {
   }
 }
 
+const handleMenuSelect: MenuProps['onClick'] = (info) => {
+  handleMenuClick(info.key as string)
+}
+
 // 加载用户信息
 const loadUserInfo = async () => {
   try {
@@ -137,6 +111,7 @@ const loadUserInfo = async () => {
       const baseUrl = apiBaseUrl.endsWith('/') ? apiBaseUrl.slice(0, -1) : apiBaseUrl
       avatarUrl.value = `${baseUrl}/sys/users/${userId.value}/avatar?t=${Date.now()}`
     }
+
   } catch (error) {
     console.error('加载用户信息失败:', error)
   }
@@ -299,67 +274,31 @@ onUnmounted(() => {
 }
 
 .dropdown-menu {
-  position: fixed;
-  background: #fff;
-  border: 1px solid #d9d9d9;
-  box-shadow: 0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05);
-  min-width: 120px;
-  z-index: 999999;
-  list-style: none;
   padding: 4px 0;
-  margin: 0;
-  border-radius: 6px;
-  /* 确保下拉菜单在最顶层显示 */
 }
 
-.dropdown-menu li {
+.dropdown-menu :deep(.ant-dropdown-menu-item) {
   display: flex;
   align-items: center;
-  padding: 5px 12px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background-color 0.3s;
-  color: rgba(0, 0, 0, 0.85);
+  gap: 8px;
   font-size: 14px;
-  line-height: 1.5715;
-  user-select: none;
-  /* 使用与系统UI一致的字体和颜色 */
+  color: rgba(0, 0, 0, 0.85);
+  transition: background-color 0.3s, color 0.3s;
 }
 
-.dropdown-menu li:hover {
-  background: #f5f5f5;
-}
-
-.dropdown-menu li:active {
-  background: #e6f7ff;
+.dropdown-menu :deep(.ant-dropdown-menu-item:hover),
+.dropdown-menu :deep(.ant-dropdown-menu-item-active) {
+  color: #1890ff;
+  background: #f0f5ff;
 }
 
 .menu-icon {
   font-size: 14px;
-  margin-right: 8px;
   color: rgba(0, 0, 0, 0.45);
   flex-shrink: 0;
 }
 
-.dropdown-menu li:hover .menu-icon {
+.dropdown-menu :deep(.ant-dropdown-menu-item:hover .menu-icon) {
   color: #1890ff;
-}
-
-/* 普通菜单项字体色 */
-:deep(.ant-dropdown-menu .ant-dropdown-menu-item),
-:deep(.ant-menu .ant-menu-item) {
-  color: rgba(0, 0, 0, 0.85);
-  /* 普通状态字体色 */
-}
-
-/* 悬浮/选中时字体色为主色调 */
-:deep(.ant-dropdown-menu .ant-dropdown-menu-item:hover),
-:deep(.ant-menu .ant-menu-item:hover),
-:deep(.ant-dropdown-menu .ant-dropdown-menu-item-active),
-:deep(.ant-menu .ant-menu-item-active) {
-  color: #1890ff !important;
-  /* 主色调 */
-  background: #f0f5ff !important;
-  /* 主色调浅色背景 */
 }
 </style>

@@ -12,3 +12,42 @@ frontend:
   # TOTP 验证页面 - 重定向到 Vite dev server
   totp-verify-url: redirect:http://localhost:5173/self/security/totp-verify
 
+# 开发环境日志配置
+logging:
+  # 日志文件路径（开发环境可以使用相对路径）
+  file:
+    path: logs
+  # 异步日志配置（开发环境使用较小的队列，便于快速发现问题）
+  async:
+    queue-size: 256          # 队列大小：开发环境较小，便于快速响应
+    discard-threshold: 0      # 不丢弃日志：开发环境需要完整日志
+  # 日志级别：开发环境可以更详细
+  level:
+    root: INFO
+    com.tiny.oauthserver: DEBUG          # 业务代码 DEBUG 级别，便于调试
+    com.tiny.oauthserver.sys.security.MultiAuthenticationProvider: DEBUG
+    com.tiny.oauthserver.sys.security.UserDetailsServiceImpl: DEBUG
+    com.tiny.oauthserver.sys.service.impl.SecurityServiceImpl: DEBUG
+    com.tiny.oauthserver.config.CustomJdbcOAuth2AuthorizationService: DEBUG
+    org.springframework.security: TRACE  # 安全框架 TRACE，便于排查认证问题
+    org.camunda.bpm.engine.persistence: DEBUG
+    org.camunda.bpm.engine.impl.db.sql: DEBUG
+    org.camunda.bpm.engine.impl.persistence.entity: DEBUG
+    org.camunda.bpm.engine.impl.persistence: DEBUG
+    com.zaxxer.hikari: DEBUG
+    org.hibernate.SQL: DEBUG             # SQL 日志 DEBUG，便于查看完整 SQL
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE  # 参数绑定 TRACE
+
+# HTTP 请求日志配置（开发环境：记录更多信息，便于调试）
+http:
+  request-log:
+    enabled: true
+    include-request-body: true           # 开发环境记录请求体，便于调试
+    include-response-body: true           # 开发环境记录响应体，便于调试
+    max-body-length: 1048576             # 1MB，开发环境可以更大
+    excluded-path-prefixes:
+      - /actuator
+      - /dist
+      - /static
+      - /webjars
+

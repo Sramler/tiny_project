@@ -50,3 +50,36 @@ frontend:
   # Vue Router 会根据 URL 路径渲染 TotpVerify 组件
   totp-verify-url: forward:/dist/index.html
 
+# 生产环境日志配置
+logging:
+  # 日志文件路径（生产环境建议使用绝对路径或挂载的日志目录）
+  file:
+    path: /var/log/oauth-server  # 生产环境建议使用系统日志目录
+  # 异步日志配置（生产环境使用较大的队列，提升性能）
+  async:
+    queue-size: 1024         # 队列大小：生产环境较大，提升吞吐量
+    discard-threshold: 0     # 不丢弃日志：生产环境必须保证日志完整性
+  # 日志级别：生产环境更保守，减少噪音和性能开销
+  level:
+    root: INFO
+    com.tiny.oauthserver: INFO           # 业务代码 INFO 级别，减少日志量
+    org.springframework: WARN            # Spring 框架 WARN，减少框架日志
+    org.springframework.security: WARN   # 安全框架 WARN，避免敏感信息泄露
+    org.hibernate.SQL: WARN              # SQL 日志 WARN，生产环境不记录 SQL
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN  # 参数绑定 WARN
+
+# HTTP 请求日志配置（生产环境：平衡性能和安全）
+http:
+  request-log:
+    enabled: true
+    include-request-body: false          # 生产环境不记录请求体，避免敏感信息泄露和性能开销
+    include-response-body: false          # 生产环境不记录响应体，避免敏感信息泄露和性能开销
+    max-body-length: 5120                # 5KB，生产环境较小，节省存储
+    excluded-path-prefixes:
+      - /actuator
+      - /dist
+      - /static
+      - /webjars
+      - /oauth2/jwks                     # OAuth2 端点通常不需要详细日志
+      - /.well-known                     # 元数据端点不需要详细日志
+

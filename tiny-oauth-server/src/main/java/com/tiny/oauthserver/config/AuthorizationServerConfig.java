@@ -79,8 +79,12 @@ public class AuthorizationServerConfig {
                                 // 匹配所有非 HTML 请求，包括 OAuth2 端点
                                 request -> {
                                     String uri = request.getRequestURI();
-                                    // OAuth2 端点总是返回 JSON
-                                    if (uri.startsWith("/oauth2/") || uri.startsWith("/.well-known/")) {
+                                    // OAuth2 和 OIDC 端点总是返回 JSON 或重定向，不是 JSON 响应
+                                    if (uri.startsWith("/oauth2/") || uri.startsWith("/.well-known/") || uri.startsWith("/connect/")) {
+                                        // 注销端点可能需要 HTML 重定向，所以特殊处理
+                                        if (uri.equals("/connect/logout")) {
+                                            return false; // 注销端点可能需要 HTML 重定向
+                                        }
                                         return true;
                                     }
                                     String acceptHeader = request.getHeader("Accept");

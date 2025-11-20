@@ -185,6 +185,12 @@
             <artifactId>javase</artifactId>
             <version>3.5.2</version>
         </dependency>
+        <!-- Apache Fesod (incubating) for high-performance spreadsheet processing -->
+        <dependency>
+            <groupId>org.apache.fesod</groupId>
+            <artifactId>fesod</artifactId>
+            <version>1.3.0</version>
+        </dependency>
     </dependencies>
     <repositories>
         <repository>

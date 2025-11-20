@@ -2,6 +2,8 @@ package com.tiny.oauthserver.sys.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tiny.oauthserver.sys.model.*;
+import com.tiny.oauthserver.sys.repository.UserAuthenticationAuditRepository;
+import com.tiny.oauthserver.sys.service.AvatarService;
 import com.tiny.oauthserver.sys.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -34,10 +36,13 @@ class UserControllerAllTest {
     private UserService userService;
     private UserController userController;
 
+    UserAuthenticationAuditRepository auditRepository;
+    AvatarService avatarService;
+
     @BeforeEach
     void setup() {
         userService = mock(UserService.class);
-        userController = new UserController(userService);
+        userController = new UserController(userService,auditRepository,avatarService);
         mockMvc = MockMvcBuilders.standaloneSetup(userController)
                 .setCustomArgumentResolvers(new PageableHandlerMethodArgumentResolver())
                 .build();

@@ -9,20 +9,6 @@ server:
         http-only: true    # HttpOnly：防止 XSS 攻击，JavaScript 无法访问 Cookie
         secure: false      # Secure：开发环境使用 HTTP，设为 false；生产环境在 application-prod.yaml 中设为 true
         same-site: Lax     # SameSite：Lax 允许从外部链接跳转时携带 Cookie，Strict 更严格但可能影响用户体验
-logging:
-  level:
-    org.camunda.bpm.engine.persistence: DEBUG
-    org.camunda.bpm.engine.impl.db.sql: DEBUG
-    org.camunda.bpm.engine.impl.persistence.entity: DEBUG
-    org.camunda.bpm.engine.impl.persistence: DEBUG
-    org.springframework.security: TRACE
-    com.zaxxer.hikari: DEBUG
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
-    com.tiny.oauthserver.sys.security.MultiAuthenticationProvider: DEBUG
-    com.tiny.oauthserver.sys.security.UserDetailsServiceImpl: DEBUG
-    com.tiny.oauthserver.sys.service.impl.SecurityServiceImpl: DEBUG
-    com.tiny.oauthserver.config.CustomJdbcOAuth2AuthorizationService: DEBUG
 spring:
   application:
     name: oauth-server
@@ -158,12 +144,28 @@ security:
   mfa:
     mode: OPTIONAL # MFA模式: NONE(完全禁用), OPTIONAL(推荐可跳过), REQUIRED(强制必须绑定)
 
+# 日志配置（默认配置，可被 dev/prod 环境覆盖）
+logging:
+  file:
+    path: logs  # 默认使用相对路径
+  async:
+    queue-size: 512          # 默认队列大小
+    discard-threshold: 0      # 默认不丢弃日志
+  level:
+    root: INFO
+    com.tiny.oauthserver: INFO
+    org.springframework: WARN
+    org.springframework.security: WARN
+    org.hibernate.SQL: INFO
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN
+
+# HTTP 请求日志配置（默认配置，可被 dev/prod 环境覆盖）
 http:
   request-log:
     enabled: true
-    include-request-body: true
-    include-response-body: true
-    max-body-length: 1048576
+    include-request-body: false         # 默认不记录请求体，避免敏感信息泄露
+    include-response-body: false         # 默认不记录响应体，避免敏感信息泄露
+    max-body-length: 5120               # 默认 5KB
     excluded-path-prefixes:
       - /actuator
       - /dist

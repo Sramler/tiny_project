@@ -27,6 +27,18 @@ public class HttpRequestLogServiceImpl implements HttpRequestLogService {
     public void save(HttpRequestLog requestLog) {
         try {
             repository.save(requestLog);
+            if (log.isInfoEnabled()) {
+                log.info("REQ_LOG service={} env={} method={} path={} status={} duration={}ms user={} traceId={} requestId={}",
+                        requestLog.getServiceName(),
+                        requestLog.getEnv(),
+                        requestLog.getMethod(),
+                        requestLog.getPathTemplate(),
+                        requestLog.getStatus(),
+                        requestLog.getDurationMs(),
+                        requestLog.getUserId(),
+                        requestLog.getTraceId(),
+                        requestLog.getRequestId());
+            }
         } catch (Exception ex) {
             log.warn("保存 HTTP 请求日志失败: {}", ex.getMessage(), ex);
         }

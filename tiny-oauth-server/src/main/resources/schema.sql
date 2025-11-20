@@ -181,3 +181,32 @@ CREATE TABLE IF NOT EXISTS `http_request_log` (
     KEY `idx_trace` (`trace_id`),
     KEY `idx_request_at` (`request_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='HTTP 请求/响应日志（面向数据分析，body 可选，注意脱敏与限长）';
+
+-- 创建导出任务表
+CREATE TABLE IF NOT EXISTS `export_task` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `task_id` VARCHAR(64) NOT NULL UNIQUE COMMENT '任务唯一ID（UUID）',
+    `user_id` VARCHAR(64) NOT NULL COMMENT '任务发起用户ID',
+    `username` VARCHAR(128) DEFAULT NULL COMMENT '任务发起用户名（可选）',
+    `status` VARCHAR(20) NOT NULL DEFAULT 'PENDING' COMMENT '状态：PENDING/RUNNING/SUCCESS/FAILED/CANCELED',
+    `progress` INT DEFAULT 0 COMMENT '导出进度 0~100（动态更新）',
+    `total_rows` BIGINT DEFAULT NULL COMMENT '总行数（可为 NULL 表示未知或估算值）',
+    `processed_rows` BIGINT DEFAULT 0 COMMENT '已处理行数（Slice/Iterator 用这个）',
+    `sheet_count` INT DEFAULT 1 COMMENT '总 Sheet 数（用于多Sheet导出）',
+    `file_path` VARCHAR(512) DEFAULT NULL COMMENT '导出文件本地路径（或 OSS 对象key）',
+    `download_url` VARCHAR(1024) DEFAULT NULL COMMENT '可选：文件下载URL（通常是 OSS 预签名URL）',
+    `error_msg` TEXT COMMENT '错误信息（失败时记录）',
+    `error_code` VARCHAR(64) DEFAULT NULL COMMENT '错误编码（可选，便于分类统计）',
+    `query_params` JSON DEFAULT NULL COMMENT '导出查询参数（JSON 持久化，用于审计和重跑）',
+    `worker_id` VARCHAR(64) DEFAULT NULL COMMENT '执行任务的 worker 实例ID',
+    `attempt` INT NOT NULL DEFAULT 0 COMMENT '任务尝试次数',
+    `last_heartbeat` DATETIME DEFAULT NULL COMMENT '最近心跳时间（检测僵尸任务）',
+    `expire_at` DATETIME DEFAULT NULL COMMENT '文件失效时间（定时清理任务用）',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '任务创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '任务更新时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_user` (`user_id`),
+    KEY `idx_status` (`status`),
+    KEY `idx_created_at` (`created_at`),
+    KEY `idx_expire_at` (`expire_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='导出任务表';

@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration scan="true" scanPeriod="60 seconds">
+
+    <!-- 从 Spring 环境读取配置，便于不同环境覆盖 -->
+    <springProperty scope="context" name="LOG_PATH" source="logging.file.path" defaultValue="logs"/>
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="oauth-server"/>
+    <springProperty scope="context" name="ASYNC_QUEUE_SIZE" source="logging.async.queue-size" defaultValue="512"/>
+    <springProperty scope="context" name="ASYNC_DISCARD_THRESHOLD" source="logging.async.discard-threshold" defaultValue="0"/>
+
+    <!-- ==================== 控制台输出 ==================== -->
+    <!-- 开发环境使用，包含 traceId/requestId 等上下文 -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} traceId=%X{traceId} requestId=%X{requestId} userId=%X{userId} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- ==================== 全量日志文件 ==================== -->
+    <!-- 所有级别的日志统一输出 -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/${APP_NAME}.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/${APP_NAME}.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxHistory>30</maxHistory>
+            <maxFileSize>200MB</maxFileSize>
+            <totalSizeCap>10GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} traceId=%X{traceId} requestId=%X{requestId} userId=%X{userId} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- ==================== 错误日志单独输出 ==================== -->
+    <!-- 企业级规范：ERROR/WARN 级别日志单独文件，便于快速定位问题 -->
+    <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/${APP_NAME}-error.log</file>
+        <!-- 只记录 ERROR 和 WARN 级别 -->
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/${APP_NAME}-error.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxHistory>90</maxHistory>
+            <maxFileSize>200MB</maxFileSize>
+            <totalSizeCap>20GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} traceId=%X{traceId} requestId=%X{requestId} userId=%X{userId} - %msg%n%ex</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- ==================== 审计日志单独输出 ==================== -->
+    <!-- 企业级规范：安全审计日志单独存储，满足合规要求 -->
+    <appender name="AUDIT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/${APP_NAME}-audit.log</file>
+        <!-- 只记录审计相关的 logger -->
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/${APP_NAME}-audit.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxHistory>365</maxHistory>
+            <maxFileSize>200MB</maxFileSize>
+            <totalSizeCap>50GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} traceId=%X{traceId} requestId=%X{requestId} userId=%X{userId} ip=%X{clientIp} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- ==================== 异步写入（企业级性能优化） ==================== -->
+    <!-- 高并发场景：异步写入文件，避免阻塞业务线程 -->
+    <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <!-- 不丢失日志：discardThreshold=0 表示队列满时阻塞而不是丢弃 -->
+        <discardingThreshold>${ASYNC_DISCARD_THRESHOLD}</discardingThreshold>
+        <!-- 队列大小，默认 512，可根据实际情况调整 -->
+        <queueSize>${ASYNC_QUEUE_SIZE}</queueSize>
+        <!-- 是否包含调用者信息（影响性能，生产环境建议 false） -->
+        <includeCallerData>false</includeCallerData>
+        <!-- 引用实际的 FILE appender -->
+        <appender-ref ref="FILE"/>
+    </appender>
+
+    <appender name="ASYNC_ERROR_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <discardingThreshold>0</discardingThreshold>
+        <queueSize>256</queueSize>
+        <includeCallerData>true</includeCallerData>
+        <appender-ref ref="ERROR_FILE"/>
+    </appender>
+
+    <!-- ==================== 日志级别配置 ==================== -->
+    <!-- 业务包日志默认 INFO，避免第三方库噪音 -->
+    <logger name="com.tiny.oauthserver" level="INFO"/>
+    <!-- 审计相关日志单独记录 -->
+    <logger name="com.tiny.oauthserver.sys.service.AuthenticationAuditService" level="INFO" additivity="false">
+        <appender-ref ref="AUDIT_FILE"/>
+        <appender-ref ref="STDOUT"/>
+    </logger>
+    <logger name="com.tiny.oauthserver.sys.service.HttpRequestLogService" level="INFO"/>
+    <!-- Spring 框架日志降级，减少噪音 -->
+    <logger name="org.springframework" level="WARN"/>
+    <logger name="org.springframework.security" level="WARN"/>
+    <!-- SQL 日志：开发环境可设为 DEBUG，生产环境建议 INFO 或关闭 -->
+    <logger name="org.hibernate.SQL" level="INFO"/>
+    <logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="WARN"/>
+
+    <!-- ==================== 环境配置 ==================== -->
+    <!-- 开发环境：同步写入，便于实时查看 -->
+    <springProfile name="dev">
+        <root level="INFO">
+            <appender-ref ref="STDOUT"/>
+            <appender-ref ref="FILE"/>
+            <appender-ref ref="ERROR_FILE"/>
+        </root>
+    </springProfile>
+
+    <!-- 生产环境：异步写入，提升性能 -->
+    <springProfile name="prod">
+        <root level="INFO">
+            <appender-ref ref="STDOUT"/>
+            <appender-ref ref="ASYNC_FILE"/>
+            <appender-ref ref="ASYNC_ERROR_FILE"/>
+        </root>
+    </springProfile>
+    
+    <!-- 默认环境：使用异步写入 -->
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="ASYNC_FILE"/>
+        <appender-ref ref="ASYNC_ERROR_FILE"/>
+    </root>
+
+</configuration>
+

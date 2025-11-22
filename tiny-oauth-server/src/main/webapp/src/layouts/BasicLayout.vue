@@ -1,7 +1,8 @@
 <template>
+  <!-- 基础布局容器 -->
   <div class="layout">
     <!-- 侧边栏 -->
-    <Sider class="sider" :class="{ collapsed: collapsed }" />
+    <Sider class="sider" />
     <!-- 主内容区 -->
     <div class="main">
       <!-- 顶部导航栏 -->
@@ -10,95 +11,100 @@
       <TagTabs class="tag-tabs" />
       <!-- 主内容区域 -->
       <div class="content">
-        <router-view />
+        <!-- 使用 key 强制重新渲染组件，实现刷新功能 -->
+        <router-view :key="routerViewKey" />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-// 引入自定义组件（已移动到 layouts 目录）
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import Sider from './Sider.vue'
 import HeaderBar from './HeaderBar.vue'
 import TagTabs from './TagTabs.vue'
-import { ref } from 'vue'
 
-const collapsed = ref(false)
+/**
+ * 组件配置
+ */
+defineOptions({
+  name: 'BasicLayout'
+})
+
+/**
+ * 路由实例
+ */
+const route = useRoute()
+
+/**
+ * 计算 router-view 的 key
+ * 当 _refresh 参数变化时，key 会变化，从而强制重新渲染组件
+ */
+const routerViewKey = computed(() => {
+  // 使用路径和 _refresh 参数组合作为 key
+  // 当 _refresh 参数变化时，组件会重新渲染
+  return `${route.path}-${route.query._refresh || 'default'}`
+})
 </script>
 
 <style scoped>
+/**
+ * 基础布局样式
+ * 
+ * 布局结构：
+ * - layout: 最外层容器，使用 flex 横向布局
+ *   - sider: 侧边栏，固定宽度
+ *   - main: 主内容区，自适应宽度
+ *     - header-bar: 顶部导航栏
+ *     - tag-tabs: 标签页导航
+ *     - content: 主内容区域（router-view）
+ */
+
+/* 布局容器 */
 .layout {
-  /* 设置布局容器高度为100vh，保证全屏显示 */
-  min-height: 100vh;
-  /* 可选：设置全局背景色 */
-  background: #f5f7fa;
-  /* 参考 Ant Design Pro 默认背景 */
   display: flex;
+  min-height: 100vh;
   height: 100vh;
-  background: #f0f2f5;
+  background: #f0f2f5; /* 整体背景色 */
 }
 
-.main {
-  flex: 1;
-  min-width: 0;
-  /* 可选：transition 让内容区宽度变化更平滑 */
-  transition: width 0.2s;
-  display: flex;
-  flex-direction: column;
-}
-
-.content {
-  flex: 1;
-  padding: var(--content-padding);
-  overflow: auto;
-  background: #f0f2f5;
-  box-sizing: border-box;
-  /* 让padding包含在高度内 */
-}
-
-.layout {
-  /* 设置布局容器高度为100vh，保证全屏显示 */
-  min-height: 100vh;
-  /* 可选：设置全局背景色 */
-  background: #f5f7fa;
-  /* 参考 Ant Design Pro 默认背景 */
-}
-
-.header-bar {
-  margin-bottom: 0 !important;
-  padding-bottom: 0 !important;
-}
-
-.tag-tabs {
-  margin-bottom: 0 !important;
-  padding-bottom: 0 !important;
-}
-
-.sider-header {
-  height: 56px;
-  /* 统一高度 */
-  color: #fff;
-  /* 统一字体色 */
-  display: flex;
-  align-items: center;
-  font-size: 20px;
-  font-weight: bold;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  /* 如主HeaderBar有阴影 */
-}
-
-/* HeaderBar组件样式，不覆盖组件内部样式 */
-.header-bar {
-  /* 只设置基础布局样式，不覆盖组件内部样式 */
-  flex-shrink: 0;
-}
-
+/* 侧边栏 */
 .sider {
-  width: var(--sider-width-expanded);
-  transition: width 0.2s;
+  flex-shrink: 0; /* 不允许收缩 */
+  width: var(--sider-width-expanded); /* 使用 CSS 变量定义宽度 */
+  transition: width 0.2s; /* 宽度变化动画 */
 }
 
-.sider.collapsed {
-  width: var(--sider-width-collapsed);
+/* 主内容区 */
+.main {
+  flex: 1; /* 占据剩余空间 */
+  min-width: 0; /* 允许 flex 子元素收缩到内容宽度以下 */
+  display: flex;
+  flex-direction: column; /* 纵向布局 */
+  transition: width 0.2s; /* 宽度变化动画（侧边栏折叠/展开时） */
+}
+
+/* 顶部导航栏 */
+.header-bar {
+  flex-shrink: 0; /* 不允许收缩 */
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+/* 标签页导航 */
+.tag-tabs {
+  flex-shrink: 0; /* 不允许收缩 */
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+/* 主内容区域 */
+.content {
+  flex: 1; /* 占据剩余空间 */
+  padding: var(--content-padding); /* 使用 CSS 变量定义内边距 */
+  overflow: auto; /* 内容溢出时显示滚动条 */
+  background: #f0f2f5; /* 内容区域背景色 */
+  box-sizing: border-box; /* 确保 padding 包含在高度内 */
 }
 </style>

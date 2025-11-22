@@ -9,31 +9,32 @@
     <!-- 菜单列表，支持滚动 -->
     <div class="menu-scroll">
       <ul class="menu">
-        <template v-for="(item, idx) in menuList" :key="item.url">
+        <template v-for="(item, idx) in menuList" :key="item.url || item.id || idx">
+          <!-- 一级菜单项 -->
           <li :class="['menu-item', { active: isActive(item), open: openMenu === idx }]" @click="toggleMenu(idx, item)">
-            <!-- 使用 Icon.vue 组件渲染图标 -->
+            <!-- 菜单图标 -->
             <Icon v-if="item.showIcon && item.icon" :icon="item.icon" className="icon" />
+            <!-- 菜单标题（折叠时隐藏） -->
             <span v-if="!collapsed" class="text">{{ item.title }}</span>
-            <!-- 使用 Icon 组件替换箭头 -->
-            <Icon v-if="item.children && item.children.length > 0 && !collapsed"
-              :icon="openMenu === idx ? 'DownOutlined' : 'RightOutlined'" class="arrow" />
+            <!-- 展开/折叠箭头（仅在有子菜单且未折叠时显示） -->
+            <Icon v-if="hasChildren(item) && !collapsed" :icon="openMenu === idx ? 'DownOutlined' : 'RightOutlined'"
+              class="arrow" />
           </li>
-          <!-- 二级菜单 -->
-          <ul v-if="item.children && item.children.length > 0 && openMenu === idx && !collapsed" class="submenu">
-            <template v-for="(sub, subIdx) in item.children" :key="sub.url">
+          <!-- 二级菜单（仅在一级菜单展开且未折叠时显示） -->
+          <ul v-if="hasChildren(item) && openMenu === idx && !collapsed" class="submenu">
+            <template v-for="(sub, subIdx) in item.children" :key="sub.url || sub.id || subIdx">
+              <!-- 二级菜单项 -->
               <li :class="['submenu-item', { active: isActive(sub), open: openSubMenu === subIdx }]"
                 @click.stop="toggleSubMenu(subIdx, sub)">
-                <!-- 二级菜单不渲染图标 -->
                 <span class="text">{{ sub.title }}</span>
-                <!-- 使用 Icon 组件替换箭头 -->
-                <Icon v-if="sub.children && sub.children.length > 0"
-                  :icon="openSubMenu === subIdx ? 'DownOutlined' : 'RightOutlined'" class="arrow" />
+                <!-- 展开/折叠箭头（仅在有三级菜单时显示） -->
+                <Icon v-if="hasChildren(sub)" :icon="openSubMenu === subIdx ? 'DownOutlined' : 'RightOutlined'"
+                  class="arrow" />
               </li>
-              <!-- 三级菜单 -->
-              <ul v-if="sub.children && sub.children.length > 0 && openSubMenu === subIdx" class="submenu third">
+              <!-- 三级菜单（仅在二级菜单展开时显示） -->
+              <ul v-if="hasChildren(sub) && openSubMenu === subIdx" class="submenu third">
                 <li v-for="third in sub.children" :key="third.url || third.id || third.name"
-                  :class="['submenu-item', { active: isActive(third) }]" @click.stop="third.url && goMenu(third.url)">
-                  <!-- 三级菜单不渲染图标 -->
+                  :class="['submenu-item', { active: isActive(third) }]" @click.stop="handleThirdMenuClick(third)">
                   <span class="text">{{ third.title }}</span>
                 </li>
               </ul>
@@ -42,7 +43,6 @@
         </template>
       </ul>
     </div>
-
 
     <!-- 折叠按钮固定在底部 -->
     <div class="collapse-btn" @click="toggleCollapse">
@@ -58,121 +58,305 @@ import { menuTree, type MenuItem } from '@/api/menu'
 import { message } from 'ant-design-vue'
 import Icon from '@/components/Icon.vue'
 
-// 禁用自动属性继承，手动控制属性绑定
+/**
+ * 常量定义
+ */
+const DEFAULT_OPEN_MENU = 0 // 默认打开的一级菜单索引（工作台）
+const INVALID_INDEX = -1 // 无效索引，表示未选中任何菜单
+const COLLAPSED_STORAGE_KEY = 'sider-collapsed' // localStorage 中存储折叠状态的键名
+
+/**
+ * 组件配置
+ */
 defineOptions({
-  inheritAttrs: false
+  name: 'SiderLayout',
+  inheritAttrs: false // 禁用自动属性继承，手动控制属性绑定
 })
 
-// 侧边栏是否折叠状态
-const collapsed = ref(false)
+/**
+ * 路由实例
+ */
+const router = useRouter()
+const route = useRoute()
+
+/**
+ * 响应式状态
+ */
+// 侧边栏折叠状态（从 localStorage 恢复）
+const getInitialCollapsedState = (): boolean => {
+  const stored = localStorage.getItem(COLLAPSED_STORAGE_KEY)
+  return stored === 'true'
+}
+const collapsed = ref<boolean>(getInitialCollapsedState())
+
 // 菜单项列表，初始为空，后续通过接口加载
 const menuList = ref<MenuItem[]>([])
-// 当前打开的一级菜单索引，默认工作台（0）
-const openMenu = ref(0)
-// 当前打开的二级菜单索引
-const openSubMenu = ref(-1)
 
-// 加载菜单数据
+// 当前打开的一级菜单索引，默认工作台（0）
+const openMenu = ref<number>(DEFAULT_OPEN_MENU)
+
+// 当前打开的二级菜单索引
+const openSubMenu = ref<number>(INVALID_INDEX)
+
+/**
+ * 工具函数
+ */
+
+/**
+ * 检查菜单项是否有子菜单
+ * @param item 菜单项
+ * @returns 是否有子菜单
+ */
+function hasChildren(item: MenuItem): boolean {
+  return !!(item.children && item.children.length > 0)
+}
+
+/**
+ * 菜单位置接口定义
+ */
+interface MenuPosition {
+  firstLevelIdx: number // 一级菜单索引
+  secondLevelIdx: number | null // 二级菜单索引（如果是一级菜单则为 null）
+}
+
+/**
+ * 递归查找菜单项在菜单树中的位置
+ * 支持一级、二级、三级菜单的查找
+ * @param menuList 菜单列表
+ * @param targetPath 目标路径
+ * @returns 菜单位置信息，如果未找到则返回 null
+ */
+function findMenuPosition(
+  menuList: MenuItem[],
+  targetPath: string
+): MenuPosition | null {
+  for (let i = 0; i < menuList.length; i++) {
+    const item = menuList[i]
+
+    // 检查一级菜单
+    if (item.url === targetPath) {
+      return {
+        firstLevelIdx: i,
+        secondLevelIdx: null
+      }
+    }
+
+    // 检查二级菜单
+    if (hasChildren(item)) {
+      for (let j = 0; j < item.children!.length; j++) {
+        const sub = item.children![j]
+
+        if (sub.url === targetPath) {
+          return {
+            firstLevelIdx: i,
+            secondLevelIdx: j
+          }
+        }
+
+        // 检查三级菜单
+        if (hasChildren(sub)) {
+          for (const third of sub.children!) {
+            if (third.url === targetPath) {
+              return {
+                firstLevelIdx: i,
+                secondLevelIdx: j
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return null
+}
+
+/**
+ * 业务逻辑函数
+ */
+
+/**
+ * 加载菜单数据
+ * 从后端 API 获取菜单树结构
+ */
 async function loadMenu() {
   try {
     const data = await menuTree()
-    console.log('menuTree 返回数据:', data);
 
     if (data && Array.isArray(data) && data.length > 0) {
       menuList.value = data
-      console.log('菜单列表加载成功，数量:', menuList.value.length)
     } else {
       menuList.value = []
       message.warning('未加载到可用菜单')
     }
   } catch (error) {
-    console.error('加载菜单失败:', error)
-    message.error('加载菜单失败，请检查网络或联系管理员')
+    const errorMessage = error instanceof Error ? error.message : '未知错误'
+    message.error(`加载菜单失败：${errorMessage}`)
     menuList.value = []
   }
 }
 
-onMounted(loadMenu)
-
-// 路由实例
-const router = useRouter()
-const route = useRoute()
-
-// 切换折叠状态
+/**
+ * 切换折叠状态
+ * 同时将状态保存到 localStorage 以便下次访问时恢复
+ */
 function toggleCollapse() {
   collapsed.value = !collapsed.value
+  localStorage.setItem(COLLAPSED_STORAGE_KEY, String(collapsed.value))
 }
-// 一级菜单点击，手风琴效果
+
+/**
+ * 一级菜单点击处理
+ * 实现手风琴效果：点击已展开的菜单会折叠，点击未展开的菜单会展开
+ * @param idx 菜单索引
+ * @param item 菜单项
+ */
 function toggleMenu(idx: number, item: MenuItem) {
-  // 如果有子菜单
-  if (item.children && item.children.length > 0) {
-    openMenu.value = openMenu.value === idx ? -1 : idx
-    openSubMenu.value = -1
+  if (hasChildren(item)) {
+    // 切换展开/折叠
+    openMenu.value = openMenu.value === idx ? INVALID_INDEX : idx
+    openSubMenu.value = INVALID_INDEX
+
     // 如果有 redirect 字段，点击父菜单时跳转到 redirect
     if (item.redirect) {
-      goMenu(item.redirect) // 跳转到父节点的 redirect
+      goMenu(item.redirect)
     }
   } else {
     // 叶子节点直接跳转到 path
     if (item.url) {
       goMenu(item.url)
       openMenu.value = idx
-      openSubMenu.value = -1
+      openSubMenu.value = INVALID_INDEX
     }
   }
 }
-// 二级菜单点击，手风琴效果
+
+/**
+ * 二级菜单点击处理
+ * 实现手风琴效果
+ * @param subIdx 二级菜单索引
+ * @param sub 二级菜单项
+ */
 function toggleSubMenu(subIdx: number, sub: MenuItem) {
-  if (sub.children && sub.children.length > 0) {
-    openSubMenu.value = openSubMenu.value === subIdx ? -1 : subIdx
+  if (hasChildren(sub)) {
+    // 切换展开/折叠
+    openSubMenu.value = openSubMenu.value === subIdx ? INVALID_INDEX : subIdx
   } else {
+    // 叶子节点直接跳转
     if (sub.url) {
       goMenu(sub.url)
       openSubMenu.value = subIdx
     }
   }
 }
-// 跳转菜单
-function goMenu(path: string) {
-  router.push(path)
+
+/**
+ * 三级菜单点击处理
+ * @param third 三级菜单项
+ */
+function handleThirdMenuClick(third: MenuItem) {
+  if (third.url) {
+    goMenu(third.url)
+  }
 }
-// 判断当前路由是否激活
-function isActive(item: MenuItem) {
+
+/**
+ * 跳转到指定菜单路径
+ * @param path 菜单路径
+ */
+function goMenu(path: string) {
+  if (path) {
+    router.push(path)
+  }
+}
+
+/**
+ * 判断当前路由是否激活（用于高亮显示）
+ * @param item 菜单项
+ * @returns 是否激活
+ */
+function isActive(item: MenuItem): boolean {
   return route.path === item.url
 }
-// 路由变化时自动展开对应菜单
-watch(() => route.path, (newPath) => {
-  // 一级
-  const idx = menuList.value.findIndex((m: MenuItem) => m.url === newPath || (m.children && m.children.some((sub: MenuItem) => sub.url === newPath || (sub.children && sub.children.some((third: MenuItem) => third.url === newPath)))))
-  if (idx !== -1) openMenu.value = idx
-  // 二级
-  if (idx !== -1 && menuList.value[idx].children && menuList.value[idx].children.length > 0) {
-    const subIdx = menuList.value[idx].children.findIndex((sub: MenuItem) => sub.url === newPath || (sub.children && sub.children.some((third: MenuItem) => third.url === newPath)))
-    openSubMenu.value = subIdx
+
+/**
+ * 根据路由路径自动展开对应菜单
+ * 用于路由变化时自动展开对应的菜单项
+ * @param path 路由路径
+ */
+function expandMenuByPath(path: string) {
+  if (!menuList.value.length) return
+
+  const position = findMenuPosition(menuList.value, path)
+
+  if (position) {
+    openMenu.value = position.firstLevelIdx
+
+    if (position.secondLevelIdx !== null) {
+      openSubMenu.value = position.secondLevelIdx
+    } else {
+      openSubMenu.value = INVALID_INDEX
+    }
   } else {
-    openSubMenu.value = -1
+    // 如果找不到匹配的菜单，重置为默认状态
+    openMenu.value = DEFAULT_OPEN_MENU
+    openSubMenu.value = INVALID_INDEX
   }
-}, { immediate: true })
+}
+
+/**
+ * 监听器
+ */
+
+// 监听路由变化，自动展开对应菜单
+watch(
+  () => route.path,
+  (newPath) => {
+    expandMenuByPath(newPath)
+  },
+  { immediate: true } // 立即执行一次，确保初始路由也能正确展开
+)
+
+// 监听菜单列表变化，重新展开当前路由对应的菜单
+// 用于菜单加载完成后自动展开当前路由对应的菜单项
+watch(
+  menuList,
+  () => {
+    if (menuList.value.length > 0) {
+      expandMenuByPath(route.path)
+    }
+  },
+  { deep: true } // 深度监听，确保子菜单变化也能触发
+)
+
+/**
+ * 生命周期
+ */
+
+// 组件挂载时加载菜单
+onMounted(loadMenu)
 </script>
 
 <style scoped>
+/* 侧边栏主容器 */
 .sider {
-  /* 使用 var() 函数从 theme.css 中读取并应用侧边栏展开宽度变量 */
+  /* 使用 CSS 变量定义宽度，便于主题定制 */
   width: var(--sider-width-expanded);
-  /* background: #001529; */
   color: #fff;
   height: 100vh;
   display: flex;
   flex-direction: column;
   transition: width 0.2s;
+  /* 折叠/展开动画 */
   background: #fafbfc;
 }
 
+/* 折叠状态下的侧边栏 */
 .sider.collapsed {
-  /* 使用 var() 函数从 theme.css 中读取并应用侧边栏折叠宽度变量 */
   width: var(--sider-width-collapsed);
 }
 
+/* Logo 区域 */
 .logo {
   display: flex;
   align-items: center;
@@ -202,9 +386,9 @@ watch(() => route.path, (newPath) => {
   display: flex;
   align-items: center;
   color: #333;
-  /* logo区字体色与菜单一致 */
 }
 
+/* 折叠状态下的 Logo 样式 */
 .sider.collapsed .logo {
   justify-content: center;
   padding: 0;
@@ -214,30 +398,35 @@ watch(() => route.path, (newPath) => {
   margin: 0 auto;
 }
 
+/* 折叠状态下隐藏文字和箭头 */
 .sider.collapsed .logo-text,
 .sider.collapsed .text,
 .sider.collapsed .arrow {
   display: none;
 }
 
+/* 菜单滚动区域 */
 .menu-scroll {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+  /* 确保 flex 子元素可以正确收缩 */
 }
 
+/* 菜单列表 */
 .menu {
   list-style: none;
   padding: 0;
   margin: 0;
 }
 
+/* 菜单项基础样式 */
 .menu-item,
 .submenu-item {
   color: #333;
-  /* 普通菜单字体色 */
 }
 
+/* 一级菜单项 */
 .menu-item {
   display: flex;
   align-items: center;
@@ -247,26 +436,25 @@ watch(() => route.path, (newPath) => {
   user-select: none;
 }
 
+/* 激活状态的一级菜单项 */
 .menu-item.active {
   background: #1890ff;
   color: #fff;
-  /* 激活时字体和图标都为白色 */
 }
 
-.menu-item.open {
-  /* background: #112240; */
-}
-
+/* 菜单图标 */
 .menu-item .icon {
   font-size: 18px;
   width: 24px;
   text-align: center;
 }
 
+/* 菜单文字 */
 .menu-item .text {
   margin-left: 8px;
 }
 
+/* 展开/折叠箭头 */
 .menu-item .arrow {
   margin-left: auto;
   font-size: 12px;
@@ -276,16 +464,17 @@ watch(() => route.path, (newPath) => {
   margin-right: 16px;
 }
 
+/* 二级菜单容器 */
 .submenu {
-  /* background: #0d1a26; */
   padding-left: 24px;
   margin-top: 2px;
 }
 
+/* 二级菜单项 */
 .submenu-item {
   display: flex;
   align-items: center;
-  padding: 8px 12px 8px 12px;
+  padding: 8px 12px;
   cursor: pointer;
   font-size: 14px;
   transition: background 0.2s;
@@ -294,22 +483,25 @@ watch(() => route.path, (newPath) => {
   margin: 1px 0;
 }
 
+/* 激活状态的二级菜单项 */
 .submenu-item.active {
   background: #1890ff;
   color: #fff;
 }
 
+/* 二级菜单项悬浮效果 */
 .submenu-item:hover {
   background: #f0f5ff;
   color: #1890ff;
 }
 
-/* 选中状态下的悬浮效果 - 与普通悬浮一致 */
+/* 激活状态下的悬浮效果 */
 .submenu-item.active:hover {
   background: #f0f5ff;
   color: #1890ff;
 }
 
+/* 二级菜单项的箭头 */
 .submenu-item .arrow {
   margin-left: auto;
   font-size: 12px;
@@ -319,6 +511,7 @@ watch(() => route.path, (newPath) => {
   margin-right: 16px;
 }
 
+/* 三级菜单容器 */
 .submenu.third {
   background: transparent;
   padding-left: 24px;
@@ -327,8 +520,9 @@ watch(() => route.path, (newPath) => {
   margin-left: 0;
 }
 
+/* 三级菜单项 */
 .submenu.third .submenu-item {
-  padding: 8px 12px 8px 12px;
+  padding: 8px 12px;
   font-size: 14px;
   color: #333;
   position: relative;
@@ -339,11 +533,13 @@ watch(() => route.path, (newPath) => {
   margin-bottom: 1px;
 }
 
+/* 三级菜单项悬浮效果 */
 .submenu.third .submenu-item:hover {
   background: #f0f5ff !important;
   color: #1890ff !important;
 }
 
+/* 激活状态的三级菜单项 */
 .submenu.third .submenu-item.active {
   background: #1890ff !important;
   color: #fff !important;
@@ -360,39 +556,35 @@ watch(() => route.path, (newPath) => {
   color: #fff !important;
 }
 
-/* 选中状态下的悬浮效果 - 与普通悬浮一致 */
+/* 激活状态下的悬浮效果 */
 .submenu.third li.submenu-item.active:hover {
   background: #f0f5ff !important;
   color: #1890ff !important;
 }
 
+/* 折叠按钮 */
 .collapse-btn {
   cursor: pointer;
   padding: 12px 0;
   font-size: 22px;
   text-align: center;
   color: #333;
-  /* 伸缩按钮字体色与菜单一致 */
   background: #fafbfc;
-  /* 伸缩按钮背景色与侧边栏一致 */
   border-top: 1px solid #e5e6eb;
-  /* 分割线更柔和 */
   transition: background 0.2s, color 0.2s;
   width: 100%;
 }
 
+/* 折叠按钮悬浮效果 */
 .collapse-btn:hover {
   background: #f0f5ff;
-  /* 悬浮背景色与菜单一致 */
   color: #1890ff;
-  /* 悬浮字体色与菜单一致 */
 }
 
+/* 折叠按钮图标样式 */
 .collapse-btn :deep(.anticon) {
   font-size: 18px;
-  /* 与一级菜单 icon 大小一致 */
   width: 24px;
-  /* 与一级菜单 icon 宽度一致 */
   vertical-align: middle;
   display: inline-block;
 }

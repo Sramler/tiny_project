@@ -229,8 +229,8 @@
         <div class="pagination-container" ref="paginationRef">
           <a-pagination
             v-model:current="pagination.current"
-            :page-size="pagination.pageSize"
-            :total="pagination.total"
+            :page-size="Number(pagination.pageSize)"
+            :total="Number(pagination.total)"
             :show-size-changer="pagination.showSizeChanger"
             :page-size-options="paginationConfig.pageSizeOptions"
             :show-total="pagination.showTotal"
@@ -430,7 +430,8 @@ async function loadData() {
     }
     const res = await roleList(params)
     tableData.value = Array.isArray(res.content) ? res.content : []
-    pagination.value.total = res.totalElements || 0
+    // 确保 total 是数字类型，避免类型检查警告
+    pagination.value.total = Number(res.totalElements) || 0
   } catch (error) {
     tableData.value = []
     pagination.value.total = 0

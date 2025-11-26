@@ -58,6 +58,7 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { debounce } from '@/utils/debounce'
 import {
   ReloadOutlined,
   CloseOutlined,
@@ -164,21 +165,6 @@ const overflowMenuPos = ref<MenuPosition>({ left: 0, top: 0 })
 /**
  * 工具函数
  */
-
-/**
- * 防抖函数
- * 用于限制函数调用频率，优化性能
- * @param fn 要防抖的函数
- * @param delay 延迟时间（毫秒）
- * @returns 防抖后的函数
- */
-function debounce<T extends (...args: unknown[]) => void>(fn: T, delay: number): T {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null
-  return ((...args: Parameters<T>) => {
-    if (timeoutId) clearTimeout(timeoutId)
-    timeoutId = setTimeout(() => fn(...args), delay)
-  }) as T
-}
 
 /**
  * 设置标签引用
@@ -454,7 +440,7 @@ const calcOverflowTabs = debounce(() => {
 
 /**
  * 监听关闭当前标签页事件
- * 用于响应键盘快捷键 Ctrl+W / Cmd+W
+ * 用于响应自定义事件 'close-current-tab'
  */
 function handleCloseCurrentTab() {
   const currentIdx = activeTabIdx.value
@@ -463,26 +449,6 @@ function handleCloseCurrentTab() {
   }
 }
 
-/**
- * 键盘快捷键处理
- * 支持 Ctrl+W/Cmd+W 关闭当前标签，Ctrl+1-9/Cmd+1-9 切换标签
- * @param e 键盘事件
- */
-function handleKeydown(e: KeyboardEvent) {
-  // Ctrl+W 或 Cmd+W 关闭当前标签
-  if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
-    e.preventDefault()
-    handleCloseCurrentTab()
-  }
-  // Ctrl+数字键切换标签（1-9）
-  if ((e.ctrlKey || e.metaKey) && /^[1-9]$/.test(e.key)) {
-    const idx = parseInt(e.key) - 1
-    if (idx < tabs.value.length) {
-      e.preventDefault()
-      switchTab(tabs.value[idx].path)
-    }
-  }
-}
 
 /**
  * 溢出菜单显示/隐藏
@@ -539,8 +505,6 @@ watch(
 onMounted(() => {
   // 监听窗口大小变化，重新计算溢出标签
   window.addEventListener('resize', calcOverflowTabs)
-  // 监听键盘事件，支持快捷键
-  window.addEventListener('keydown', handleKeydown)
   // 监听滚动事件，重新计算溢出标签
   if (tabScrollRef.value) {
     tabScrollRef.value.addEventListener('scroll', calcOverflowTabs)
@@ -558,7 +522,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   // 清理所有事件监听器
   window.removeEventListener('resize', calcOverflowTabs)
-  window.removeEventListener('keydown', handleKeydown)
   if (tabScrollRef.value) {
     tabScrollRef.value.removeEventListener('scroll', calcOverflowTabs)
   }

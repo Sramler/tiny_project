@@ -1,115 +1,59 @@
 <template>
   <div class="menu-form">
-    <a-form
-      ref="formRef"
-      :model="formData"
-      :rules="rules"
-      :label-col="{ span: 6 }"
-      :wrapper-col="{ span: 18 }"
-      layout="horizontal"
-    >
+    <a-form ref="formRef" :model="formData" :rules="rules" :label-col="{ span: 6 }" :wrapper-col="{ span: 18 }"
+      layout="horizontal">
       <!-- 基本信息 -->
       <a-divider>基本信息</a-divider>
-      
+
       <a-form-item label="菜单名称" name="name">
-        <a-input 
-          v-model:value="formData.name" 
-          placeholder="请输入菜单名称"
-          maxlength="100"
-          show-count
-        />
+        <a-input v-model:value="formData.name" placeholder="请输入菜单名称" maxlength="100" show-count />
       </a-form-item>
-      
+
       <a-form-item label="菜单标题" name="title">
-        <a-input 
-          v-model:value="formData.title" 
-          placeholder="请输入菜单显示标题"
-          maxlength="100"
-          show-count
-        />
+        <a-input v-model:value="formData.title" placeholder="请输入菜单显示标题" maxlength="100" show-count />
       </a-form-item>
-      
+
       <a-form-item label="父级菜单" name="parentId">
-        <a-tree-select
-          v-model:value="formData.parentId"
-          :tree-data="menuTreeData"
-          placeholder="请选择父级菜单"
-          allow-clear
-          tree-default-expand-all
-          :field-names="{ children: 'children', label: 'title', value: 'id' }"
-        />
+        <a-tree-select v-model:value="formData.parentId" :tree-data="menuTreeData" placeholder="请选择父级菜单" allow-clear
+          tree-default-expand-all :field-names="{ children: 'children', label: 'title', value: 'id' }" />
       </a-form-item>
-      
+
       <a-form-item label="排序权重" name="sort">
-        <a-input-number 
-          v-model:value="formData.sort" 
-          :min="0" 
-          :max="9999"
-          placeholder="数字越小越靠前"
-          style="width: 100%"
-        />
+        <a-input-number v-model:value="formData.sort" :min="0" :max="9999" placeholder="数字越小越靠前" style="width: 100%" />
       </a-form-item>
-      
+
       <!-- 路由配置 -->
       <a-divider>路由配置</a-divider>
-      
+
       <a-form-item label="前端路径" name="url">
-        <a-input 
-          v-model:value="formData.url" 
-          placeholder="请输入前端路由路径，如：/user"
-          maxlength="200"
-          show-count
-        />
+        <a-input v-model:value="formData.url" placeholder="请输入前端路由路径，如：/user" maxlength="200" show-count />
       </a-form-item>
-      
+
       <a-form-item label="组件路径" name="component">
-        <a-input 
-          v-model:value="formData.component" 
-          placeholder="请输入Vue组件路径，如：@/views/user/User.vue"
-          maxlength="200"
-          show-count
-        />
+        <a-input v-model:value="formData.component" placeholder="请输入Vue组件路径，如：@/views/user/User.vue" maxlength="200"
+          show-count />
       </a-form-item>
-      
+
       <a-form-item label="重定向地址" name="redirect">
-        <a-input 
-          v-model:value="formData.redirect" 
-          placeholder="父菜单重定向地址，如：/user/list"
-          maxlength="200"
-          show-count
-        />
+        <a-input v-model:value="formData.redirect" placeholder="父菜单重定向地址，如：/user/list" maxlength="200" show-count />
       </a-form-item>
-      
+
       <a-form-item label="权限标识" name="permission">
-        <a-input 
-          v-model:value="formData.permission" 
-          placeholder="请输入权限标识，如：user:list"
-          maxlength="100"
-          show-count
-        />
+        <a-input v-model:value="formData.permission" placeholder="请输入权限标识，如：user:list" maxlength="100" show-count />
       </a-form-item>
-      
+
       <!-- 显示配置 -->
       <a-divider>显示配置</a-divider>
-      
+
       <a-form-item label="是否启用" name="enabled">
         <a-switch v-model:checked="formData.enabled" />
       </a-form-item>
-      
+
       <a-form-item label="菜单图标" name="icon">
         <div class="icon-selector-row">
-          <a-input
-            v-model:value="formData.icon"
-            placeholder="请输入图标名称"
-            maxlength="200"
-            style="flex: 1;"
-          >
+          <a-input v-model:value="formData.icon" placeholder="请输入图标名称" maxlength="200" style="flex: 1;">
             <template #suffix>
-              <Icon
-                v-if="formData.icon"
-                :icon="formData.icon"
-                className="input-suffix-icon"
-              />
+              <Icon v-if="formData.icon" :icon="formData.icon" className="input-suffix-icon" />
             </template>
           </a-input>
           <a-button @click="showIconSelector = true" type="primary" style="margin-left: 8px;">
@@ -117,28 +61,23 @@
           </a-button>
         </div>
       </a-form-item>
-      <a-modal
-        v-model:open="showIconSelector"
-        title="选择图标"
-        width="800px"
-        :footer="null"
-      >
+      <a-modal v-model:open="showIconSelector" title="选择图标" width="800px" :footer="null">
         <IconSelect v-model="formData.icon" />
       </a-modal>
-      
+
       <a-form-item label="显示图标" name="showIcon">
         <a-switch v-model:checked="formData.showIcon" />
       </a-form-item>
-      
+
       <a-form-item label="侧边栏隐藏" name="hidden">
         <a-switch v-model:checked="formData.hidden" />
       </a-form-item>
-      
+
       <a-form-item label="页面缓存" name="keepAlive">
         <a-switch v-model:checked="formData.keepAlive" />
       </a-form-item>
     </a-form>
-    
+
     <!-- 表单操作按钮 -->
     <div class="form-actions">
       <a-button @click="handleCancel">取消</a-button>
@@ -154,7 +93,7 @@ import { ref, reactive, computed, onMounted, watch, onBeforeUnmount, nextTick } 
 import { message } from 'ant-design-vue'
 import type { FormInstance } from 'ant-design-vue'
 // 引入菜单API
-import { menuTree, type MenuItem } from '@/api/menu'
+import { menuTreeAll, type MenuItem } from '@/api/menu'
 import IconSelect from '../../components/IconSelect.vue' // 新增
 import * as allIcons from '@ant-design/icons-vue' // 新增
 import Icon from '@/components/Icon.vue' // 通用图标回显组件
@@ -237,9 +176,9 @@ function selectIcon(iconName: string) {
 async function loadMenuTree() {
   try {
     console.log('开始加载菜单树数据...')
-    const data = await menuTree()
+    const data = await menuTreeAll()
     console.log('菜单树原始数据:', data)
-    
+
     // 验证返回的数据
     if (Array.isArray(data)) {
       // 转换数据格式，确保 children 是数组格式
@@ -255,7 +194,7 @@ async function loadMenuTree() {
       console.warn('菜单树数据格式异常:', data)
       menuTreeData.value = []
     }
-    
+
     // 打印菜单树结构，便于调试
     console.log('最终菜单树数据:', menuTreeData.value)
   } catch (error) {
@@ -280,7 +219,7 @@ function initFormData() {
     console.log('初始化表单数据，当前模式:', props.mode)
     console.log('菜单数据:', props.menuData)
     console.log('父级菜单:', props.parentMenu)
-    
+
     if (props.menuData && typeof props.menuData === 'object') {
       // 安全地复制数据，避免直接引用
       const menuData = props.menuData
@@ -300,7 +239,7 @@ function initFormData() {
         parentId: menuData.parentId || null,
         enabled: menuData.enabled !== undefined ? menuData.enabled : true
       })
-      
+
       console.log('编辑模式 - 表单数据已设置:', formData)
       console.log('父级菜单ID:', formData.parentId)
     } else {
@@ -323,17 +262,17 @@ function initFormData() {
       })
       console.log('新建模式 - 表单数据已重置')
     }
-    
+
     // 如果是添加子菜单，设置父级菜单ID
     if (props.parentMenu && typeof props.parentMenu === 'object') {
       formData.parentId = props.parentMenu.id || null
       console.log('添加子菜单模式 - 父级菜单ID已设置:', formData.parentId)
     }
-    
+
     // 验证父级菜单ID是否正确设置
     console.log('最终父级菜单ID:', formData.parentId)
     console.log('菜单树数据是否可用:', menuTreeData.value.length > 0)
-    
+
     // 如果菜单树数据已加载，验证父级菜单是否存在
     if (menuTreeData.value.length > 0 && formData.parentId) {
       const parentExists = findMenuInTree(menuTreeData.value, formData.parentId)
@@ -354,7 +293,7 @@ function initFormData() {
 // 递归查找菜单在树中的位置
 function findMenuInTree(tree: MenuItem[], targetId: number | null): boolean {
   if (!targetId) return false
-  
+
   for (const item of tree) {
     if (item.id === targetId) {
       return true
@@ -373,20 +312,20 @@ async function handleSubmit() {
   try {
     // 验证表单
     await formRef.value?.validate()
-    
+
     // 验证必填字段
     if (!formData.name || !formData.name.trim()) {
       message.error('请输入菜单名称')
       return
     }
-    
+
     if (!formData.title || !formData.title.trim()) {
       message.error('请输入菜单标题')
       return
     }
-    
+
     submitting.value = true
-    
+
     // 深拷贝表单数据，避免直接引用
     const submitData = {
       id: formData.id,
@@ -404,7 +343,7 @@ async function handleSubmit() {
       parentId: formData.parentId || null,
       enabled: formData.enabled
     }
-    
+
     emit('submit', submitData)
   } catch (error) {
     console.error('表单验证失败:', error)
@@ -486,7 +425,7 @@ onBeforeUnmount(() => {
       hidden: false, keepAlive: false, permission: '', parentId: null,
       enabled: true
     })
-    
+
     // 清理其他响应式数据
     menuTreeData.value = []
     showIconSelector.value = false
@@ -500,9 +439,9 @@ onBeforeUnmount(() => {
 async function testMenuTreeApi() {
   try {
     console.log('开始测试菜单树API...')
-    const data = await menuTree()
+    const data = await menuTreeAll()
     console.log('菜单树API返回数据:', data)
-    
+
     if (Array.isArray(data)) {
       console.log('数据是数组格式，长度:', data.length)
       data.forEach((item, index) => {
@@ -516,7 +455,7 @@ async function testMenuTreeApi() {
     } else {
       console.log('数据不是数组格式:', typeof data, data)
     }
-    
+
     message.success('菜单树API测试完成，请查看控制台')
   } catch (error) {
     console.error('菜单树API测试失败:', error)
@@ -602,4 +541,4 @@ async function testMenuTreeApi() {
   color: #1890ff;
   vertical-align: middle;
 }
-</style> 
+</style>

@@ -210,3 +210,416 @@ CREATE TABLE IF NOT EXISTS `export_task` (
     KEY `idx_created_at` (`created_at`),
     KEY `idx_expire_at` (`expire_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='导出任务表';
+
+-- ========================================================================
+-- 企业级 DAG 调度系统（带 scheduling_ 前缀、无外键）
+-- 基于 Quartz + Spring Boot，支持多租户、版本化、分布式执行
+-- ========================================================================
+
+-- 1) scheduling_task_type：任务类型表
+CREATE TABLE IF NOT EXISTS `scheduling_task_type` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID，自增',
+  `tenant_id` BIGINT DEFAULT NULL COMMENT '租户ID（多租户场景可用）',
+  `code` VARCHAR(128) NOT NULL COMMENT '类型唯一编码（租户范围内唯一）',
+  `name` VARCHAR(128) NOT NULL COMMENT '类型名称，用于展示',
+  `description` TEXT DEFAULT NULL COMMENT '类型描述，说明用途与注意事项',
+  `executor` VARCHAR(255) DEFAULT NULL COMMENT '执行器标识（如 Spring Bean 名、镜像引用、脚本路径）',
+  `param_schema` JSON DEFAULT NULL COMMENT 'JSON Schema：参数校验规则，便于 UI 自动生成表单',
+  `default_timeout_sec` INT DEFAULT 0 COMMENT '默认超时时间（秒），0 表示无限制',
+  `default_max_retry` INT DEFAULT 0 COMMENT '默认最大重试次数，0 表示不重试',
+  `enabled` TINYINT(1) DEFAULT 1 COMMENT '是否启用（1=启用，0=禁用）',
+  `created_by` VARCHAR(128) DEFAULT NULL COMMENT '创建者标识',
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（UTC）',
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间（UTC）',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_scheduling_task_type_tenant_code` (`tenant_id`,`code`),
+  KEY `idx_scheduling_task_type_executor` (`executor`),
+  KEY `idx_scheduling_task_type_enabled` (`enabled`),
+  KEY `idx_scheduling_task_type_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='任务类型：定义任务能力/模板（无外键）';
+
+-- 2) scheduling_task：任务实例定义表
+CREATE TABLE IF NOT EXISTS `scheduling_task` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID，自增',
+  `tenant_id` BIGINT DEFAULT NULL COMMENT '租户ID（如适用）',
+  `type_id` BIGINT NOT NULL COMMENT '引用 scheduling_task_type.id（应用层保证存在）',
+  `code` VARCHAR(128) DEFAULT NULL COMMENT '业务编码（租户范围内可唯一标识）',
+  `name` VARCHAR(128) NOT NULL COMMENT '任务名称，用于展示',
+  `description` TEXT DEFAULT NULL COMMENT '任务描述，说明职责、注意事项',
+  `params` JSON DEFAULT NULL COMMENT '默认参数模板（可以被 DAG 覆盖）',
+  `timeout_sec` INT DEFAULT NULL COMMENT '任务超时时间（秒），若为空使用 task_type.default_timeout_sec',
+  `max_retry` INT DEFAULT 0 COMMENT '最大重试次数，优先使用本字段，若为 0 则使用 task_type.default_max_retry',
+  `retry_policy` JSON DEFAULT NULL COMMENT '重试策略（JSON），例如 { "strategy":"fixed","interval_sec":60 }',
+  `concurrency_policy` VARCHAR(32) DEFAULT 'PARALLEL' COMMENT '并发策略：PARALLEL/SEQUENTIAL/SINGLETON/KEYED',
+  `enabled` TINYINT(1) DEFAULT 1 COMMENT '是否启用该任务定义',
+  `created_by` VARCHAR(128) DEFAULT NULL COMMENT '创建者',
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（UTC）',
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间（UTC）',
+  PRIMARY KEY (`id`),
+  KEY `idx_scheduling_task_type_id` (`type_id`),
+  KEY `idx_scheduling_task_tenant_code` (`tenant_id`,`code`),
+  KEY `idx_scheduling_task_enabled` (`enabled`),
+  KEY `idx_scheduling_task_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='任务定义表：参数化的任务实例模板（无外键）';
+
+-- 3) scheduling_dag：DAG 主表
+CREATE TABLE IF NOT EXISTS `scheduling_dag` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'DAG 主键ID',
+  `tenant_id` BIGINT DEFAULT NULL COMMENT '租户ID（如适用）',
+  `code` VARCHAR(128) DEFAULT NULL COMMENT 'DAG 编码（租户内唯一）',
+  `name` VARCHAR(128) NOT NULL COMMENT 'DAG 名称',
+  `description` TEXT DEFAULT NULL COMMENT 'DAG 描述',
+  `enabled` TINYINT(1) DEFAULT 1 COMMENT '是否启用该 DAG（1=启用）',
+  `created_by` VARCHAR(128) DEFAULT NULL COMMENT '创建者',
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（UTC）',
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间（UTC）',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_scheduling_dag_tenant_code` (`tenant_id`,`code`),
+  KEY `idx_scheduling_dag_enabled` (`enabled`),
+  KEY `idx_scheduling_dag_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='DAG 表：流程元数据（无外键）';
+
+-- 4) scheduling_dag_version：DAG 版本表
+CREATE TABLE IF NOT EXISTS `scheduling_dag_version` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '版本ID，自增',
+  `dag_id` BIGINT NOT NULL COMMENT '引用 scheduling_dag.id（应用层保证存在）',
+  `version_no` INT NOT NULL DEFAULT 1 COMMENT '版本号，递增',
+  `status` VARCHAR(32) DEFAULT 'DRAFT' COMMENT 'DRAFT/ACTIVE/ARCHIVED',
+  `definition` JSON DEFAULT NULL COMMENT 'JSON：包含 nodes/edges/metadata，便于回滚与预览',
+  `created_by` VARCHAR(128) DEFAULT NULL COMMENT '版本创建者',
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（UTC）',
+  `activated_at` DATETIME DEFAULT NULL COMMENT '激活时间（若 status=ACTIVE）',
+  PRIMARY KEY (`id`),
+  KEY `idx_scheduling_dag_version_dag` (`dag_id`),
+  KEY `idx_scheduling_dag_version_status` (`status`),
+  KEY `idx_scheduling_dag_version_dag_status` (`dag_id`, `status`),
+  UNIQUE KEY `uk_scheduling_dag_version_dag_version` (`dag_id`, `version_no`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='DAG 版本表：用于版本化 DAG 定义（无外键）';
+
+-- 5) scheduling_dag_task：DAG 版本节点表
+CREATE TABLE IF NOT EXISTS `scheduling_dag_task` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '节点主键ID',
+  `dag_version_id` BIGINT NOT NULL COMMENT '引用 scheduling_dag_version.id（由业务保证一致性）',
+  `node_code` VARCHAR(128) NOT NULL COMMENT '版本内唯一的节点编码（用于 edges 引用）',
+  `task_id` BIGINT NOT NULL COMMENT '引用 scheduling_task.id（执行逻辑），应用层需保证存在',
+  `name` VARCHAR(128) DEFAULT NULL COMMENT '节点显示名称',
+  `override_params` JSON DEFAULT NULL COMMENT '节点覆盖的参数（优先级高于 task.params）',
+  `timeout_sec` INT DEFAULT NULL COMMENT '节点级超时（秒）',
+  `max_retry` INT DEFAULT NULL COMMENT '节点级最大重试',
+  `parallel_group` VARCHAR(64) DEFAULT NULL COMMENT '并行组标识（同组可并行）',
+  `meta` JSON DEFAULT NULL COMMENT '扩展字段，供 UI 或插件存放自定义信息',
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_scheduling_dag_task_version_node` (`dag_version_id`,`node_code`),
+  KEY `idx_scheduling_dag_task_task` (`task_id`),
+  KEY `idx_scheduling_dag_task_dag_version` (`dag_version_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='DAG 节点表：版本化节点定义（无外键）';
+
+-- 6) scheduling_dag_edge：DAG 边表
+CREATE TABLE IF NOT EXISTS `scheduling_dag_edge` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `dag_version_id` BIGINT NOT NULL COMMENT '引用 scheduling_dag_version.id',
+  `from_node_code` VARCHAR(128) NOT NULL COMMENT '上游节点编码',
+  `to_node_code` VARCHAR(128) NOT NULL COMMENT '下游节点编码',
+  `condition` JSON DEFAULT NULL COMMENT '可选条件表达式 JSON',
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_scheduling_dag_edge_version` (`dag_version_id`),
+  KEY `idx_scheduling_dag_edge_from` (`from_node_code`),
+  KEY `idx_scheduling_dag_edge_to` (`to_node_code`),
+  KEY `idx_scheduling_dag_edge_version_from_to` (`dag_version_id`, `from_node_code`, `to_node_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='DAG 边表：版本级依赖关系（无外键）';
+
+-- 7) scheduling_dag_run：DAG 运行实例
+CREATE TABLE IF NOT EXISTS `scheduling_dag_run` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID，自增',
+  `dag_id` BIGINT NOT NULL COMMENT '引用 scheduling_dag.id',
+  `dag_version_id` BIGINT DEFAULT NULL COMMENT '引用当时使用的 scheduling_dag_version.id',
+  `run_no` VARCHAR(128) DEFAULT NULL COMMENT '外部可见的 run 编号（幂等用）',
+  `tenant_id` BIGINT DEFAULT NULL COMMENT '租户ID',
+  `trigger_type` VARCHAR(32) DEFAULT 'MANUAL' COMMENT '触发类型：MANUAL / SCHEDULE / RETRY',
+  `triggered_by` VARCHAR(128) DEFAULT NULL COMMENT '触发人或触发器标识',
+  `status` VARCHAR(32) DEFAULT 'SCHEDULED' COMMENT 'SCHEDULED/RUNNING/SUCCESS/FAILED/CANCELLED/PARTIAL_FAILED',
+  `start_time` DATETIME DEFAULT NULL COMMENT '实际开始时间',
+  `end_time` DATETIME DEFAULT NULL COMMENT '结束时间',
+  `metrics` JSON DEFAULT NULL COMMENT '聚合指标（可选）',
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_scheduling_dag_run_dag` (`dag_id`),
+  KEY `idx_scheduling_dag_run_status` (`status`),
+  KEY `idx_scheduling_dag_run_dag_status` (`dag_id`, `status`),
+  KEY `idx_scheduling_dag_run_created_at` (`created_at`),
+  UNIQUE KEY `uk_scheduling_dag_run_run_no` (`run_no`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='DAG 运行实例表：记录每次 DAG 触发与运行（无外键）';
+
+-- 8) scheduling_task_instance：任务实例（调度队列项）
+CREATE TABLE IF NOT EXISTS `scheduling_task_instance` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '实例ID，自增',
+  `dag_run_id` BIGINT DEFAULT NULL COMMENT '所属 scheduling_dag_run.id',
+  `dag_id` BIGINT DEFAULT NULL COMMENT '所属 scheduling_dag.id',
+  `dag_version_id` BIGINT DEFAULT NULL COMMENT '所属 scheduling_dag_version.id',
+  `node_code` VARCHAR(128) DEFAULT NULL COMMENT '节点编码，对应 dag_version 中的 node_code',
+  `task_id` BIGINT NOT NULL COMMENT '引用 scheduling_task.id',
+  `tenant_id` BIGINT DEFAULT NULL COMMENT '租户ID',
+  `attempt_no` INT DEFAULT 1 COMMENT '本次尝试序号',
+  `status` VARCHAR(32) DEFAULT 'PENDING' COMMENT 'PENDING/RESERVED/RUNNING/SUCCESS/FAILED/SKIPPED',
+  `scheduled_at` DATETIME DEFAULT NULL COMMENT '计划执行时间',
+  `locked_by` VARCHAR(128) DEFAULT NULL COMMENT '被哪个 worker 锁定',
+  `lock_time` DATETIME DEFAULT NULL COMMENT '锁定时间',
+  `next_retry_at` DATETIME DEFAULT NULL COMMENT '下一次重试时间',
+  `params` JSON DEFAULT NULL COMMENT '执行参数快照',
+  `result` JSON DEFAULT NULL COMMENT '执行结果快照',
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '入队时间',
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_scheduling_task_instance_status` (`status`),
+  KEY `idx_scheduling_task_instance_scheduled` (`scheduled_at`),
+  KEY `idx_scheduling_task_instance_task` (`task_id`),
+  KEY `idx_scheduling_task_instance_node` (`node_code`),
+  KEY `idx_scheduling_task_instance_dag_run` (`dag_run_id`),
+  KEY `idx_scheduling_task_instance_status_scheduled` (`status`, `scheduled_at`),
+  KEY `idx_scheduling_task_instance_locked_by` (`locked_by`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='任务实例表：调度队列与 Worker 抢占（无外键）';
+
+-- 9) scheduling_task_history：任务执行历史
+CREATE TABLE IF NOT EXISTS `scheduling_task_history` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '历史ID，自增，不可修改',
+  `task_instance_id` BIGINT DEFAULT NULL COMMENT '来源 scheduling_task_instance.id',
+  `dag_run_id` BIGINT DEFAULT NULL COMMENT '所属 scheduling_dag_run.id',
+  `dag_id` BIGINT DEFAULT NULL COMMENT '所属 scheduling_dag.id',
+  `node_code` VARCHAR(128) DEFAULT NULL COMMENT '节点编码',
+  `task_id` BIGINT DEFAULT NULL COMMENT '任务 ID',
+  `attempt_no` INT DEFAULT 1 COMMENT '执行尝试序号',
+  `status` VARCHAR(32) DEFAULT 'PENDING' COMMENT 'PENDING/RUNNING/SUCCESS/FAILED/SKIPPED',
+  `start_time` DATETIME DEFAULT NULL COMMENT '开始时间',
+  `end_time` DATETIME DEFAULT NULL COMMENT '结束时间',
+  `duration_ms` BIGINT DEFAULT NULL COMMENT '耗时毫秒',
+  `params` JSON DEFAULT NULL COMMENT '执行参数快照',
+  `result` JSON DEFAULT NULL COMMENT '执行结果快照',
+  `error_message` TEXT DEFAULT NULL COMMENT '错误摘要',
+  `stack_trace` LONGTEXT DEFAULT NULL COMMENT '完整堆栈',
+  `log_path` VARCHAR(512) DEFAULT NULL COMMENT '日志存放路径',
+  `worker_id` VARCHAR(128) DEFAULT NULL COMMENT '执行 worker 标识',
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '记录时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_scheduling_task_history_task` (`task_id`),
+  KEY `idx_scheduling_task_history_dagrun` (`dag_run_id`),
+  KEY `idx_scheduling_task_history_status` (`status`),
+  KEY `idx_scheduling_task_history_task_instance` (`task_instance_id`),
+  KEY `idx_scheduling_task_history_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='任务执行历史表（无外键）';
+
+-- 10) scheduling_audit：操作审计表
+CREATE TABLE IF NOT EXISTS `scheduling_audit` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '自增主键',
+  `tenant_id` BIGINT DEFAULT NULL COMMENT '租户ID',
+  `object_type` VARCHAR(64) NOT NULL COMMENT '对象类型，如 dag/task/task_instance/task_history',
+  `object_id` VARCHAR(128) DEFAULT NULL COMMENT '对象ID或业务标识',
+  `action` VARCHAR(64) NOT NULL COMMENT '操作类型：CREATE/UPDATE/DELETE/TRIGGER/RETRY/CANCEL/ACTIVATE',
+  `performed_by` VARCHAR(128) DEFAULT NULL COMMENT '执行者',
+  `detail` JSON DEFAULT NULL COMMENT '操作详情或快照',
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '操作时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_scheduling_audit_object` (`object_type`,`object_id`),
+  KEY `idx_scheduling_audit_action` (`action`),
+  KEY `idx_scheduling_audit_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='审计表（无外键）';
+
+-- 11) scheduling_task_param：任务默认参数表（可选，兼容旧系统）
+CREATE TABLE IF NOT EXISTS `scheduling_task_param` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `task_id` BIGINT NOT NULL COMMENT '引用 scheduling_task.id',
+  `param_key` VARCHAR(128) NOT NULL COMMENT '参数名',
+  `param_value` TEXT DEFAULT NULL COMMENT '参数默认值',
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_scheduling_task_param_task` (`task_id`),
+  UNIQUE KEY `uk_scheduling_task_param_task_key` (`task_id`, `param_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='任务参数表（键值对形式，兼容旧系统需求）';
+
+-- ========================================================================
+-- Quartz 调度器数据库表（JDBC JobStore 必需）
+-- 基于 Quartz 2.x/3.x 标准表结构，用于持久化 Job 和 Trigger
+-- ========================================================================
+
+-- QRTZ_JOB_DETAILS：存储 Job 详情
+CREATE TABLE IF NOT EXISTS `QRTZ_JOB_DETAILS` (
+  `SCHED_NAME` VARCHAR(120) NOT NULL COMMENT '调度器名称',
+  `JOB_NAME` VARCHAR(190) NOT NULL COMMENT 'Job 名称',
+  `JOB_GROUP` VARCHAR(190) NOT NULL COMMENT 'Job 组名',
+  `DESCRIPTION` VARCHAR(250) DEFAULT NULL COMMENT 'Job 描述',
+  `JOB_CLASS_NAME` VARCHAR(250) NOT NULL COMMENT 'Job 实现类全限定名',
+  `IS_DURABLE` VARCHAR(1) NOT NULL COMMENT '是否持久化（Y/N）',
+  `IS_NONCONCURRENT` VARCHAR(1) NOT NULL COMMENT '是否非并发（Y/N）',
+  `IS_UPDATE_DATA` VARCHAR(1) NOT NULL COMMENT '是否更新数据（Y/N）',
+  `REQUESTS_RECOVERY` VARCHAR(1) NOT NULL COMMENT '是否请求恢复（Y/N）',
+  `JOB_DATA` BLOB DEFAULT NULL COMMENT 'Job 数据（BLOB）',
+  PRIMARY KEY (`SCHED_NAME`,`JOB_NAME`,`JOB_GROUP`),
+  KEY `IDX_QRTZ_J_REQ_RECOVERY` (`SCHED_NAME`,`REQUESTS_RECOVERY`),
+  KEY `IDX_QRTZ_J_GRP` (`SCHED_NAME`,`JOB_GROUP`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Quartz Job 详情表';
+
+-- QRTZ_TRIGGERS：存储 Trigger 信息
+CREATE TABLE IF NOT EXISTS `QRTZ_TRIGGERS` (
+  `SCHED_NAME` VARCHAR(120) NOT NULL COMMENT '调度器名称',
+  `TRIGGER_NAME` VARCHAR(190) NOT NULL COMMENT 'Trigger 名称',
+  `TRIGGER_GROUP` VARCHAR(190) NOT NULL COMMENT 'Trigger 组名',
+  `JOB_NAME` VARCHAR(190) NOT NULL COMMENT '关联的 Job 名称',
+  `JOB_GROUP` VARCHAR(190) NOT NULL COMMENT '关联的 Job 组名',
+  `DESCRIPTION` VARCHAR(250) DEFAULT NULL COMMENT 'Trigger 描述',
+  `NEXT_FIRE_TIME` BIGINT(13) DEFAULT NULL COMMENT '下次触发时间（时间戳）',
+  `PREV_FIRE_TIME` BIGINT(13) DEFAULT NULL COMMENT '上次触发时间（时间戳）',
+  `PRIORITY` INTEGER DEFAULT NULL COMMENT '优先级',
+  `TRIGGER_STATE` VARCHAR(16) NOT NULL COMMENT 'Trigger 状态（WAITING/ACQUIRED/EXECUTING/COMPLETE/PAUSED/BLOCKED/ERROR/DELETED）',
+  `TRIGGER_TYPE` VARCHAR(8) NOT NULL COMMENT 'Trigger 类型（CRON/SIMPLE/BLOB）',
+  `START_TIME` BIGINT(13) NOT NULL COMMENT '开始时间（时间戳）',
+  `END_TIME` BIGINT(13) DEFAULT NULL COMMENT '结束时间（时间戳）',
+  `CALENDAR_NAME` VARCHAR(190) DEFAULT NULL COMMENT '关联的日历名称',
+  `MISFIRE_INSTR` SMALLINT(2) DEFAULT NULL COMMENT 'Misfire 策略',
+  `JOB_DATA` BLOB DEFAULT NULL COMMENT 'Trigger 数据（BLOB）',
+  PRIMARY KEY (`SCHED_NAME`,`TRIGGER_NAME`,`TRIGGER_GROUP`),
+  KEY `IDX_QRTZ_T_J` (`SCHED_NAME`,`JOB_NAME`,`JOB_GROUP`),
+  KEY `IDX_QRTZ_T_JG` (`SCHED_NAME`,`JOB_GROUP`),
+  KEY `IDX_QRTZ_T_C` (`SCHED_NAME`,`CALENDAR_NAME`),
+  KEY `IDX_QRTZ_T_G` (`SCHED_NAME`,`TRIGGER_GROUP`),
+  KEY `IDX_QRTZ_T_STATE` (`SCHED_NAME`,`TRIGGER_STATE`),
+  KEY `IDX_QRTZ_T_N_STATE` (`SCHED_NAME`,`TRIGGER_NAME`,`TRIGGER_GROUP`,`TRIGGER_STATE`),
+  KEY `IDX_QRTZ_T_N_G_STATE` (`SCHED_NAME`,`TRIGGER_GROUP`,`TRIGGER_STATE`),
+  KEY `IDX_QRTZ_T_NEXT_FIRE_TIME` (`SCHED_NAME`,`NEXT_FIRE_TIME`),
+  KEY `IDX_QRTZ_T_NFT_ST` (`SCHED_NAME`,`TRIGGER_STATE`,`NEXT_FIRE_TIME`),
+  KEY `IDX_QRTZ_T_NFT_MISFIRE` (`SCHED_NAME`,`MISFIRE_INSTR`,`NEXT_FIRE_TIME`),
+  KEY `IDX_QRTZ_T_NFT_ST_MISFIRE` (`SCHED_NAME`,`MISFIRE_INSTR`,`NEXT_FIRE_TIME`,`TRIGGER_STATE`),
+  KEY `IDX_QRTZ_T_NFT_ST_MISFIRE_GRP` (`SCHED_NAME`,`MISFIRE_INSTR`,`NEXT_FIRE_TIME`,`TRIGGER_GROUP`,`TRIGGER_STATE`),
+  CONSTRAINT `QRTZ_TRIGGERS_IBFK_1` FOREIGN KEY (`SCHED_NAME`, `JOB_NAME`, `JOB_GROUP`) REFERENCES `QRTZ_JOB_DETAILS` (`SCHED_NAME`, `JOB_NAME`, `JOB_GROUP`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Quartz Trigger 表';
+
+-- QRTZ_SIMPLE_TRIGGERS：简单触发器（固定间隔触发）
+CREATE TABLE IF NOT EXISTS `QRTZ_SIMPLE_TRIGGERS` (
+  `SCHED_NAME` VARCHAR(120) NOT NULL COMMENT '调度器名称',
+  `TRIGGER_NAME` VARCHAR(190) NOT NULL COMMENT 'Trigger 名称',
+  `TRIGGER_GROUP` VARCHAR(190) NOT NULL COMMENT 'Trigger 组名',
+  `REPEAT_COUNT` BIGINT(7) NOT NULL COMMENT '重复次数（-1 表示无限）',
+  `REPEAT_INTERVAL` BIGINT(12) NOT NULL COMMENT '重复间隔（毫秒）',
+  `TIMES_TRIGGERED` BIGINT(10) NOT NULL COMMENT '已触发次数',
+  PRIMARY KEY (`SCHED_NAME`,`TRIGGER_NAME`,`TRIGGER_GROUP`),
+  CONSTRAINT `QRTZ_SIMPLE_TRIGGERS_IBFK_1` FOREIGN KEY (`SCHED_NAME`, `TRIGGER_NAME`, `TRIGGER_GROUP`) REFERENCES `QRTZ_TRIGGERS` (`SCHED_NAME`, `TRIGGER_NAME`, `TRIGGER_GROUP`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Quartz 简单触发器表';
+
+-- QRTZ_CRON_TRIGGERS：Cron 触发器（基于 Cron 表达式）
+CREATE TABLE IF NOT EXISTS `QRTZ_CRON_TRIGGERS` (
+  `SCHED_NAME` VARCHAR(120) NOT NULL COMMENT '调度器名称',
+  `TRIGGER_NAME` VARCHAR(190) NOT NULL COMMENT 'Trigger 名称',
+  `TRIGGER_GROUP` VARCHAR(190) NOT NULL COMMENT 'Trigger 组名',
+  `CRON_EXPRESSION` VARCHAR(120) NOT NULL COMMENT 'Cron 表达式',
+  `TIME_ZONE_ID` VARCHAR(80) DEFAULT NULL COMMENT '时区 ID',
+  PRIMARY KEY (`SCHED_NAME`,`TRIGGER_NAME`,`TRIGGER_GROUP`),
+  CONSTRAINT `QRTZ_CRON_TRIGGERS_IBFK_1` FOREIGN KEY (`SCHED_NAME`, `TRIGGER_NAME`, `TRIGGER_GROUP`) REFERENCES `QRTZ_TRIGGERS` (`SCHED_NAME`, `TRIGGER_NAME`, `TRIGGER_GROUP`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Quartz Cron 触发器表';
+
+-- QRTZ_SIMPROP_TRIGGERS：属性触发器（支持更复杂的触发规则）
+CREATE TABLE IF NOT EXISTS `QRTZ_SIMPROP_TRIGGERS` (
+  `SCHED_NAME` VARCHAR(120) NOT NULL COMMENT '调度器名称',
+  `TRIGGER_NAME` VARCHAR(190) NOT NULL COMMENT 'Trigger 名称',
+  `TRIGGER_GROUP` VARCHAR(190) NOT NULL COMMENT 'Trigger 组名',
+  `STR_PROP_1` VARCHAR(512) DEFAULT NULL COMMENT '字符串属性 1',
+  `STR_PROP_2` VARCHAR(512) DEFAULT NULL COMMENT '字符串属性 2',
+  `STR_PROP_3` VARCHAR(512) DEFAULT NULL COMMENT '字符串属性 3',
+  `INT_PROP_1` INT DEFAULT NULL COMMENT '整数属性 1',
+  `INT_PROP_2` INT DEFAULT NULL COMMENT '整数属性 2',
+  `LONG_PROP_1` BIGINT DEFAULT NULL COMMENT '长整数属性 1',
+  `LONG_PROP_2` BIGINT DEFAULT NULL COMMENT '长整数属性 2',
+  `DEC_PROP_1` NUMERIC(13,4) DEFAULT NULL COMMENT '小数属性 1',
+  `DEC_PROP_2` NUMERIC(13,4) DEFAULT NULL COMMENT '小数属性 2',
+  `BOOL_PROP_1` VARCHAR(1) DEFAULT NULL COMMENT '布尔属性 1',
+  `BOOL_PROP_2` VARCHAR(1) DEFAULT NULL COMMENT '布尔属性 2',
+  PRIMARY KEY (`SCHED_NAME`,`TRIGGER_NAME`,`TRIGGER_GROUP`),
+  CONSTRAINT `QRTZ_SIMPROP_TRIGGERS_IBFK_1` FOREIGN KEY (`SCHED_NAME`, `TRIGGER_NAME`, `TRIGGER_GROUP`) REFERENCES `QRTZ_TRIGGERS` (`SCHED_NAME`, `TRIGGER_NAME`, `TRIGGER_GROUP`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Quartz 属性触发器表';
+
+-- QRTZ_BLOB_TRIGGERS：Blob 触发器（用于序列化的自定义触发器）
+CREATE TABLE IF NOT EXISTS `QRTZ_BLOB_TRIGGERS` (
+  `SCHED_NAME` VARCHAR(120) NOT NULL COMMENT '调度器名称',
+  `TRIGGER_NAME` VARCHAR(190) NOT NULL COMMENT 'Trigger 名称',
+  `TRIGGER_GROUP` VARCHAR(190) NOT NULL COMMENT 'Trigger 组名',
+  `BLOB_DATA` BLOB DEFAULT NULL COMMENT '序列化的 Trigger 数据',
+  PRIMARY KEY (`SCHED_NAME`,`TRIGGER_NAME`,`TRIGGER_GROUP`),
+  KEY `IDX_QRTZ_BLOB_TRIGGERS` (`SCHED_NAME`,`TRIGGER_NAME`,`TRIGGER_GROUP`),
+  CONSTRAINT `QRTZ_BLOB_TRIGGERS_IBFK_1` FOREIGN KEY (`SCHED_NAME`, `TRIGGER_NAME`, `TRIGGER_GROUP`) REFERENCES `QRTZ_TRIGGERS` (`SCHED_NAME`, `TRIGGER_NAME`, `TRIGGER_GROUP`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Quartz Blob 触发器表';
+
+-- QRTZ_CALENDARS：日历表（用于排除特定日期）
+CREATE TABLE IF NOT EXISTS `QRTZ_CALENDARS` (
+  `SCHED_NAME` VARCHAR(120) NOT NULL COMMENT '调度器名称',
+  `CALENDAR_NAME` VARCHAR(190) NOT NULL COMMENT '日历名称',
+  `CALENDAR` BLOB NOT NULL COMMENT '序列化的日历对象',
+  PRIMARY KEY (`SCHED_NAME`,`CALENDAR_NAME`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Quartz 日历表';
+
+-- QRTZ_PAUSED_TRIGGER_GRPS：暂停的触发器组
+CREATE TABLE IF NOT EXISTS `QRTZ_PAUSED_TRIGGER_GRPS` (
+  `SCHED_NAME` VARCHAR(120) NOT NULL COMMENT '调度器名称',
+  `TRIGGER_GROUP` VARCHAR(190) NOT NULL COMMENT 'Trigger 组名',
+  PRIMARY KEY (`SCHED_NAME`,`TRIGGER_GROUP`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Quartz 暂停的触发器组表';
+
+-- QRTZ_FIRED_TRIGGERS：正在执行的触发器（运行时信息）
+CREATE TABLE IF NOT EXISTS `QRTZ_FIRED_TRIGGERS` (
+  `SCHED_NAME` VARCHAR(120) NOT NULL COMMENT '调度器名称',
+  `ENTRY_ID` VARCHAR(95) NOT NULL COMMENT '条目 ID（唯一标识）',
+  `TRIGGER_NAME` VARCHAR(190) NOT NULL COMMENT 'Trigger 名称',
+  `TRIGGER_GROUP` VARCHAR(190) NOT NULL COMMENT 'Trigger 组名',
+  `INSTANCE_NAME` VARCHAR(190) NOT NULL COMMENT '调度器实例名称',
+  `FIRED_TIME` BIGINT(13) NOT NULL COMMENT '触发时间（时间戳）',
+  `SCHED_TIME` BIGINT(13) NOT NULL COMMENT '计划执行时间（时间戳）',
+  `PRIORITY` INTEGER NOT NULL COMMENT '优先级',
+  `STATE` VARCHAR(16) NOT NULL COMMENT '状态（ACQUIRED/EXECUTING/COMPLETE/BLOCKED/ERROR）',
+  `JOB_NAME` VARCHAR(190) DEFAULT NULL COMMENT '关联的 Job 名称',
+  `JOB_GROUP` VARCHAR(190) DEFAULT NULL COMMENT '关联的 Job 组名',
+  `IS_NONCONCURRENT` VARCHAR(1) DEFAULT NULL COMMENT '是否非并发（Y/N）',
+  `REQUESTS_RECOVERY` VARCHAR(1) DEFAULT NULL COMMENT '是否请求恢复（Y/N）',
+  PRIMARY KEY (`SCHED_NAME`,`ENTRY_ID`),
+  KEY `IDX_QRTZ_FT_TRIG_INST_NAME` (`SCHED_NAME`,`INSTANCE_NAME`),
+  KEY `IDX_QRTZ_FT_INST_JOB_REQ_RCVRY` (`SCHED_NAME`,`INSTANCE_NAME`,`REQUESTS_RECOVERY`),
+  KEY `IDX_QRTZ_FT_J_G` (`SCHED_NAME`,`JOB_NAME`,`JOB_GROUP`),
+  KEY `IDX_QRTZ_FT_JG` (`SCHED_NAME`,`JOB_GROUP`),
+  KEY `IDX_QRTZ_FT_T_G` (`SCHED_NAME`,`TRIGGER_NAME`,`TRIGGER_GROUP`),
+  KEY `IDX_QRTZ_FT_TG` (`SCHED_NAME`,`TRIGGER_GROUP`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Quartz 正在执行的触发器表';
+
+-- QRTZ_SCHEDULER_STATE：调度器状态（集群模式使用）
+CREATE TABLE IF NOT EXISTS `QRTZ_SCHEDULER_STATE` (
+  `SCHED_NAME` VARCHAR(120) NOT NULL COMMENT '调度器名称',
+  `INSTANCE_NAME` VARCHAR(190) NOT NULL COMMENT '调度器实例名称',
+  `LAST_CHECKIN_TIME` BIGINT(13) NOT NULL COMMENT '最后检查时间（时间戳）',
+  `CHECKIN_INTERVAL` BIGINT(13) NOT NULL COMMENT '检查间隔（毫秒）',
+  PRIMARY KEY (`SCHED_NAME`,`INSTANCE_NAME`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Quartz 调度器状态表（集群模式）';
+
+-- QRTZ_LOCKS：锁表（集群模式使用，防止并发冲突）
+CREATE TABLE IF NOT EXISTS `QRTZ_LOCKS` (
+  `SCHED_NAME` VARCHAR(120) NOT NULL COMMENT '调度器名称',
+  `LOCK_NAME` VARCHAR(40) NOT NULL COMMENT '锁名称',
+  PRIMARY KEY (`SCHED_NAME`,`LOCK_NAME`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Quartz 锁表（集群模式）';

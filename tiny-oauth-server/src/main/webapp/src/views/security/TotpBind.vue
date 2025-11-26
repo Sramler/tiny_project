@@ -141,7 +141,8 @@ onMounted(async () => {
 
 async function fetchSecurityStatus() {
   try {
-    const response = await fetch(`${baseUrl}/self/security/status`, {
+    const { fetchWithTraceId } = await import('@/utils/traceId')
+    const response = await fetchWithTraceId(`${baseUrl}/self/security/status`, {
       method: 'GET',
       credentials: 'include',
       headers: { Accept: 'application/json' },
@@ -160,7 +161,8 @@ async function fetchSecurityStatus() {
 
 async function fetchTotpInfo() {
   try {
-    const response = await fetch(`${baseUrl}/self/security/totp/pre-bind`, {
+    const { fetchWithTraceId } = await import('@/utils/traceId')
+    const response = await fetchWithTraceId(`${baseUrl}/self/security/totp/pre-bind`, {
       method: 'GET',
       credentials: 'include',
       headers: { Accept: 'application/json' },

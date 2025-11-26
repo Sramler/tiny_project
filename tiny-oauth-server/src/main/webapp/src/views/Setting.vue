@@ -316,10 +316,12 @@ const loadSecurityStatus = async () => {
   try {
     const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:9000'
     const baseUrl = apiBaseUrl.endsWith('/') ? apiBaseUrl.slice(0, -1) : apiBaseUrl
-    const response = await fetch(`${baseUrl}/self/security/status`, {
+    const { fetchWithTraceId } = await import('@/utils/traceId')
+    const response = await fetchWithTraceId(`${baseUrl}/self/security/status`, {
       method: 'GET',
       credentials: 'include',
-      headers: { Accept: 'application/json' }
+      headers: { Accept: 'application/json' },
+      timeout: 5000 // 5 秒超时
     })
     if (!response.ok) {
       throw new Error('无法获取安全状态')
@@ -327,9 +329,13 @@ const loadSecurityStatus = async () => {
     const data = await response.json()
     totpBound.value = Boolean(data.totpBound)
     totpActivated.value = Boolean(data.totpActivated)
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载安全状态失败:', error)
+    // fetchWithTraceId 已经统一处理了 401 和网络错误，会自动跳转到登录页
+    // 这里只需要显示错误提示（如果还没有跳转）
+    if (!error.message?.includes('未授权') && !error.message?.includes('超时') && !error.message?.includes('网络错误')) {
     message.error('加载安全状态失败')
+    }
   } finally {
     securityLoading.value = false
   }
@@ -357,8 +363,9 @@ const handleUnbindSubmit = async () => {
     unbindLoading.value = true
     const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:9000'
     const baseUrl = apiBaseUrl.endsWith('/') ? apiBaseUrl.slice(0, -1) : apiBaseUrl
+    const { fetchWithTraceId } = await import('@/utils/traceId')
     
-    const response = await fetch(`${baseUrl}/self/security/totp/unbind`, {
+    const response = await fetchWithTraceId(`${baseUrl}/self/security/totp/unbind`, {
       method: 'POST',
       credentials: 'include',
       headers: {
@@ -464,7 +471,8 @@ const handleAvatarUpload = async (options: UploadRequestOption) => {
       formData.append('file', file as any)
     }
 
-    const response = await fetch(`${baseUrl}/sys/users/current/avatar`, {
+    const { fetchWithTraceId } = await import('@/utils/traceId')
+    const response = await fetchWithTraceId(`${baseUrl}/sys/users/current/avatar`, {
       method: 'POST',
       credentials: 'include',
       body: formData

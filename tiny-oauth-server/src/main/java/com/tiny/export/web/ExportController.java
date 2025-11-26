@@ -60,7 +60,7 @@ public class ExportController {
         String uid = currentUserId();
         String taskId = exportService.submitAsync(request, uid);
         return ResponseEntity.accepted()
-            .location(URI.create("/api/export/task/" + taskId))
+            .location(URI.create("/export/task/" + taskId))
             .body(Map.of("taskId", taskId));
     }
 

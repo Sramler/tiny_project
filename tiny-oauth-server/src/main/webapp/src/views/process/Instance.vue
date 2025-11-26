@@ -307,7 +307,7 @@ import {
 import VueDraggable from 'vuedraggable'
 import { instanceApi, tenantApi, historyApi } from '@/api/process'
 import type { ProcessInstance, Task } from '@/api/process'
-import { useThrottleFn } from '@/utils/throttle'
+import { useThrottle } from '@/utils/debounce'
 
 const router = useRouter()
 
@@ -547,7 +547,7 @@ function handleSearch() {
     loadData()
 }
 
-const throttledSearch = useThrottleFn(handleSearch, 1000)
+const throttledSearch = useThrottle(handleSearch, 1000)
 
 function handleReset() {
     query.value.instanceId = ''
@@ -558,7 +558,7 @@ function handleReset() {
     loadData()
 }
 
-const throttledReset = useThrottleFn(handleReset, 1000)
+const throttledReset = useThrottle(handleReset, 1000)
 
 function handleTableChange(pag: { current?: number; pageSize?: number }) {
     if (pag && typeof pag.current === 'number') {
@@ -622,7 +622,7 @@ async function handleRefresh() {
     })
 }
 
-const throttledRefresh = useThrottleFn(handleRefresh, 1000)
+const throttledRefresh = useThrottle(handleRefresh, 1000)
 
 function handleBatchSuspend() {
     if (selectedRowKeys.value.length === 0) {
@@ -655,7 +655,7 @@ function handleBatchSuspend() {
     })
 }
 
-const throttledBatchSuspend = useThrottleFn(handleBatchSuspend, 1000)
+const throttledBatchSuspend = useThrottle(handleBatchSuspend, 1000)
 
 function handleBatchActivate() {
     if (selectedRowKeys.value.length === 0) {
@@ -688,7 +688,7 @@ function handleBatchActivate() {
     })
 }
 
-const throttledBatchActivate = useThrottleFn(handleBatchActivate, 1000)
+const throttledBatchActivate = useThrottle(handleBatchActivate, 1000)
 
 function handleBatchDelete() {
     if (selectedRowKeys.value.length === 0) {
@@ -721,14 +721,14 @@ function handleBatchDelete() {
     })
 }
 
-const throttledBatchDelete = useThrottleFn(handleBatchDelete, 1000)
+const throttledBatchDelete = useThrottle(handleBatchDelete, 1000)
 
 function handleView(record: ProcessInstance) {
     selectedInstance.value = record
     showInstanceDetail.value = true
 }
 
-const throttledView = useThrottleFn(handleView, 500)
+const throttledView = useThrottle(handleView, 500)
 
 function handleSuspend(record: ProcessInstance) {
     Modal.confirm({
@@ -751,7 +751,7 @@ function handleSuspend(record: ProcessInstance) {
     })
 }
 
-const throttledSuspend = useThrottleFn(handleSuspend, 500)
+const throttledSuspend = useThrottle(handleSuspend, 500)
 
 function handleActivate(record: ProcessInstance) {
     Modal.confirm({
@@ -774,7 +774,7 @@ function handleActivate(record: ProcessInstance) {
     })
 }
 
-const throttledActivate = useThrottleFn(handleActivate, 500)
+const throttledActivate = useThrottle(handleActivate, 500)
 
 async function handleViewTasks(record: ProcessInstance) {
     try {
@@ -791,7 +791,7 @@ async function handleViewTasks(record: ProcessInstance) {
     }
 }
 
-const throttledViewTasks = useThrottleFn(handleViewTasks, 500)
+const throttledViewTasks = useThrottle(handleViewTasks, 500)
 
 function handleDelete(record: ProcessInstance) {
     Modal.confirm({
@@ -814,7 +814,7 @@ function handleDelete(record: ProcessInstance) {
     })
 }
 
-const throttledDelete = useThrottleFn(handleDelete, 500)
+const throttledDelete = useThrottle(handleDelete, 500)
 
 async function claimTask(task: Task) {
     try {

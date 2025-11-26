@@ -60,6 +60,12 @@
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
 
+        <!-- Quartz 任务调度 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-quartz</artifactId>
+        </dependency>
+
         <!-- 用于授权服务器 JDBC 组件 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

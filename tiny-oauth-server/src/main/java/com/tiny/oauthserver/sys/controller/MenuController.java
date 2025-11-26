@@ -1,11 +1,9 @@
 package com.tiny.oauthserver.sys.controller;
 
-import com.tiny.oauthserver.sys.enums.ResourceType;
 import com.tiny.oauthserver.sys.model.Resource;
 import com.tiny.oauthserver.sys.model.ResourceCreateUpdateDto;
 import com.tiny.oauthserver.sys.model.ResourceRequestDto;
 import com.tiny.oauthserver.sys.model.ResourceResponseDto;
-import com.tiny.oauthserver.sys.model.PageResponse;
 import com.tiny.oauthserver.sys.service.MenuService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -43,6 +41,14 @@ public class MenuController {
     @GetMapping("/tree")
     public ResponseEntity<List<ResourceResponseDto>> getMenuTree() {
         return ResponseEntity.ok(menuService.menuTree());
+    }
+
+    /**
+     * 获取完整菜单树（包含隐藏/禁用/空目录），供后台授权使用
+     */
+    @GetMapping("/tree/all")
+    public ResponseEntity<List<ResourceResponseDto>> getFullMenuTree() {
+        return ResponseEntity.ok(menuService.menuTreeAll());
     }
 
     /**

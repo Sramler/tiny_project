@@ -93,6 +93,11 @@ export function menuTree() {
   return request.get('/sys/menus/tree')
 }
 
+// 获取完整菜单树（包含隐藏/禁用/空目录）
+export function menuTreeAll() {
+  return request.get('/sys/menus/tree/all')
+}
+
 // 获取用户菜单树
 export function getUserMenuTree(userId: number): Promise<MenuItem[]> {
   return request.get(`/sys/menus/user/${userId}/tree`)

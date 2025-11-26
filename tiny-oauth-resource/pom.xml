@@ -7,8 +7,7 @@
 		<artifactId>tiny_project</artifactId>
 		<version>1.0.0</version>
 	</parent>
-	<groupId>com.tiny</groupId>
-	<artifactId>tiny-oauth-resource</artifactId>
+    <artifactId>tiny-oauth-resource</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>tiny-oauth-resource</name>
 	<description>tiny-oauth-resource</description>

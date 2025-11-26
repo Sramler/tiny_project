@@ -401,7 +401,8 @@ const loadSecurityStatus = async () => {
   try {
     const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:9000'
     const baseUrl = apiBaseUrl.endsWith('/') ? apiBaseUrl.slice(0, -1) : apiBaseUrl
-    const response = await fetch(`${baseUrl}/self/security/status`, {
+    const { fetchWithTraceId } = await import('@/utils/traceId')
+    const response = await fetchWithTraceId(`${baseUrl}/self/security/status`, {
       method: 'GET',
       credentials: 'include',
       headers: { Accept: 'application/json' }
@@ -424,7 +425,8 @@ const loadLoginHistory = async () => {
     // 构建分页参数：Spring Data JPA 使用 page (从0开始) 和 size
     const page = loginHistoryPagination.value.current - 1 // Ant Design Vue 从1开始，后端从0开始
     const size = loginHistoryPagination.value.pageSize
-    const response = await fetch(`${baseUrl}/sys/users/current/login-history?page=${page}&size=${size}&sort=createdAt,desc`, {
+    const { fetchWithTraceId } = await import('@/utils/traceId')
+    const response = await fetchWithTraceId(`${baseUrl}/sys/users/current/login-history?page=${page}&size=${size}&sort=createdAt,desc`, {
       method: 'GET',
       credentials: 'include',
       headers: { Accept: 'application/json' }

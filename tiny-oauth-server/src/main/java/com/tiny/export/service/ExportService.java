@@ -12,6 +12,7 @@ import com.tiny.export.util.HeaderBuilder;
 import com.tiny.export.writer.WriterAdapter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 
@@ -56,7 +57,7 @@ public class ExportService {
                          Map<String, DataProvider<?>> providers,
                          TopInfoDecorator topInfoDecorator,
                          Map<String, AggregateStrategy> aggregateMap,
-                         ThreadPoolTaskExecutor executor,
+                         @Qualifier("exportExecutor") ThreadPoolTaskExecutor executor,
                          ExportTaskService exportTaskService,
                          ObjectMapper objectMapper) {
         this.writerAdapter = writerAdapter;

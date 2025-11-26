@@ -52,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { menuTree, type MenuItem } from '@/api/menu'
 import { message } from 'ant-design-vue'
@@ -334,7 +334,28 @@ watch(
  */
 
 // 组件挂载时加载菜单
-onMounted(loadMenu)
+/**
+ * 监听全局菜单重载事件，只刷新侧边栏
+ */
+const handleMenuReload = () => {
+  // 避免事件在服务端渲染环境触发
+  if (typeof window !== 'undefined') {
+    loadMenu()
+  }
+}
+
+onMounted(() => {
+  loadMenu()
+  if (typeof window !== 'undefined') {
+    window.addEventListener('reload-menu-tree', handleMenuReload)
+  }
+})
+
+onUnmounted(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('reload-menu-tree', handleMenuReload)
+  }
+})
 </script>
 
 <style scoped>
@@ -423,7 +444,8 @@ onMounted(loadMenu)
 /* 菜单项基础样式 */
 .menu-item,
 .submenu-item {
-  color: #333;
+  color: rgba(0, 0, 0, 0.85);
+  /* Ant Design Vue Pro 亮色主题默认文字颜色 */
 }
 
 /* 一级菜单项 */
@@ -432,14 +454,34 @@ onMounted(loadMenu)
   align-items: center;
   padding: 12px 16px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.2s, color 0.2s;
   user-select: none;
+  background: transparent;
+  /* 默认背景透明 */
+}
+
+/* 一级菜单项悬停效果 */
+.menu-item:hover:not(.active) {
+  background: #f0f5ff;
+  /* Ant Design Vue Pro 亮色主题悬停背景色 */
+  color: #1890ff;
+  /* Ant Design Vue Pro 亮色主题悬停文字颜色 */
 }
 
 /* 激活状态的一级菜单项 */
 .menu-item.active {
   background: #1890ff;
+  /* Ant Design Vue Pro 亮色主题选中背景色 */
   color: #fff;
+  /* Ant Design Vue Pro 亮色主题选中文字颜色 */
+}
+
+/* 激活状态下的悬停效果（保持选中样式） */
+.menu-item.active:hover {
+  background: #1890ff;
+  /* 保持选中背景色 */
+  color: #fff;
+  /* 保持选中文字颜色 */
 }
 
 /* 菜单图标 */
@@ -477,28 +519,37 @@ onMounted(loadMenu)
   padding: 8px 12px;
   cursor: pointer;
   font-size: 14px;
-  transition: background 0.2s;
-  color: #333;
+  transition: background 0.2s, color 0.2s;
+  color: rgba(0, 0, 0, 0.85);
+  /* Ant Design Vue Pro 亮色主题默认文字颜色 */
   border-radius: 4px;
   margin: 1px 0;
+  background: transparent;
+  /* 默认背景透明 */
+}
+
+/* 二级菜单项悬停效果 */
+.submenu-item:hover:not(.active) {
+  background: #f0f5ff;
+  /* Ant Design Vue Pro 亮色主题悬停背景色 */
+  color: #1890ff;
+  /* Ant Design Vue Pro 亮色主题悬停文字颜色 */
 }
 
 /* 激活状态的二级菜单项 */
 .submenu-item.active {
   background: #1890ff;
+  /* Ant Design Vue Pro 亮色主题选中背景色 */
   color: #fff;
+  /* Ant Design Vue Pro 亮色主题选中文字颜色 */
 }
 
-/* 二级菜单项悬浮效果 */
-.submenu-item:hover {
-  background: #f0f5ff;
-  color: #1890ff;
-}
-
-/* 激活状态下的悬浮效果 */
+/* 激活状态下的悬停效果（保持选中样式） */
 .submenu-item.active:hover {
-  background: #f0f5ff;
-  color: #1890ff;
+  background: #1890ff;
+  /* 保持选中背景色 */
+  color: #fff;
+  /* 保持选中文字颜色 */
 }
 
 /* 二级菜单项的箭头 */
@@ -524,42 +575,55 @@ onMounted(loadMenu)
 .submenu.third .submenu-item {
   padding: 8px 12px;
   font-size: 14px;
-  color: #333;
+  color: rgba(0, 0, 0, 0.85);
+  /* Ant Design Vue Pro 亮色主题默认文字颜色 */
   position: relative;
   margin-left: -8px;
   margin-right: -16px;
   border-radius: 4px;
   margin-top: 1px;
   margin-bottom: 1px;
+  background: transparent;
+  /* 默认背景透明 */
 }
 
-/* 三级菜单项悬浮效果 */
-.submenu.third .submenu-item:hover {
+/* 三级菜单项悬停效果 */
+.submenu.third .submenu-item:hover:not(.active) {
   background: #f0f5ff !important;
+  /* Ant Design Vue Pro 亮色主题悬停背景色 */
   color: #1890ff !important;
+  /* Ant Design Vue Pro 亮色主题悬停文字颜色 */
 }
 
 /* 激活状态的三级菜单项 */
 .submenu.third .submenu-item.active {
   background: #1890ff !important;
+  /* Ant Design Vue Pro 亮色主题选中背景色 */
   color: #fff !important;
+  /* Ant Design Vue Pro 亮色主题选中文字颜色 */
 }
 
 /* 确保三级菜单样式优先级最高 */
-.submenu.third li.submenu-item:hover {
+.submenu.third li.submenu-item:hover:not(.active) {
   background: #f0f5ff !important;
+  /* Ant Design Vue Pro 亮色主题悬停背景色 */
   color: #1890ff !important;
+  /* Ant Design Vue Pro 亮色主题悬停文字颜色 */
 }
 
 .submenu.third li.submenu-item.active {
   background: #1890ff !important;
+  /* Ant Design Vue Pro 亮色主题选中背景色 */
   color: #fff !important;
+  /* Ant Design Vue Pro 亮色主题选中文字颜色 */
 }
 
-/* 激活状态下的悬浮效果 */
+/* 激活状态下的悬停效果（保持选中样式） */
 .submenu.third li.submenu-item.active:hover {
-  background: #f0f5ff !important;
-  color: #1890ff !important;
+  background: #1890ff !important;
+  /* 保持选中背景色 */
+  color: #fff !important;
+  /* 保持选中文字颜色 */
 }
 
 /* 折叠按钮 */

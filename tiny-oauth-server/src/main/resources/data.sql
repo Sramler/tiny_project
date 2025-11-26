@@ -34,6 +34,43 @@ INSERT INTO `resource` (`name`, `path`, `uri`, `method`, `icon`, `show_icon`, `s
 INSERT INTO `resource` (`name`, `path`, `uri`, `method`, `icon`, `show_icon`, `sort`, `component`, `redirect`, `hidden`, `keep_alive`, `title`, `permission`, `type`, `parent_id`) VALUES
 ('resource', '/system/resource', '/api/resources', 'GET', 'ApiOutlined', 1, 4, '/views/resource/resource.vue', '', 0, 0, '资源管理', 'resource:list', 1, 1);
 
+-- 调度中心目录
+INSERT INTO `resource`
+(`name`, `path`, `uri`, `method`, `icon`, `show_icon`, `sort`, `component`, `redirect`, `hidden`, `keep_alive`, `title`, `permission`, `type`, `parent_id`)
+VALUES
+('scheduling', '/scheduling', '', '', 'ClusterOutlined', 1, 10, '', '/scheduling/dag', 0, 0, '调度中心', 'scheduling', 0, NULL);
+SET @scheduling_dir_id = LAST_INSERT_ID();
+
+-- 调度中心 - DAG 管理
+INSERT INTO `resource`
+(`name`, `path`, `uri`, `method`, `icon`, `show_icon`, `sort`, `component`, `redirect`, `hidden`, `keep_alive`, `title`, `permission`, `type`, `parent_id`)
+VALUES
+('schedulingDag', '/scheduling/dag', '/scheduling/dag/list', 'GET', 'BranchesOutlined', 1, 11, '/views/scheduling/Dag.vue', '', 0, 0, 'DAG 管理', 'scheduling:dag:list', 1, @scheduling_dir_id);
+
+-- 调度中心 - 任务管理
+INSERT INTO `resource`
+(`name`, `path`, `uri`, `method`, `icon`, `show_icon`, `sort`, `component`, `redirect`, `hidden`, `keep_alive`, `title`, `permission`, `type`, `parent_id`)
+VALUES
+('schedulingTask', '/scheduling/task', '/scheduling/task/list', 'GET', 'ProfileOutlined', 1, 12, '/views/scheduling/Task.vue', '', 0, 0, '任务管理', 'scheduling:task:list', 1, @scheduling_dir_id);
+
+-- 调度中心 - 任务类型
+INSERT INTO `resource`
+(`name`, `path`, `uri`, `method`, `icon`, `show_icon`, `sort`, `component`, `redirect`, `hidden`, `keep_alive`, `title`, `permission`, `type`, `parent_id`)
+VALUES
+('schedulingTaskType', '/scheduling/task-type', '/scheduling/task-type/list', 'GET', 'DatabaseOutlined', 1, 13, '/views/scheduling/TaskType.vue', '', 0, 0, '任务类型', 'scheduling:task-type:list', 1, @scheduling_dir_id);
+
+-- 调度中心 - 运行历史
+INSERT INTO `resource`
+(`name`, `path`, `uri`, `method`, `icon`, `show_icon`, `sort`, `component`, `redirect`, `hidden`, `keep_alive`, `title`, `permission`, `type`, `parent_id`)
+VALUES
+('schedulingDagHistory', '/scheduling/dag-history', '/scheduling/dag/run/list', 'GET', 'HistoryOutlined', 1, 14, '/views/scheduling/DagHistory.vue', '', 0, 0, '运行历史', 'scheduling:dag-run:list', 1, @scheduling_dir_id);
+
+-- 调度中心 - 审计日志
+INSERT INTO `resource`
+(`name`, `path`, `uri`, `method`, `icon`, `show_icon`, `sort`, `component`, `redirect`, `hidden`, `keep_alive`, `title`, `permission`, `type`, `parent_id`)
+VALUES
+('schedulingAudit', '/scheduling/audit', '/scheduling/audit/list', 'GET', 'SecurityScanOutlined', 1, 15, '/views/scheduling/Audit.vue', '', 0, 0, '审计日志', 'scheduling:audit:list', 1, @scheduling_dir_id);
+
 -- 插入角色资源关联数据
 INSERT INTO `role_resource` (`role_id`, `resource_id`) VALUES
 -- ADMIN角色拥有所有资源

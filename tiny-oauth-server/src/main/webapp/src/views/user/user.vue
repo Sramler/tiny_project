@@ -277,7 +277,7 @@ import VueDraggable from 'vuedraggable'
 import UserForm from '@/views/user/UserForm.vue'
 import { message, Modal } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
-import { useThrottleFn } from '@/utils/throttle'
+import { useThrottle } from '@/utils/debounce'
 import RoleTransfer from './RoleTransfer.vue'
 import { getAllRoles, getRoleById } from '@/api/role'
 import { getUserRoles, updateUserRoles } from '@/api/user'
@@ -465,7 +465,7 @@ function handleSearch() {
   loadData()
 }
 
-const throttledSearch = useThrottleFn(handleSearch, 1000)
+const throttledSearch = useThrottle(handleSearch, 1000)
 
 function handleReset() {
   query.value.username = ''
@@ -474,7 +474,7 @@ function handleReset() {
   loadData()
 }
 
-const throttledReset = useThrottleFn(handleReset, 1000)
+const throttledReset = useThrottle(handleReset, 1000)
 
 function handleTableChange(pag: any, filters: any, sorter: any) {
   console.log('表格变化事件:', { pag, filters, sorter })
@@ -509,7 +509,7 @@ function handleCreate() {
   drawerVisible.value = true
 }
 
-const throttledCreate = useThrottleFn(handleCreate, 500)
+const throttledCreate = useThrottle(handleCreate, 500)
 
 const refreshing = ref(false)
 async function handleRefresh() {
@@ -525,7 +525,7 @@ async function handleRefresh() {
   })
 }
 
-const throttledRefresh = useThrottleFn(handleRefresh, 1000)
+const throttledRefresh = useThrottle(handleRefresh, 1000)
 
 function onCheckAllChange(e: any) {
   if (e.target.checked) {
@@ -656,7 +656,7 @@ function handleBatchDelete() {
   })
 }
 
-const throttledBatchDelete = useThrottleFn(handleBatchDelete, 1000)
+const throttledBatchDelete = useThrottle(handleBatchDelete, 1000)
 
 function handleBatchEnable() {
   if (selectedRowKeys.value.length === 0) {
@@ -678,7 +678,7 @@ function handleBatchEnable() {
     })
 }
 
-const throttledBatchEnable = useThrottleFn(handleBatchEnable, 1000)
+const throttledBatchEnable = useThrottle(handleBatchEnable, 1000)
 
 function handleBatchDisable() {
   if (selectedRowKeys.value.length === 0) {
@@ -700,7 +700,7 @@ function handleBatchDisable() {
     })
 }
 
-const throttledBatchDisable = useThrottleFn(handleBatchDisable, 1000)
+const throttledBatchDisable = useThrottle(handleBatchDisable, 1000)
 
 function clearSelection() {
   selectedRowKeys.value = []
@@ -748,7 +748,7 @@ function handleDelete(record: any) {
   })
 }
 
-const throttledDelete = useThrottleFn(handleDelete, 500)
+const throttledDelete = useThrottle(handleDelete, 500)
 
 function handleView(record: any) {
   drawerMode.value = 'view'
@@ -756,7 +756,7 @@ function handleView(record: any) {
   drawerVisible.value = true
 }
 
-const throttledView = useThrottleFn(handleView, 500)
+const throttledView = useThrottle(handleView, 500)
 
 const drawerVisible = ref(false)
 const drawerMode = ref<'create' | 'edit' | 'view'>('edit')
@@ -768,7 +768,7 @@ function handleEdit(record: any) {
   drawerVisible.value = true
 }
 
-const throttledEdit = useThrottleFn(handleEdit, 500)
+const throttledEdit = useThrottle(handleEdit, 500)
 
 // 处理表单提交（创建或更新用户）
 async function handleFormSubmit(formData: any) {

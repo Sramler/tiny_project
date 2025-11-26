@@ -52,7 +52,7 @@
 <script setup lang="ts">
 import { ref, watch, computed, onMounted, nextTick } from 'vue'
 import type { Rule } from 'ant-design-vue/es/form'
-import { useThrottleFn } from '@/utils/throttle'
+import { useThrottle } from '@/utils/debounce'
 import { getAllRoles } from '@/api/role'
 import { getUserRoles, updateUserRoles } from '@/api/user'
 import { message } from 'ant-design-vue'
@@ -256,8 +256,8 @@ function onCancel() {
   emit('cancel')
 }
 
-const throttledSubmit = useThrottleFn(onSubmit, 1000)
-const throttledCancel = useThrottleFn(onCancel, 500)
+const throttledSubmit = useThrottle(onSubmit, 1000)
+const throttledCancel = useThrottle(onCancel, 500)
 
 // 格式化最后登录时间显示
 const formattedLastLoginAt = computed(() => {

@@ -3,43 +3,18 @@
   <a-modal v-model:open="visible" :title="title" @ok="handleOk" @cancel="handleCancel" width="900px">
     <div style="min-height: 400px;">
       <!-- 使用 a-transfer 组件实现树形穿梭 -->
-      <a-transfer
-        v-model:target-keys="rightKeys"
-        class="tree-transfer"
-        :data-source="transferDataSource"
-        :render="(item: any) => item.title"
-        :show-select-all="false"
-        :disabled="loading"
-        :titles="['可选资源', '已分配资源']"
-        style="height: 400px;"
-      >
-        <template #children="{ direction, selectedKeys, onItemSelect }">
+      <a-transfer v-model:target-keys="rightKeys" class="tree-transfer" :data-source="transferDataSource"
+        :render="(item: any) => item.title" :show-select-all="false" :disabled="loading" :titles="['可选资源', '已分配资源']"
+        style="height: 400px;">
+        <template #children="{ direction }">
           <!-- 左侧树形结构 -->
-          <a-tree
-            v-if="direction === 'left'"
-            block-node
-            checkable
-            check-strictly
-            default-expand-all
-            :checked-keys="[...selectedKeys, ...rightKeys]"
-            :tree-data="leftTreeData"
-            :field-names="{ title: 'title', key: 'key', children: 'children' }"
-            @check="(checkedKeys: any, info: any) => handleTreeCheck(info, [...selectedKeys, ...rightKeys], onItemSelect)"
-            @select="(selectedKeys: any, info: any) => handleTreeSelect(info, [...selectedKeys, ...rightKeys], onItemSelect)"
-          />
+          <a-tree v-if="direction === 'left'" block-node checkable default-expand-all :checked-keys="[]"
+            :tree-data="leftTreeData" :field-names="{ title: 'title', key: 'key', children: 'children' }"
+            @check="(_, info: any) => handleTreeCheck(info)" @select="(_, info: any) => handleTreeSelect(info)" />
           <!-- 右侧树形结构 -->
-          <a-tree
-            v-if="direction === 'right'"
-            block-node
-            checkable
-            check-strictly
-            default-expand-all
-            :checked-keys="selectedKeys"
-            :tree-data="rightTreeData"
-            :field-names="{ title: 'title', key: 'key', children: 'children' }"
-            @check="(checkedKeys: any, info: any) => handleTreeCheck(info, selectedKeys, onItemSelect)"
-            @select="(selectedKeys: any, info: any) => handleTreeSelect(info, selectedKeys, onItemSelect)"
-          />
+          <a-tree v-if="direction === 'right'" block-node checkable default-expand-all :checked-keys="rightKeys"
+            :tree-data="rightTreeData" :field-names="{ title: 'title', key: 'key', children: 'children' }"
+            @check="(_, info: any) => handleTreeCheck(info)" @select="(_, info: any) => handleTreeSelect(info)" />
         </template>
       </a-transfer>
     </div>
@@ -77,6 +52,14 @@ const rightKeys = ref<number[]>([]);
 // 扁平化的transfer数据源
 const transferDataSource = ref<any[]>([]);
 
+type TreeNodeInfo = {
+  key: number
+  parent?: number
+  children: number[]
+}
+
+const treeNodeMap = new Map<number, TreeNodeInfo>()
+
 // 加载资源树数据
 async function loadResourceTree() {
   loading.value = true
@@ -86,6 +69,8 @@ async function loadResourceTree() {
     originalTreeData.value = transformTreeData(tree)
     // 扁平化数据用于transfer组件
     flattenTreeData(originalTreeData.value)
+    treeNodeMap.clear()
+    buildTreeMap(originalTreeData.value)
   } catch (error) {
     console.error('加载资源树失败:', error)
   } finally {
@@ -94,11 +79,16 @@ async function loadResourceTree() {
 }
 
 // 加载角色已分配资源
-async function loadRoleResources() {
-  if (!props.roleId) return
+async function loadRoleResources(targetRoleId?: number) {
+  const roleId = Number(targetRoleId ?? props.roleId)
+  if (!roleId) {
+    rightKeys.value = []
+    return
+  }
   try {
-    const resourceIds = await getRoleResources(props.roleId)
-    rightKeys.value = resourceIds || []
+    const resourceIds = await getRoleResources(roleId)
+    // 确保 key 类型一致
+    rightKeys.value = (resourceIds || []).map((id: number | string) => Number(id))
   } catch (error) {
     console.error('加载角色资源失败:', error)
     rightKeys.value = []
@@ -129,9 +119,74 @@ function flattenTreeData(list: any[] = []) {
   });
 }
 
-// 检查节点是否被选中
-function isChecked(selectedKeys: (string | number)[], eventKey: string | number) {
-  return selectedKeys.indexOf(eventKey) !== -1;
+function buildTreeMap(nodes: any[] = [], parent?: number) {
+  nodes.forEach(node => {
+    const key = Number(node.key)
+    const children = node.children ? node.children.map((child: any) => Number(child.key)) : []
+    treeNodeMap.set(key, { key, parent, children })
+    if (node.children) {
+      buildTreeMap(node.children, key)
+    }
+  })
+}
+
+function getDescendantKeys(key: number): number[] {
+  const node = treeNodeMap.get(key)
+  if (!node) return []
+  const result: number[] = []
+  node.children.forEach(childKey => {
+    result.push(childKey)
+    result.push(...getDescendantKeys(childKey))
+  })
+  return result
+}
+
+function addAncestors(key: number, keySet: Set<number>) {
+  const parentKey = treeNodeMap.get(key)?.parent
+  if (parentKey === undefined) return
+  if (!keySet.has(parentKey)) {
+    keySet.add(parentKey)
+  }
+  addAncestors(parentKey, keySet)
+}
+
+function removeAncestorsIfNoChildren(key: number, keySet: Set<number>) {
+  const parentKey = treeNodeMap.get(key)?.parent
+  if (parentKey === undefined) return
+  const parentNode = treeNodeMap.get(parentKey)
+  if (!parentNode) return
+  const hasSelectedChild = parentNode.children.some(childKey => keySet.has(childKey))
+  if (!hasSelectedChild && keySet.has(parentKey)) {
+    keySet.delete(parentKey)
+    removeAncestorsIfNoChildren(parentKey, keySet)
+  }
+}
+
+function addNodeCascade(key: number, keySet: Set<number>) {
+  if (keySet.has(key)) return
+  keySet.add(key)
+  const children = treeNodeMap.get(key)?.children ?? []
+  children.forEach(childKey => addNodeCascade(childKey, keySet))
+}
+
+function removeNodeCascade(key: number, keySet: Set<number>) {
+  if (keySet.has(key)) {
+    keySet.delete(key)
+  }
+  const children = treeNodeMap.get(key)?.children ?? []
+  children.forEach(childKey => removeNodeCascade(childKey, keySet))
+}
+
+function toggleCascadeSelection(key: number, checked: boolean) {
+  const nextKeys = new Set(rightKeys.value)
+  if (checked) {
+    addNodeCascade(key, nextKeys)
+    addAncestors(key, nextKeys)
+  } else {
+    removeNodeCascade(key, nextKeys)
+    removeAncestorsIfNoChildren(key, nextKeys)
+  }
+  rightKeys.value = Array.from(nextKeys)
 }
 
 // 处理树形数据，为已分配的节点设置disabled状态
@@ -186,20 +241,20 @@ const leftTreeData = computed(() => filterUnassignedTree(originalTreeData.value,
 const rightTreeData = computed(() => filterAssignedTree(originalTreeData.value, rightKeys.value));
 
 // 处理树节点选中事件
-const handleTreeCheck = (info: any, checkedKeys: (string | number)[], onItemSelect: (n: any, c: boolean) => void) => {
-  const { eventKey } = info.node;
-  if (eventKey !== undefined) {
-    onItemSelect(eventKey, !isChecked(checkedKeys, eventKey));
-  }
-};
+const handleTreeCheck = (info: any) => {
+  const { eventKey } = info.node
+  if (eventKey === undefined) return
+  const checked = info.checked
+  toggleCascadeSelection(Number(eventKey), checked)
+}
 
-// 处理树节点选择事件
-const handleTreeSelect = (info: any, selectedKeys: (string | number)[], onItemSelect: (n: any, c: boolean) => void) => {
-  const { eventKey } = info.node;
-  if (eventKey !== undefined) {
-    onItemSelect(eventKey, !isChecked(selectedKeys, eventKey));
-  }
-};
+// 处理树节点选择事件（与勾选行为保持一致）
+const handleTreeSelect = (info: any) => {
+  const { eventKey } = info.node
+  if (eventKey === undefined) return
+  const isSelected = rightKeys.value.includes(Number(eventKey))
+  toggleCascadeSelection(Number(eventKey), !isSelected)
+}
 
 // 点击确定
 function handleOk() {
@@ -213,15 +268,30 @@ function handleCancel() {
 }
 
 // 监听弹窗打开，加载数据
-watch(() => props.open, async (newVal) => {
-  if (newVal) {
-    // 弹窗打开时加载数据
-    await loadResourceTree()
-    await loadRoleResources()
-  }
-})
+watch(
+  () => props.open,
+  async (newVal) => {
+    if (newVal) {
+      await loadResourceTree()
+      await loadRoleResources()
+    } else {
+      // 关闭弹窗时清理状态，避免下次打开残留上一次的数据
+      rightKeys.value = []
+    }
+  },
+)
 
-// 组件挂载时也加载一次数据
+// 监听角色 ID 变化，重新加载角色已分配资源
+watch(
+  () => props.roleId,
+  async (newRoleId) => {
+    if (visible.value) {
+      await loadRoleResources(Number(newRoleId))
+    }
+  },
+)
+
+// 组件挂载时也加载一次数据（当组件默认就是打开状态）
 onMounted(async () => {
   if (props.open) {
     await loadResourceTree()

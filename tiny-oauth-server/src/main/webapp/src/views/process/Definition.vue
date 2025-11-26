@@ -247,12 +247,13 @@ import {
     SettingOutlined,
     HolderOutlined,
     CloseOutlined,
-    PoweroffOutlined
+    PoweroffOutlined,
+    FileImageOutlined
 } from '@ant-design/icons-vue'
 import VueDraggable from 'vuedraggable'
 import { processApi, deploymentApi, tenantApi } from '@/api/process'
 import type { ProcessDefinition } from '@/api/process'
-import { useThrottleFn } from '@/utils/throttle'
+import { useThrottle } from '@/utils/debounce'
 import ProcessPreviewDrawer from '@/components/process/ProcessPreviewDrawer.vue'
 import ProcessDeployResultModal from '@/components/process/ProcessDeployResultModal.vue'
 
@@ -510,7 +511,7 @@ function handleSearch() {
     loadData()
 }
 
-const throttledSearch = useThrottleFn(handleSearch, 1000)
+const throttledSearch = useThrottle(handleSearch, 1000)
 
 function handleReset() {
     query.value.name = ''
@@ -520,7 +521,7 @@ function handleReset() {
     loadData()
 }
 
-const throttledReset = useThrottleFn(handleReset, 1000)
+const throttledReset = useThrottle(handleReset, 1000)
 
 function handleTableChange(pag: any, filters: any, sorter: any) {
     if (pag && typeof pag.current === 'number') {
@@ -584,7 +585,7 @@ async function handleRefresh() {
     })
 }
 
-const throttledRefresh = useThrottleFn(handleRefresh, 1000)
+const throttledRefresh = useThrottle(handleRefresh, 1000)
 
 function handleBatchDelete() {
     if (selectedRowKeys.value.length === 0) {
@@ -616,7 +617,7 @@ function handleBatchDelete() {
     })
 }
 
-const throttledBatchDelete = useThrottleFn(handleBatchDelete, 1000)
+const throttledBatchDelete = useThrottle(handleBatchDelete, 1000)
 
 function handleView(record: any) {
     viewRecord.value = record || null
@@ -628,7 +629,7 @@ function closeView() {
     viewRecord.value = null
 }
 
-const throttledView = useThrottleFn(handleView, 500)
+const throttledView = useThrottle(handleView, 500)
 
 async function handlePreview(record: any) {
     previewRecord.value = (record as ProcessDefinition) || null
@@ -637,20 +638,20 @@ async function handlePreview(record: any) {
 
 // 已改为在详情抽屉之上直接打开预览抽屉，无需中转函数
 
-const throttledPreview = useThrottleFn(handlePreview, 500)
+const throttledPreview = useThrottle(handlePreview, 500)
 
 function handleEdit(record: any) {
     message.info(`编辑流程：${record.name}`)
     // TODO: 实现流程编辑功能
 }
 
-const throttledEdit = useThrottleFn(handleEdit, 500)
+const throttledEdit = useThrottle(handleEdit, 500)
 
 function handleStart(record: any) {
     startProcess(record)
 }
 
-const throttledStart = useThrottleFn(handleStart, 500)
+const throttledStart = useThrottle(handleStart, 500)
 
 function handleDelete(record: any) {
     Modal.confirm({
@@ -672,7 +673,7 @@ function handleDelete(record: any) {
     })
 }
 
-const throttledDelete = useThrottleFn(handleDelete, 500)
+const throttledDelete = useThrottle(handleDelete, 500)
 
 function handleToggleSuspend(record: any) {
     const action = record.suspended ? '激活' : '暂停'
@@ -689,7 +690,7 @@ function handleToggleSuspend(record: any) {
     })
 }
 
-const throttledToggleSuspend = useThrottleFn(handleToggleSuspend, 500)
+const throttledToggleSuspend = useThrottle(handleToggleSuspend, 500)
 
 /**
  * 动态计算表格内容区（body）的高度

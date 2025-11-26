@@ -181,13 +181,19 @@ export function useAuth(): AuthContext {
     const timeout = setTimeout(() => controller.abort(), 8000)
 
     try {
-      return await fetch(url, {
+      // 添加 TRACE_ID 和 Authorization headers
+      const { addTraceIdToFetchOptions } = await import('@/utils/traceId')
+      const headers = new Headers(options.headers)
+      headers.set('Authorization', `Bearer ${token}`)
+      
+      const traceOptions = addTraceIdToFetchOptions({
         ...options,
+        headers,
+      })
+
+      return await fetch(url, {
+        ...traceOptions,
         signal: controller.signal,
-        headers: {
-          ...options.headers,
-          Authorization: `Bearer ${token}`,
-        },
       })
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {

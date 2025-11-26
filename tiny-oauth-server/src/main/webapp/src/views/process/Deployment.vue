@@ -233,7 +233,7 @@ import {
 import VueDraggable from 'vuedraggable'
 import { deploymentApi, tenantApi } from '@/api/process'
 import type { Deployment } from '@/api/process'
-import { useThrottleFn } from '@/utils/throttle'
+import { useThrottle } from '@/utils/debounce'
 
 // 查询条件
 const query = ref({
@@ -439,7 +439,7 @@ function handleSearch() {
     loadData()
 }
 
-const throttledSearch = useThrottleFn(handleSearch, 1000)
+const throttledSearch = useThrottle(handleSearch, 1000)
 
 function handleReset() {
     query.value.name = ''
@@ -448,7 +448,7 @@ function handleReset() {
     loadData()
 }
 
-const throttledReset = useThrottleFn(handleReset, 1000)
+const throttledReset = useThrottle(handleReset, 1000)
 
 function handleTableChange(pag: any, filters: any, sorter: any) {
     if (pag && typeof pag.current === 'number') {
@@ -512,7 +512,7 @@ async function handleRefresh() {
     })
 }
 
-const throttledRefresh = useThrottleFn(handleRefresh, 1000)
+const throttledRefresh = useThrottle(handleRefresh, 1000)
 
 function handleBatchDelete() {
     if (selectedRowKeys.value.length === 0) {
@@ -544,14 +544,14 @@ function handleBatchDelete() {
     })
 }
 
-const throttledBatchDelete = useThrottleFn(handleBatchDelete, 1000)
+const throttledBatchDelete = useThrottle(handleBatchDelete, 1000)
 
 function handleView(record: any) {
     selectedDeployment.value = record
     showDeploymentDetail.value = true
 }
 
-const throttledView = useThrottleFn(handleView, 500)
+const throttledView = useThrottle(handleView, 500)
 
 function handleDownload(record: any) {
     try {
@@ -564,7 +564,7 @@ function handleDownload(record: any) {
     }
 }
 
-const throttledDownload = useThrottleFn(handleDownload, 500)
+const throttledDownload = useThrottle(handleDownload, 500)
 
 function handleDelete(record: any) {
     Modal.confirm({
@@ -586,7 +586,7 @@ function handleDelete(record: any) {
     })
 }
 
-const throttledDelete = useThrottleFn(handleDelete, 500)
+const throttledDelete = useThrottle(handleDelete, 500)
 
 const beforeUpload = (file: any) => {
     const isBpmn = file.type === 'application/xml' || file.name.endsWith('.bpmn') || file.name.endsWith('.xml')

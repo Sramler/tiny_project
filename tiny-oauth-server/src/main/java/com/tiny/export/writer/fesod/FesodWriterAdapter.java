@@ -5,7 +5,7 @@ import com.tiny.export.core.WriterOptions;
 import com.tiny.export.service.SheetWriteModel;
 import com.tiny.export.writer.WriterAdapter;
 import org.apache.fesod.sheet.ExcelWriter;
-import org.apache.fesod.sheet.FesodSheetFactory;
+import org.apache.fesod.sheet.EasyExcel;
 import org.apache.fesod.sheet.support.ExcelTypeEnum;
 import org.apache.fesod.sheet.write.builder.ExcelWriterBuilder;
 import org.apache.fesod.sheet.write.builder.ExcelWriterSheetBuilder;
@@ -59,7 +59,7 @@ public class FesodWriterAdapter implements WriterAdapter {
         if (sheets == null || sheets.isEmpty()) {
             return;
         }
-        ExcelWriterBuilder builder = FesodSheetFactory.write(out)
+        ExcelWriterBuilder builder = EasyExcel.write(out)
                 .autoCloseStream(false)
                 .excelType(ExcelTypeEnum.XLSX);
         ExcelWriter writer = builder.build();
@@ -97,7 +97,7 @@ public class FesodWriterAdapter implements WriterAdapter {
         String sheetName = (model.getSheetName() == null || model.getSheetName().isBlank())
                 ? "Sheet" + (sheetIndex + 1)
                 : model.getSheetName();
-        ExcelWriterSheetBuilder sheetBuilder = FesodSheetFactory.writerSheet(sheetIndex, sheetName);
+        ExcelWriterSheetBuilder sheetBuilder = EasyExcel.writerSheet(sheetIndex, sheetName);
         List<List<String>> head = model.getHead();
         if (head != null && !head.isEmpty()) {
             sheetBuilder.head(head);

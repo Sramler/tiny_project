@@ -27,6 +27,12 @@ public interface MenuService {
     List<ResourceResponseDto> menuTree();
 
     /**
+     * 获取完整菜单树（包含隐藏/禁用/空目录）
+     * @return 菜单树
+     */
+    List<ResourceResponseDto> menuTreeAll();
+
+    /**
      * 根据父级ID查询子菜单（type=0/1）
      * @param parentId 父级ID，null或0表示顶级菜单
      * @return 子菜单列表

@@ -385,11 +385,4 @@ public interface ResourceRepository extends JpaRepository<Resource, Long>, JpaSp
      */
     List<Resource> findByParentIdIn(List<Long> parentIds);
 
-    /**
-     * 根据角色ID查询该角色拥有的所有资源ID列表
-     * @param roleId 角色ID
-     * @return 资源ID列表
-     */
-    @Query(value = "SELECT resource_id FROM role_resource WHERE role_id = :roleId", nativeQuery = true)
-    List<Long> findResourceIdsByRoleId(@Param("roleId") Long roleId);
 }

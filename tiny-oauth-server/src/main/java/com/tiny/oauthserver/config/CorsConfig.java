@@ -42,13 +42,25 @@ public class CorsConfig {
                 "Accept",
                 "Origin",
                 "Access-Control-Request-Method",
-                "Access-Control-Request-Headers"
+                "Access-Control-Request-Headers",
+                // TRACE_ID 相关 headers
+                "X-Trace-Id",
+                "X-Request-Id",
+                "trace-id",
+                "traceparent",
+                "x-b3-traceid",
+                "x-trace-id",
+                "x-b3-spanid",
+                "span-id"
         ));
 
         // 允许暴露的响应头
         config.setExposedHeaders(Arrays.asList(
                 "Access-Control-Allow-Origin",
-                "Access-Control-Allow-Credentials"
+                "Access-Control-Allow-Credentials",
+                // TRACE_ID 相关 headers，允许前端读取
+                "X-Request-Id",
+                "X-Trace-Id"
         ));
 
         config.setAllowCredentials(true);

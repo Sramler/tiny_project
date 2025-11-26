@@ -52,37 +52,24 @@
             <template #content>
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
                 <div style="display: flex; align-items: center;">
-                  <a-checkbox
-                    :checked="showColumnKeys.length === allColumns.length"
+                  <a-checkbox :checked="showColumnKeys.length === allColumns.length"
                     :indeterminate="showColumnKeys.length > 0 && showColumnKeys.length < allColumns.length"
-                    @change="onCheckAllChange"
-                  />
+                    @change="onCheckAllChange" />
                   <span style="font-weight: bold; margin-left: 8px;">列展示/排序</span>
                 </div>
-                <span
-                  style="font-weight: bold; color: #1677ff; cursor: pointer;"
-                  @click="resetColumnOrder"
-                >
+                <span style="font-weight: bold; color: #1677ff; cursor: pointer;" @click="resetColumnOrder">
                   重置
                 </span>
               </div>
-              <VueDraggable
-                v-model="draggableColumns"
-                :item-key="(item: any) => item?.dataIndex || ('col_' + Math.random())"
-                handle=".drag-handle"
-                @end="onDragEnd"
-                class="draggable-columns"
-                ghost-class="sortable-ghost"
-                chosen-class="sortable-chosen"
-                tag="div"
-              >
+              <VueDraggable v-model="draggableColumns"
+                :item-key="(item: any) => item?.dataIndex || ('col_' + Math.random())" handle=".drag-handle"
+                @end="onDragEnd" class="draggable-columns" ghost-class="sortable-ghost" chosen-class="sortable-chosen"
+                tag="div">
                 <template #item="{ element }">
                   <div class="draggable-column-item">
                     <HolderOutlined class="drag-handle" />
-                    <a-checkbox
-                      :checked="showColumnKeys.includes(element.dataIndex)"
-                      @change="(e: any) => onCheckboxChange(element.dataIndex, e.target.checked)"
-                    >
+                    <a-checkbox :checked="showColumnKeys.includes(element.dataIndex)"
+                      @change="(e: any) => onCheckboxChange(element.dataIndex, e.target.checked)">
                       {{ element.title }}
                     </a-checkbox>
                   </div>
@@ -99,25 +86,12 @@
       <!-- 表格区域，支持多选、动态列 -->
       <div class="table-container" ref="tableContentRef">
         <div class="table-scroll-container" ref="tableScrollContainerRef">
-          <a-table
-            :columns="columns"
-            :data-source="tableData"
-            :row-key="(record: any) => String(record.id)"
-            bordered
-            :loading="loading"
-            :row-selection="rowSelection"
-            :custom-row="onCustomRow"
-            :row-class-name="getRowClassName"
-            :scroll="{ x: 'max-content', y: tableBodyHeight }"
-            :expandable="expandableConfig"
-            :pagination="false"
-          >
+          <a-table :columns="columns" :data-source="tableData" :row-key="(record: any) => String(record.id)" bordered
+            :loading="loading" :row-selection="rowSelection" :custom-row="onCustomRow" :row-class-name="getRowClassName"
+            :scroll="{ x: 'max-content', y: tableBodyHeight }" :expandable="expandableConfig" :pagination="false">
             <template #expandIcon="{ record }">
-              <span
-                v-if="!record.leaf"
-                style="cursor:pointer; color:#1890ff; margin-right:4px;"
-                @click.stop="() => onExpandIconClick(record)"
-              >
+              <span v-if="!record.leaf" style="cursor:pointer; color:#1890ff; margin-right:4px;"
+                @click.stop="() => onExpandIconClick(record)">
                 <MinusOutlined v-if="expandedRowKeys.includes(String(record.id))" />
                 <PlusOutlined v-else />
               </span>
@@ -161,25 +135,14 @@
                     编辑
                   </a-button>
                   <a-tooltip v-if="record.leaf" title="叶子节点不可添加子菜单">
-                    <a-button
-                      type="link"
-                      size="small"
-                      :disabled="true"
-                      class="action-btn"
-                    >
+                    <a-button type="link" size="small" :disabled="true" class="action-btn">
                       <template #icon>
                         <PlusOutlined />
                       </template>
                       子菜单
                     </a-button>
                   </a-tooltip>
-                  <a-button
-                    v-else
-                    type="link"
-                    size="small"
-                    @click.stop="throttledAddChild(record)"
-                    class="action-btn"
-                  >
+                  <a-button v-else type="link" size="small" @click.stop="throttledAddChild(record)" class="action-btn">
                     <template #icon>
                       <PlusOutlined />
                     </template>
@@ -200,22 +163,10 @@
     </div>
 
     <!-- 抽屉表单，编辑/新建菜单 -->
-    <a-drawer
-      v-model:open="drawerVisible"
-      :title="drawerMode === 'create' ? '新建菜单' : '编辑菜单'"
-      width="600px"
-      :get-container="false"
-      :style="{ position: 'absolute' }"
-      @close="handleDrawerClose"
-    >
-      <MenuForm
-        v-if="drawerVisible"
-        :mode="drawerMode"
-        :menu-data="currentMenu"
-        :parent-menu="parentMenu"
-        @submit="handleFormSubmit"
-        @cancel="handleDrawerClose"
-      />
+    <a-drawer v-model:open="drawerVisible" :title="drawerMode === 'create' ? '新建菜单' : '编辑菜单'" width="600px"
+      :get-container="false" :style="{ position: 'absolute' }" @close="handleDrawerClose">
+      <MenuForm v-if="drawerVisible" :mode="drawerMode" :menu-data="currentMenu" :parent-menu="parentMenu"
+        @submit="handleFormSubmit" @cancel="handleDrawerClose" />
     </a-drawer>
   </div>
 </template>
@@ -241,8 +192,8 @@ import MenuForm from './MenuForm.vue'
 import Icon from '@/components/Icon.vue' // 通用图标回显组件
 
 // MenuItem 类型补充 expanded 和 _childrenLoaded 字段，消除TS报错
-type MenuItemEx = MenuItem & { 
-  expanded?: boolean; 
+type MenuItemEx = MenuItem & {
+  expanded?: boolean;
   _childrenLoaded?: boolean;
   leaf?: boolean | number; // 添加 leaf 属性，支持 boolean 或 number 类型
   _loading?: boolean; // 添加加载状态属性
@@ -268,17 +219,17 @@ const selectedRowKeys = ref<string[]>([])
 
 // 所有列定义
 const INITIAL_COLUMNS = [
-  { title: '菜单名称', dataIndex: 'name'},
-  { title: '菜单标题', dataIndex: 'title'},
+  { title: '菜单名称', dataIndex: 'name' },
+  { title: '菜单标题', dataIndex: 'title' },
   { title: '图标', dataIndex: 'icon', align: 'center' },
   { title: '路径', dataIndex: 'url' },
-  { title: '权限标识', dataIndex: 'permission'},
+  { title: '权限标识', dataIndex: 'permission' },
   { title: '排序', dataIndex: 'sort', align: 'center' },
   { title: '菜单类型', dataIndex: 'type', align: 'center' },
   { title: '是否启用', dataIndex: 'enabled', align: 'center' },
   { title: '显示', dataIndex: 'hidden', align: 'center' },
   { title: '缓存', dataIndex: 'keepAlive', align: 'center' },
-  { title: '操作', dataIndex: 'action',width: 200, fixed: 'right', align: 'center' }
+  { title: '操作', dataIndex: 'action', width: 200, fixed: 'right', align: 'center' }
 ]
 
 const allColumns = ref([...INITIAL_COLUMNS])
@@ -362,7 +313,7 @@ const columns = computed(() => {
         title: '序号',
         dataIndex: 'index',
         width: 80,
-        align: 'center',
+        align: 'left',
         fixed: 'left',
         customRender: ({ index }: { index?: number }) => {
           try {
@@ -386,7 +337,7 @@ const rowSelection = computed(() => {
   try {
     return {
       selectedRowKeys: selectedRowKeys.value,
-      onChange: (selectedKeys: (string|number)[]) => {
+      onChange: (selectedKeys: (string | number)[]) => {
         try {
           selectedRowKeys.value = selectedKeys.map(String)
         } catch (error) {
@@ -505,9 +456,9 @@ async function loadData() {
     // 验证响应数据
     if (res && Array.isArray(res)) {
       tableData.value = res.map(item => {
-        const obj: MenuItemEx = { 
-          ...item, 
-          expanded: false, 
+        const obj: MenuItemEx = {
+          ...item,
+          expanded: false,
           _childrenLoaded: false,
           // 确保 enabled 字段有默认值
           enabled: item.enabled !== undefined ? item.enabled : true
@@ -521,6 +472,8 @@ async function loadData() {
     } else {
       tableData.value = []
     }
+    // 数据刷新后重置展开状态，避免图标错乱
+    expandedRowKeys.value = []
   } catch (error) {
     console.error('加载菜单数据失败:', error)
     tableData.value = []
@@ -555,12 +508,12 @@ const throttledReset = handleReset
 function handleCreate() {
   try {
     drawerMode.value = 'create'
-    currentMenu.value = { 
-      name: '', 
-      title: '', 
-      sort: 0, 
-      showIcon: true, 
-      hidden: false, 
+    currentMenu.value = {
+      name: '',
+      title: '',
+      sort: 0,
+      showIcon: true,
+      hidden: false,
       keepAlive: false,
       icon: '',
       url: '',
@@ -677,7 +630,7 @@ function handleEdit(record: any) {
     }
 
     console.log('编辑菜单，原始数据:', record)
-    
+
     drawerMode.value = 'edit'
     // 深拷贝数据，避免直接引用
     currentMenu.value = {
@@ -696,12 +649,12 @@ function handleEdit(record: any) {
       permission: record.permission || '',
       parentId: record.parentId || null
     }
-    
+
     console.log('编辑菜单，处理后的数据:', currentMenu.value)
     if (currentMenu.value) {
       console.log('父级菜单ID:', currentMenu.value.parentId)
     }
-    
+
     parentMenu.value = null
     drawerVisible.value = true
   } catch (error) {
@@ -802,6 +755,10 @@ async function handleFormSubmit(formData: any) {
 
     handleDrawerClose()
     await loadData() // 等待数据加载完成
+    // 通知侧边栏刷新菜单树，实现局部重载
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('reload-menu-tree'))
+    }
   } catch (error: any) {
     console.error('保存菜单失败:', error)
     message.error('保存失败: ' + (error.message || '未知错误'))
@@ -1033,7 +990,11 @@ function onExpandIconClick(record: any) {
   overflow-x: auto;
   overflow-y: auto;
 }
-.ml-2 { margin-left: 8px; }
+
+.ml-2 {
+  margin-left: 8px;
+}
+
 .table-title {
   font-size: 16px;
   font-weight: bold;
@@ -1182,18 +1143,23 @@ function onExpandIconClick(record: any) {
 :deep(.ant-table-tbody > tr:nth-child(odd)) {
   background-color: #fafbfc;
 }
+
 :deep(.ant-table-tbody > tr:nth-child(even)) {
   background-color: #fff;
 }
+
 :deep(.ant-table-tbody > tr.checkbox-selected-row) {
   background-color: #e6f7ff !important;
 }
+
 :deep(.ant-table-tbody > tr.checkbox-selected-row:hover) {
   background-color: #bae7ff !important;
 }
+
 :deep(.ant-table-thead th) {
   white-space: nowrap;
 }
+
 :deep(.ant-table-cell) {
   white-space: nowrap;
   /* overflow: hidden; */

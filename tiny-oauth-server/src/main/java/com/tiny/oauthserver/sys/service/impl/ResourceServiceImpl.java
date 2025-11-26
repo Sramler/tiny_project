@@ -3,6 +3,7 @@ package com.tiny.oauthserver.sys.service.impl;
 import com.tiny.oauthserver.sys.enums.ResourceType;
 import com.tiny.oauthserver.sys.model.*;
 import com.tiny.oauthserver.sys.repository.ResourceRepository;
+import com.tiny.oauthserver.sys.repository.RoleRepository;
 import com.tiny.oauthserver.sys.repository.UserRepository;
 import com.tiny.oauthserver.sys.service.ResourceService;
 import org.springframework.data.domain.Page;
@@ -22,10 +23,12 @@ public class ResourceServiceImpl implements ResourceService {
 
     private final ResourceRepository resourceRepository;
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
 
-    public ResourceServiceImpl(ResourceRepository resourceRepository, UserRepository userRepository) {
+    public ResourceServiceImpl(ResourceRepository resourceRepository, UserRepository userRepository, RoleRepository roleRepository) {
         this.resourceRepository = resourceRepository;
         this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
     }
 
     @Override
@@ -360,7 +363,7 @@ public class ResourceServiceImpl implements ResourceService {
         if (roleId == null) {
             return Collections.emptyList();
         }
-        List<Long> resourceIds = resourceRepository.findResourceIdsByRoleId(roleId);
+        List<Long> resourceIds = roleRepository.findResourceIdsByRoleId(roleId);
         if (resourceIds == null || resourceIds.isEmpty()) {
             return Collections.emptyList();
         }
@@ -386,7 +389,7 @@ public class ResourceServiceImpl implements ResourceService {
                     // 通过角色ID查询关联的资源ID
                     Set<Long> resourceIds = new HashSet<>();
                     for (Long roleId : roleIds) {
-                        List<Long> ids = resourceRepository.findResourceIdsByRoleId(roleId);
+                        List<Long> ids = roleRepository.findResourceIdsByRoleId(roleId);
                         if (ids != null && !ids.isEmpty()) {
                             resourceIds.addAll(ids);
                         }

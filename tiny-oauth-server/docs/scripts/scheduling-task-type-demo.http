@@ -1,0 +1,39 @@
+@baseUrl = http://localhost:9000
+@token = Bearer {{paste_access_token_here}}
+
+### 创建 LoggingTaskExecutor 示例任务类型
+POST {{baseUrl}}/scheduling/task-type
+Authorization: {{token}}
+Content-Type: application/json
+
+{
+  "tenantId": 1,
+  "code": "demo_logging",
+  "name": "示例-日志执行器",
+  "description": "使用 loggingTaskExecutor 打印参数并返回结果",
+  "executor": "loggingTaskExecutor",
+  "paramSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"message\": {\n      \"type\": \"string\",\n      \"description\": \"需要打印的消息\"\n    }\n  }\n}",
+  "defaultTimeoutSec": 60,
+  "defaultMaxRetry": 0,
+  "enabled": true,
+  "createdBy": "demo"
+}
+
+### 创建 DelayTaskExecutor 示例任务类型
+POST {{baseUrl}}/scheduling/task-type
+Authorization: {{token}}
+Content-Type: application/json
+
+{
+  "tenantId": 1,
+  "code": "demo_delay",
+  "name": "示例-延迟执行器",
+  "description": "使用 delayTaskExecutor, 支持延迟/失败模拟",
+  "executor": "delayTaskExecutor",
+  "paramSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"delayMs\": {\n      \"type\": \"integer\",\n      \"description\": \"延迟毫秒数\",\n      \"default\": 1000\n    },\n    \"fail\": {\n      \"type\": \"boolean\",\n      \"description\": \"是否模拟失败\",\n      \"default\": false\n    }\n  },\n  \"required\": [\"delayMs\"]\n}",
+  "defaultTimeoutSec": 120,
+  "defaultMaxRetry": 2,
+  "enabled": true,
+  "createdBy": "demo"
+}
+

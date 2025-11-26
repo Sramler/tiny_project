@@ -76,38 +76,3 @@ export function getReturnUrl(): string {
   const urlParams = new URLSearchParams(window.location.search)
   return urlParams.get('returnUrl') || window.location.pathname + window.location.search
 }
-
-/**
- * 防抖函数，用于防止重复操作
- */
-export function debounce<T extends (...args: any[]) => any>(
-  func: T,
-  wait: number,
-): (...args: Parameters<T>) => void {
-  let timeout: number | null = null
-
-  return (...args: Parameters<T>) => {
-    if (timeout) {
-      clearTimeout(timeout)
-    }
-    timeout = window.setTimeout(() => func(...args), wait)
-  }
-}
-
-/**
- * 节流函数，用于限制操作频率
- */
-export function throttle<T extends (...args: any[]) => any>(
-  func: T,
-  limit: number,
-): (...args: Parameters<T>) => void {
-  let inThrottle: boolean = false
-
-  return (...args: Parameters<T>) => {
-    if (!inThrottle) {
-      func(...args)
-      inThrottle = true
-      setTimeout(() => (inThrottle = false), limit)
-    }
-  }
-}

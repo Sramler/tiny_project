@@ -147,8 +147,7 @@ public class RoleServiceImpl implements RoleService {
 
     @Override
     public List<Long> getResourceIdsByRoleId(Long roleId) {
-        // 使用原生SQL查询角色资源ID列表，避免懒加载问题
-        return resourceRepository.findResourceIdsByRoleId(roleId);
+        return roleRepository.findResourceIdsByRoleId(roleId);
     }
 
     private RoleResponseDto toDto(Role role) {

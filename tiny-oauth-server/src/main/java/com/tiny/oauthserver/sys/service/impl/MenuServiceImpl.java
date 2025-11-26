@@ -39,6 +39,13 @@ public class MenuServiceImpl implements MenuService {
         this.resourceRepository = resourceRepository;
     }
 
+    private Long normalizeParentId(Long parentId) {
+        if (parentId == null || parentId == 0) {
+            return null;
+        }
+        return parentId;
+    }
+
     /**
      * 分页查询菜单（支持type、parentId、title、enabled多条件）
      */
@@ -276,13 +283,23 @@ public class MenuServiceImpl implements MenuService {
 
         // 2. 从扁平化列表中，筛选出所有可见菜单的 URL，作为有效 redirect 目标集合
         Set<String> visibleUrls = flatList.stream()
-                .filter(node -> Boolean.TRUE.equals(node.getEnabled()) && !Boolean.TRUE.equals(node.getHidden()))
+                .filter(this::isNodeVisible)
                 .map(ResourceResponseDto::getUrl)
                 .filter(StringUtils::hasText)
                 .collect(Collectors.toSet());
 
         // 3. 返回前进行过滤，并传入可见 URL 集合
         return filterVisibleMenus(fullTree, visibleUrls);
+    }
+
+    /**
+     * 返回不带任何过滤的完整菜单树
+     * 用于角色授权、菜单管理等后台场景
+     */
+    @Override
+    public List<ResourceResponseDto> menuTreeAll() {
+        List<Resource> menus = resourceRepository.findByTypeInOrderBySortAsc(List.of(ResourceType.DIRECTORY, ResourceType.MENU));
+        return buildResourceTree(menus);
     }
 
     /**
@@ -314,7 +331,7 @@ public class MenuServiceImpl implements MenuService {
         }
 
         return nodes.stream()
-            .filter(node -> Boolean.TRUE.equals(node.getEnabled()) && !Boolean.TRUE.equals(node.getHidden()))
+            .filter(this::isNodeVisible)
             .map(node -> {
                 if (node.getChildren() != null && !node.getChildren().isEmpty()) {
                     node.setChildren(filterVisibleMenus(node.getChildren(), visibleUrls));
@@ -337,6 +354,12 @@ public class MenuServiceImpl implements MenuService {
                 return hasVisibleChildren || hasValidRedirect;
             })
             .collect(Collectors.toList());
+    }
+
+    private boolean isNodeVisible(ResourceResponseDto node) {
+        boolean enabled = !Boolean.FALSE.equals(node.getEnabled());
+        boolean hidden = Boolean.TRUE.equals(node.getHidden());
+        return enabled && !hidden;
     }
 
     /**
@@ -366,6 +389,7 @@ public class MenuServiceImpl implements MenuService {
         }
         
         // 验证父ID设置（创建时ID为null，所以传入0作为占位符）
+        resourceDto.setParentId(normalizeParentId(resourceDto.getParentId()));
         validateParentId(0L, resourceDto.getParentId());
         
         Resource resource = new Resource();
@@ -396,6 +420,7 @@ public class MenuServiceImpl implements MenuService {
                 .orElseThrow(() -> new RuntimeException("菜单不存在"));
         
         // 验证父ID设置
+        resourceDto.setParentId(normalizeParentId(resourceDto.getParentId()));
         validateParentId(resourceDto.getId(), resourceDto.getParentId());
         
         resource.setName(resourceDto.getName());
@@ -420,19 +445,20 @@ public class MenuServiceImpl implements MenuService {
      * 验证父ID设置是否有效
      */
     private void validateParentId(Long menuId, Long parentId) {
+        Long normalizedParentId = normalizeParentId(parentId);
         // 如果父ID为空，表示设置为顶级菜单，这是允许的
-        if (parentId == null || parentId == 0) {
+        if (normalizedParentId == null) {
             return;
         }
         
         // 不能将自己设置为自己的父菜单
-        if (menuId.equals(parentId)) {
+        if (menuId != null && menuId.equals(normalizedParentId)) {
             throw new RuntimeException("不能将自己设置为父菜单");
         }
         
         // 检查父菜单是否存在
-        Resource parentResource = resourceRepository.findById(parentId)
-                .orElseThrow(() -> new RuntimeException("父菜单不存在，ID: " + parentId));
+        Resource parentResource = resourceRepository.findById(normalizedParentId)
+                .orElseThrow(() -> new RuntimeException("父菜单不存在，ID: " + normalizedParentId));
         
         // 父菜单必须是目录类型
         if (parentResource.getType() != ResourceType.DIRECTORY) {
@@ -440,7 +466,7 @@ public class MenuServiceImpl implements MenuService {
         }
         
         // 检查是否会造成循环引用
-        if (wouldCreateCircularReference(menuId, parentId)) {
+        if (wouldCreateCircularReference(menuId, normalizedParentId)) {
             throw new RuntimeException("设置此父菜单会造成循环引用");
         }
     }
@@ -510,12 +536,13 @@ public class MenuServiceImpl implements MenuService {
             // 构建树形结构
             for (Resource resource : resources) {
                 ResourceResponseDto dto = resourceMap.get(resource.getId());
-                if (resource.getParentId() == null) {
+                Long parentId = normalizeParentId(resource.getParentId());
+                if (parentId == null) {
                     // 顶级资源
                     rootResources.add(dto);
                 } else {
                     // 子资源
-                    ResourceResponseDto parent = resourceMap.get(resource.getParentId());
+                    ResourceResponseDto parent = resourceMap.get(parentId);
                     if (parent != null) {
                         if (parent.getChildren() == null) {
                             parent.setChildren(new ArrayList<>());
@@ -558,7 +585,7 @@ public class MenuServiceImpl implements MenuService {
             dto.setPermission(resource.getPermission());
             dto.setType(resource.getType() != null ? resource.getType().getCode() : null);
             dto.setTypeName(resource.getType() != null ? resource.getType().getDescription() : null);
-            dto.setParentId(resource.getParentId());
+            dto.setParentId(normalizeParentId(resource.getParentId()));
             dto.setEnabled(Boolean.TRUE.equals(resource.getEnabled()));
             
             // 判断是否为叶子节点（没有子资源）

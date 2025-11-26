@@ -213,7 +213,7 @@ import {
     CloseOutlined,
     PlusOutlined
 } from '@ant-design/icons-vue'
-import { useThrottleFn } from '@/utils/throttle'
+import { useThrottle } from '@/utils/debounce'
 import { taskApi, userApi, type Task } from '@/api/process'
 import { useAuth } from '@/auth/auth'
 
@@ -742,11 +742,11 @@ function getDueDateClass(dueDate: string) {
 }
 
 // 节流函数
-const throttledSearch = useThrottleFn(handleSearch, 500)
-const throttledReset = useThrottleFn(handleReset, 500)
-const throttledRefresh = useThrottleFn(refresh, 500)
-const throttledBatchClaim = useThrottleFn(batchClaim, 1000)
-const throttledBatchComplete = useThrottleFn(batchComplete, 1000)
+const throttledSearch = useThrottle(handleSearch, 500)
+const throttledReset = useThrottle(handleReset, 500)
+const throttledRefresh = useThrottle(refresh, 500)
+const throttledBatchClaim = useThrottle(batchClaim, 1000)
+const throttledBatchComplete = useThrottle(batchComplete, 1000)
 
 
 // 自动刷新定时器

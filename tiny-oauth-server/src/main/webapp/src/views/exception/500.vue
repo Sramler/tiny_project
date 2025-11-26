@@ -3,11 +3,11 @@
     <a-card class="error-card" :bordered="false">
       <div class="error-content">
         <div class="error-icon-wrapper">
-          <StopOutlined class="error-icon" />
+          <ThunderboltOutlined class="error-icon" />
         </div>
-        <h1 class="error-code">403</h1>
-        <h2 class="error-title">访问被拒绝</h2>
-        <p class="error-description">抱歉，您没有权限访问该页面。如有疑问，请联系系统管理员。</p>
+        <h1 class="error-code">500</h1>
+        <h2 class="error-title">服务器错误</h2>
+        <p class="error-description">抱歉，服务器发生了错误。我们正在努力修复这个问题，请稍后再试。如果问题持续存在，请联系技术支持。</p>
         <div class="error-actions">
           <a-button type="primary" size="large" @click="goHome">
             <template #icon>
@@ -23,7 +23,7 @@
 
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-import { StopOutlined, HomeOutlined } from '@ant-design/icons-vue'
+import { ThunderboltOutlined, HomeOutlined } from '@ant-design/icons-vue'
 
 const router = useRouter()
 
@@ -65,16 +65,19 @@ const goHome = () => {
 
 .error-icon {
   font-size: 80px;
-  color: #ff4d4f;
-  animation: float 3s ease-in-out infinite;
+  color: #d4380d;
+  animation: shake 2s ease-in-out infinite;
 }
 
-@keyframes float {
+@keyframes shake {
   0%, 100% {
-    transform: translateY(0px);
+    transform: rotate(0deg);
   }
-  50% {
-    transform: translateY(-10px);
+  10%, 30%, 50%, 70%, 90% {
+    transform: rotate(-5deg);
+  }
+  20%, 40%, 60%, 80% {
+    transform: rotate(5deg);
   }
 }
 
@@ -83,7 +86,7 @@ const goHome = () => {
   font-weight: 700;
   line-height: 1;
   margin: 0 0 16px;
-  background: linear-gradient(135deg, #ff4d4f 0%, #ff7875 100%);
+  background: linear-gradient(135deg, #d4380d 0%, #ff7a45 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -114,11 +117,13 @@ const goHome = () => {
   padding: 0 32px;
   font-size: 16px;
   border-radius: 6px;
-  box-shadow: 0 2px 4px rgba(255, 77, 79, 0.2);
+  box-shadow: 0 2px 4px rgba(212, 56, 13, 0.2);
+  background: linear-gradient(135deg, #d4380d 0%, #ff7a45 100%);
+  border: none;
 }
 
 :deep(.ant-btn-primary:hover) {
-  box-shadow: 0 4px 8px rgba(255, 77, 79, 0.3);
+  box-shadow: 0 4px 8px rgba(212, 56, 13, 0.3);
   transform: translateY(-1px);
   transition: all 0.3s ease;
 }
@@ -144,4 +149,5 @@ const goHome = () => {
     padding: 32px 16px;
   }
 }
-</style> 
+</style>
+

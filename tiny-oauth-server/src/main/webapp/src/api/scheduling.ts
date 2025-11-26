@@ -1,0 +1,312 @@
+// scheduling.ts 企业级 DAG 调度相关 API 封装
+import request from '@/utils/request'
+
+// ==================== TaskType - 任务类型 ====================
+
+// 分页查询任务类型列表
+export function taskTypeList(params: any) {
+  const apiParams: { [key: string]: any } = {
+    page: (params.current || 1) - 1,
+    size: params.pageSize || 10,
+    tenantId: params.tenantId,
+    code: params.code,
+    name: params.name,
+  }
+  return request.get('/scheduling/task-type/list', { params: apiParams }).then((res: any) => {
+    return {
+      records: res.content || [],
+      total: res.totalElements || 0,
+    }
+  })
+}
+
+// 创建任务类型
+export function createTaskType(data: any) {
+  return request.post('/scheduling/task-type', data)
+}
+
+// 更新任务类型
+export function updateTaskType(id: number, data: any) {
+  return request.put(`/scheduling/task-type/${id}`, data)
+}
+
+// 删除任务类型
+export function deleteTaskType(id: number) {
+  return request.delete(`/scheduling/task-type/${id}`)
+}
+
+// 查看任务类型详情
+export function getTaskType(id: number) {
+  return request.get(`/scheduling/task-type/${id}`)
+}
+
+// ==================== Task - 任务实例定义 ====================
+
+// 分页查询任务列表
+export function taskList(params: any) {
+  const apiParams: { [key: string]: any } = {
+    page: (params.current || 1) - 1,
+    size: params.pageSize || 10,
+    tenantId: params.tenantId,
+    typeId: params.typeId,
+    code: params.code,
+    name: params.name,
+  }
+  return request.get('/scheduling/task/list', { params: apiParams }).then((res: any) => {
+    return {
+      records: res.content || [],
+      total: res.totalElements || 0,
+    }
+  })
+}
+
+// 创建任务实例
+export function createTask(data: any) {
+  return request.post('/scheduling/task', data)
+}
+
+// 更新任务
+export function updateTask(id: number, data: any) {
+  return request.put(`/scheduling/task/${id}`, data)
+}
+
+// 删除任务
+export function deleteTask(id: number) {
+  return request.delete(`/scheduling/task/${id}`)
+}
+
+// 查看任务详情
+export function getTask(id: number) {
+  return request.get(`/scheduling/task/${id}`)
+}
+
+// 查询任务默认参数
+export function getTaskParam(taskId: number) {
+  return request.get(`/scheduling/task-param/${taskId}`)
+}
+
+// ==================== DAG（编排流程） ====================
+
+// 分页查询 DAG 列表
+export function dagList(params: any) {
+  const apiParams: { [key: string]: any } = {
+    page: (params.current || 1) - 1,
+    size: params.pageSize || 10,
+    tenantId: params.tenantId,
+    code: params.code,
+    name: params.name,
+  }
+  return request.get('/scheduling/dag/list', { params: apiParams }).then((res: any) => {
+    return {
+      records: res.content || [],
+      total: res.totalElements || 0,
+    }
+  })
+}
+
+// 创建 DAG
+export function createDag(data: any) {
+  return request.post('/scheduling/dag', data)
+}
+
+// 更新 DAG
+export function updateDag(id: number, data: any) {
+  return request.put(`/scheduling/dag/${id}`, data)
+}
+
+// 删除 DAG
+export function deleteDag(id: number) {
+  return request.delete(`/scheduling/dag/${id}`)
+}
+
+// 查看 DAG 详情
+export function getDag(id: number) {
+  return request.get(`/scheduling/dag/${id}`)
+}
+
+// ==================== DAG Version ====================
+
+// 创建 DAG 新版本
+export function createDagVersion(dagId: number, data: any) {
+  return request.post(`/scheduling/dag/${dagId}/version`, data)
+}
+
+// 更新 DAG 版本
+export function updateDagVersion(dagId: number, versionId: number, data: any) {
+  return request.put(`/scheduling/dag/${dagId}/version/${versionId}`, data)
+}
+
+// 查看 DAG 版本详情
+export function getDagVersion(dagId: number, versionId: number) {
+  return request.get(`/scheduling/dag/${dagId}/version/${versionId}`)
+}
+
+// 查询 DAG 所有版本
+export function listDagVersions(dagId: number) {
+  return request.get(`/scheduling/dag/${dagId}/version/list`)
+}
+
+// ==================== DAG Node（节点） ====================
+
+// 添加 DAG 节点
+export function createDagNode(dagId: number, versionId: number, data: any) {
+  return request.post(`/scheduling/dag/${dagId}/version/${versionId}/node`, data)
+}
+
+// 更新节点
+export function updateDagNode(dagId: number, versionId: number, nodeId: number, data: any) {
+  return request.put(`/scheduling/dag/${dagId}/version/${versionId}/node/${nodeId}`, data)
+}
+
+// 删除节点
+export function deleteDagNode(dagId: number, versionId: number, nodeId: number) {
+  return request.delete(`/scheduling/dag/${dagId}/version/${versionId}/node/${nodeId}`)
+}
+
+// 查看节点详情
+export function getDagNode(dagId: number, versionId: number, nodeId: number) {
+  return request.get(`/scheduling/dag/${dagId}/version/${versionId}/node/${nodeId}`)
+}
+
+// 查询上游节点
+export function getUpstreamNodes(dagId: number, versionId: number, nodeId: number) {
+  return request.get(`/scheduling/dag/${dagId}/version/${versionId}/node/${nodeId}/up`)
+}
+
+// 查询下游节点
+export function getDownstreamNodes(dagId: number, versionId: number, nodeId: number) {
+  return request.get(`/scheduling/dag/${dagId}/version/${versionId}/node/${nodeId}/down`)
+}
+
+// 查询版本下的所有节点
+export function getDagNodes(dagId: number, versionId: number) {
+  return request.get(`/scheduling/dag/${dagId}/version/${versionId}/nodes`)
+}
+
+// 查询版本下的所有依赖
+export function getDagEdges(dagId: number, versionId: number) {
+  return request.get(`/scheduling/dag/${dagId}/version/${versionId}/edges`)
+}
+
+// ==================== DAG Edge（节点依赖） ====================
+
+// 新增节点依赖
+export function createDagEdge(dagId: number, versionId: number, data: any) {
+  return request.post(`/scheduling/dag/${dagId}/version/${versionId}/edge`, data)
+}
+
+// 删除节点依赖
+export function deleteDagEdge(dagId: number, versionId: number, edgeId: number) {
+  return request.delete(`/scheduling/dag/${dagId}/version/${versionId}/edge/${edgeId}`)
+}
+
+// ==================== DAG 调度触发/控制 ====================
+
+// 触发整个 DAG 执行
+export function triggerDag(dagId: number, triggeredBy?: string) {
+  return request.post(`/scheduling/dag/${dagId}/trigger`, null, {
+    params: { triggeredBy: triggeredBy || 'system' },
+  })
+}
+
+// 暂停 DAG 执行
+export function pauseDag(dagId: number) {
+  return request.post(`/scheduling/dag/${dagId}/pause`)
+}
+
+// 恢复 DAG 执行
+export function resumeDag(dagId: number) {
+  return request.post(`/scheduling/dag/${dagId}/resume`)
+}
+
+// 强制停止 DAG 执行
+export function stopDag(dagId: number) {
+  return request.post(`/scheduling/dag/${dagId}/stop`)
+}
+
+// 对失败的 DAG 进行整体重试
+export function retryDag(dagId: number) {
+  return request.post(`/scheduling/dag/${dagId}/retry`)
+}
+
+// ==================== DAG 节点调度 ====================
+
+// 单独触发节点执行
+export function triggerNode(dagId: number, nodeId: number) {
+  return request.post(`/scheduling/dag/${dagId}/node/${nodeId}/trigger`)
+}
+
+// 对失败节点重试
+export function retryNode(dagId: number, nodeId: number) {
+  return request.post(`/scheduling/dag/${dagId}/node/${nodeId}/retry`)
+}
+
+// 暂停节点
+export function pauseNode(dagId: number, nodeId: number) {
+  return request.post(`/scheduling/dag/${dagId}/node/${nodeId}/pause`)
+}
+
+// 恢复节点
+export function resumeNode(dagId: number, nodeId: number) {
+  return request.post(`/scheduling/dag/${dagId}/node/${nodeId}/resume`)
+}
+
+// ==================== 运行历史 ====================
+
+// 查询 DAG 所有运行历史
+export function getDagRuns(dagId: number, params: any) {
+  const apiParams: { [key: string]: any } = {
+    page: (params.current || 1) - 1,
+    size: params.pageSize || 10,
+  }
+  return request.get(`/scheduling/dag/${dagId}/runs`, { params: apiParams }).then((res: any) => {
+    return {
+      records: res.content || [],
+      total: res.totalElements || 0,
+    }
+  })
+}
+
+// 查看 DAG 单次运行详情
+export function getDagRun(dagId: number, runId: number) {
+  return request.get(`/scheduling/dag/${dagId}/run/${runId}`)
+}
+
+// 查看该次运行的所有节点执行记录
+export function getDagRunNodes(dagId: number, runId: number) {
+  return request.get(`/scheduling/dag/${dagId}/run/${runId}/nodes`)
+}
+
+// 查看单节点执行详情
+export function getDagRunNode(dagId: number, runId: number, nodeId: number) {
+  return request.get(`/scheduling/dag/${dagId}/run/${runId}/node/${nodeId}`)
+}
+
+// 查看任务实例执行日志
+export function getTaskInstanceLog(instanceId: number) {
+  return request.get(`/scheduling/task-instance/${instanceId}/log`)
+}
+
+// 查看任务执行历史
+export function getTaskHistory(historyId: number) {
+  return request.get(`/scheduling/task-history/${historyId}`)
+}
+
+// ==================== 审计与监控 ====================
+
+// 分页查询操作审计记录
+export function auditList(params: any) {
+  const apiParams: { [key: string]: any } = {
+    page: (params.current || 1) - 1,
+    size: params.pageSize || 10,
+    tenantId: params.tenantId,
+    objectType: params.objectType,
+    action: params.action,
+  }
+  return request.get('/scheduling/audit/list', { params: apiParams }).then((res: any) => {
+    return {
+      records: res.content || [],
+      total: res.totalElements || 0,
+    }
+  })
+}

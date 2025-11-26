@@ -6,12 +6,47 @@ server:
     session:
       cookie:
         name: JSESSIONID
-        http-only: true    # HttpOnly：防止 XSS 攻击，JavaScript 无法访问 Cookie
-        secure: false      # Secure：开发环境使用 HTTP，设为 false；生产环境在 application-prod.yaml 中设为 true
-        same-site: Lax     # SameSite：Lax 允许从外部链接跳转时携带 Cookie，Strict 更严格但可能影响用户体验
+        http-only: true # HttpOnly：防止 XSS 攻击，JavaScript 无法访问 Cookie
+        secure: false # Secure：开发环境使用 HTTP，设为 false；生产环境在 application-prod.yaml 中设为 true
+        same-site: Lax # SameSite：Lax 允许从外部链接跳转时携带 Cookie，Strict 更严格但可能影响用户体验
 spring:
   application:
     name: oauth-server
+  quartz:
+    job-store-type: jdbc # 使用数据库存储调度元数据，确保多节点共享
+    jdbc:
+      initialize-schema: never # 由 Flyway/Liquibase 管理 QRTZ_* 表，避免启动时被重建
+    scheduler-name: DagScheduler # Scheduler 名称，可在集群中唯一标识
+    startup-delay: 10s # 应用启动后延迟触发 Quartz 初始化，确保数据源就绪
+    overwrite-existing-jobs: true # 启动时覆盖已存在的 Job 定义，便于自动部署
+    wait-for-jobs-to-complete-on-shutdown: true # 优雅停机：等待任务执行完毕后再关闭
+    properties:
+      # ---------------- Scheduler 基础配置 ----------------
+      org.quartz.scheduler.instanceName: DagScheduler # Quartz Scheduler 名称
+      org.quartz.scheduler.instanceId: AUTO # AUTO 根据主机/时间生成唯一实例 ID
+      org.quartz.scheduler.skipUpdateCheck: true # 关闭官方更新检查，避免外网访问
+      org.quartz.scheduler.batchTriggerAcquisitionMaxCount: 12 # 批量拉取 Trigger 的最大数量
+      org.quartz.scheduler.batchTriggerAcquisitionFireAheadTimeWindow: 60000 # 提前多久加载触发器 (ms)
+
+      # ---------------- JobStore 配置 ----------------
+      org.quartz.jobStore.class: org.springframework.scheduling.quartz.LocalDataSourceJobStore # Spring 托管的 JDBC JobStore
+      org.quartz.jobStore.driverDelegateClass: org.quartz.impl.jdbcjobstore.StdJDBCDelegate # MySQL 通用 Delegate
+      org.quartz.jobStore.tablePrefix: QRTZ_ # Quartz 表前缀
+      org.quartz.jobStore.isClustered: true # 启用集群
+      org.quartz.jobStore.clusterCheckinInterval: 20000 # 集群实例心跳频率 (ms)
+      org.quartz.jobStore.misfireThreshold: 60000 # 触发器误触发阈值 (ms)
+      org.quartz.jobStore.acquireTriggersWithinLock: true # 获取 Trigger 时加锁，避免多节点冲突
+      org.quartz.jobStore.maxMisfiresToHandleAtATime: 20 # 单次处理的最大 misfire 数，平衡恢复速度
+
+      # ---------------- 线程池配置 ----------------
+      org.quartz.threadPool.class: org.quartz.simpl.SimpleThreadPool # 轻量级线程池实现
+      org.quartz.threadPool.threadCount: 10 # 工作线程数量
+      org.quartz.threadPool.threadPriority: 5 # 工作线程优先级，默认 5 (Normal)
+      org.quartz.threadPool.threadsInheritContextClassLoaderOfInitializingThread: true # 继承上下文类加载器，避免类找不到
+
+      # ---------------- Listener / Plugin 示例 ----------------
+      org.quartz.plugin.triggHistory.class: org.quartz.plugins.history.LoggingTriggerHistoryPlugin # 记录 Trigger 执行历史
+      org.quartz.plugin.triggHistory.triggerFiredMessage: "Trigger {1}.{0} fired job {6}.{5} at {4}" # 自定义日志模板
   datasource:
     url: >-
       jdbc:mysql://localhost:3306/tiny_web
@@ -59,6 +94,7 @@ spring:
   sql:
     init:
       mode: always # 总是执行数据初始化脚本
+      schema-locations: classpath:schema.sql # 指定表结构初始化脚本位置（包含 Quartz 表）
       data-locations: classpath:data.sql # 指定数据初始化脚本位置
       continue-on-error: true # 遇到错误继续执行
   profiles:
@@ -147,10 +183,10 @@ security:
 # 日志配置（默认配置，可被 dev/prod 环境覆盖）
 logging:
   file:
-    path: logs  # 默认使用相对路径
+    path: logs # 默认使用相对路径
   async:
-    queue-size: 512          # 默认队列大小
-    discard-threshold: 0      # 默认不丢弃日志
+    queue-size: 512 # 默认队列大小
+    discard-threshold: 0 # 默认不丢弃日志
   level:
     root: INFO
     com.tiny.oauthserver: INFO
@@ -163,15 +199,14 @@ logging:
 http:
   request-log:
     enabled: true
-    include-request-body: false         # 默认不记录请求体，避免敏感信息泄露
-    include-response-body: false         # 默认不记录响应体，避免敏感信息泄露
-    max-body-length: 5120               # 默认 5KB
+    include-request-body: false # 默认不记录请求体，避免敏感信息泄露
+    include-response-body: false # 默认不记录响应体，避免敏感信息泄露
+    max-body-length: 5120 # 默认 5KB
     excluded-path-prefixes:
       - /actuator
       - /dist
       - /static
       - /webjars
-
 # 前端页面配置
 # 默认配置为生产环境（forward 到打包后的静态文件）
 # 开发环境请使用 application-dev.yaml 覆盖配置

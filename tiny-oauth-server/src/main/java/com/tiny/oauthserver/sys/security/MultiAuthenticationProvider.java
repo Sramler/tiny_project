@@ -232,6 +232,12 @@ public class MultiAuthenticationProvider implements AuthenticationProvider {
                             userDetails.getAuthorities()
                     );
                     authenticated.setAuthenticated(true);
+                    // 将 SecurityUser 设置到 details 中，以便在 JWT Token 生成时获取 userId
+                    if (userDetails instanceof com.tiny.oauthserver.sys.model.SecurityUser securityUser) {
+                        authenticated.setDetails(securityUser);
+                        logger.debug("用户 {} 的 SecurityUser 已设置到 MultiFactorAuthenticationToken.details (userId: {})", 
+                                user.getUsername(), securityUser.getUserId());
+                    }
                     logger.info("用户 {} 部分认证完成，返回已认证 MFA token（需后续验证），将在 successHandler 中处理", user.getUsername());
                     return authenticated;
                 } else {
@@ -279,6 +285,12 @@ public class MultiAuthenticationProvider implements AuthenticationProvider {
                 );
                 // setAuthenticated(true) 在构造器中已设置，但为了保险可以再次设置
                 authenticated.setAuthenticated(true);
+                // 将 SecurityUser 设置到 details 中，以便在 JWT Token 生成时获取 userId
+                if (userDetails instanceof com.tiny.oauthserver.sys.model.SecurityUser securityUser) {
+                    authenticated.setDetails(securityUser);
+                    logger.debug("用户 {} 的 SecurityUser 已设置到 MultiFactorAuthenticationToken.details (userId: {})", 
+                            user.getUsername(), securityUser.getUserId());
+                }
                 logger.info("用户 {} 已完成密码验证，返回已认证 MFA token（需后续 TOTP）", user.getUsername());
                 return authenticated;
             } else {
@@ -293,6 +305,12 @@ public class MultiAuthenticationProvider implements AuthenticationProvider {
                         userDetails.getAuthorities()
                 );
                 authenticated.setAuthenticated(true);
+                // 将 SecurityUser 设置到 details 中，以便在 JWT Token 生成时获取 userId
+                if (userDetails instanceof com.tiny.oauthserver.sys.model.SecurityUser securityUser) {
+                    authenticated.setDetails(securityUser);
+                    logger.debug("用户 {} 的 SecurityUser 已设置到 MultiFactorAuthenticationToken.details (userId: {})", 
+                            user.getUsername(), securityUser.getUserId());
+                }
                 logger.info("用户 {} 部分认证完成，返回已认证 MFA token（需后续验证），将在 successHandler 中处理", user.getUsername());
                 return authenticated;
             }
@@ -308,6 +326,12 @@ public class MultiAuthenticationProvider implements AuthenticationProvider {
                 userDetails.getAuthorities()
         );
         finalToken.setAuthenticated(true);
+        // 将 SecurityUser 设置到 details 中，以便在 JWT Token 生成时获取 userId
+        if (userDetails instanceof com.tiny.oauthserver.sys.model.SecurityUser securityUser) {
+            finalToken.setDetails(securityUser);
+            logger.debug("用户 {} 的 SecurityUser 已设置到 MultiFactorAuthenticationToken.details (userId: {})", 
+                    user.getUsername(), securityUser.getUserId());
+        }
         logger.info("用户 {} 完成所有 MFA 因子，认证成功", user.getUsername());
         return finalToken;
     }
@@ -359,13 +383,20 @@ public class MultiAuthenticationProvider implements AuthenticationProvider {
 
         // 返回 MultiFactorAuthenticationToken 以携带 provider/type 信息（向后兼容）
         MultiFactorAuthenticationToken.AuthenticationFactorType initialFactor = MultiFactorAuthenticationToken.AuthenticationFactorType.from(type);
-            return new MultiFactorAuthenticationToken(
+            MultiFactorAuthenticationToken token = new MultiFactorAuthenticationToken(
                     user.getUsername(),
                 null,
                 MultiFactorAuthenticationToken.AuthenticationProviderType.from(provider),
                 initialFactor,
                     userDetails.getAuthorities()
             );
+            // 将 SecurityUser 设置到 details 中，以便在 JWT Token 生成时获取 userId
+            if (userDetails instanceof com.tiny.oauthserver.sys.model.SecurityUser securityUser) {
+                token.setDetails(securityUser);
+                logger.debug("用户 {} 的 SecurityUser 已设置到 MultiFactorAuthenticationToken.details (userId: {})", 
+                        user.getUsername(), securityUser.getUserId());
+            }
+            return token;
     }
 
     /**
@@ -402,13 +433,20 @@ public class MultiAuthenticationProvider implements AuthenticationProvider {
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getUsername());
 
         MultiFactorAuthenticationToken.AuthenticationFactorType initialFactor = MultiFactorAuthenticationToken.AuthenticationFactorType.from(type);
-            return new MultiFactorAuthenticationToken(
+            MultiFactorAuthenticationToken token = new MultiFactorAuthenticationToken(
                     user.getUsername(),
                 null,
                 MultiFactorAuthenticationToken.AuthenticationProviderType.from(provider),
                 initialFactor,
                     userDetails.getAuthorities()
             );
+            // 将 SecurityUser 设置到 details 中，以便在 JWT Token 生成时获取 userId
+            if (userDetails instanceof com.tiny.oauthserver.sys.model.SecurityUser securityUser) {
+                token.setDetails(securityUser);
+                logger.debug("用户 {} 的 SecurityUser 已设置到 MultiFactorAuthenticationToken.details (userId: {})", 
+                        user.getUsername(), securityUser.getUserId());
+            }
+            return token;
     }
 
 

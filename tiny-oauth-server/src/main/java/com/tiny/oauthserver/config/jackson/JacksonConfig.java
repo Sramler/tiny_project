@@ -18,7 +18,6 @@ import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 import org.springframework.security.jackson2.SecurityJackson2Modules;
 import org.springframework.security.oauth2.server.authorization.jackson2.OAuth2AuthorizationServerJackson2Module;
 import com.fasterxml.jackson.databind.module.SimpleModule;
-
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.TimeZone;
@@ -161,6 +160,14 @@ public class JacksonConfig {
         mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         // 允许单值表示数组（提升兼容性）
         mapper.configure(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY, true);
+
+        // -----------------------------
+        // 6. 配置允许列表以支持基本 Java 类型（如 Long）
+        // -----------------------------
+        // Spring Security 的 allowlist 默认不包含 java.lang.Long，需要显式添加
+        // 这修复了反序列化 OAuth2 授权数据时的 IllegalArgumentException
+        // LongAllowlistModule 会在 setupModule 时自动修改 allowlist
+        mapper.registerModule(new LongAllowlistModule());
 
         return mapper;
     }

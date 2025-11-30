@@ -74,7 +74,7 @@ async function renderBpmn() {
         await nextTick()
         if (!innerOpen.value || !record.value?.id) return
         const res = await processApi.getProcessDefinitionXml(record.value.id)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const xml = (res as any)?.bpmnXml || ''
         if (!xml) {
             message.error('未获取到流程XML')
@@ -82,12 +82,12 @@ async function renderBpmn() {
         }
         if (!previewContainer.value) return
         try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             ; (bpmnViewer.value as any)?.destroy?.()
         } catch { }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         bpmnViewer.value = new (BpmnViewer as any)({ container: previewContainer.value })
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const viewer = bpmnViewer.value as any
         await viewer.importXML(xml)
         const canvas = viewer.get('canvas')
@@ -102,7 +102,7 @@ async function renderBpmn() {
 
 function cleanup() {
     try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         ; (bpmnViewer.value as any)?.destroy?.()
     } catch { }
     bpmnViewer.value = null

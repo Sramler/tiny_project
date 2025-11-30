@@ -70,28 +70,49 @@ java.lang.IllegalArgumentException: The class with java.lang.Long and name of ja
 
 ## 官方推荐方式 vs 当前方案
 
-### 官方推荐方式
+### 官方推荐方式（已实现）
 Spring Security 官方推荐通过以下方式处理反序列化问题：
-1. **使用 Jackson 注解**：在自定义类上使用 `@JsonTypeInfo` 和 `@JsonTypeName`
-2. **使用 Mixin**：为需要反序列化的类创建 Mixin
-3. **自定义 TypeIdResolver**：创建自定义解析器并注册到 ObjectMapper
+1. **使用 Jackson 注解**：在自定义类上使用 `@JsonSerialize` 和 `@JsonDeserialize` 注解
+2. **自定义序列化器/反序列化器**：为特定字段创建自定义序列化器/反序列化器
+3. **使用 Mixin**：为需要反序列化的类创建 Mixin（可选）
 
-### 为什么当前方案不符合官方推荐？
-1. **Long 是 Java 基础类型**：无法使用 `@JsonTypeInfo` 注解（注解只能用于自定义类）
-2. **无法控制序列化格式**：OAuth2 授权数据由 Spring Security 内部序列化，我们无法修改序列化时的类型信息
-3. **没有公开的扩展 API**：Spring Security 没有提供公开的 API 来扩展 allowlist
+### 当前实现方案（符合官方指南）
+我们采用了**官方推荐的扩展方式**：
 
-### 当前方案的合理性
-虽然不符合官方推荐，但当前方案是**在现有约束下的最佳实践**：
-1. **问题根源**：Spring Security 的 allowlist 设计过于严格，将安全的 Java 基础类型也排除在外
-2. **技术可行性**：使用反射 + Unsafe 是修改 final 字段的标准做法（虽然不推荐）
-3. **实际效果**：成功解决了问题，且 Long 是安全的类型
-4. **社区实践**：GitHub Issues 中也有类似讨论，但没有官方解决方案
+1. **在 SecurityUser 类上添加注解**：
+   ```java
+   @JsonSerialize(using = SecurityUserLongSerializer.class)
+   @JsonDeserialize(using = SecurityUserLongDeserializer.class)
+   public Long getUserId() {
+       return userId;
+   }
+   ```
 
-### 替代方案评估
-1. **自定义 TypeIdResolver**：需要替换所有使用 allowlist 的地方，过于复杂
-2. **修改序列化格式**：无法控制 Spring Security 内部的序列化
-3. **等待官方修复**：Issue #12294 中官方表示不会将 Long 加入默认 allowlist
+2. **自定义序列化器**（`SecurityUserLongSerializer`）：
+   - 将 `Long` 类型的 `userId` 序列化为 `String`
+   - 避免 Spring Security allowlist 检查失败
+   - 避免 JavaScript 精度丢失
+
+3. **自定义反序列化器**（`SecurityUserLongDeserializer`）：
+   - 支持从 `String` 或 `Number` 反序列化为 `Long`
+   - 兼容新旧数据格式
+
+4. **备用方案**（`LongAllowlistModule`）：
+   - 虽然通过自定义序列化器已经解决了问题，但保留此模块作为备用方案
+   - 以防其他 Long 类型字段需要支持
+
+### 方案优势
+1. **符合官方指南**：使用 Jackson 注解和自定义序列化器，不修改框架内部实现
+2. **类型安全**：通过注解明确指定序列化/反序列化行为
+3. **兼容性好**：支持新旧数据格式（String 和 Number）
+4. **易于维护**：代码清晰，易于理解和维护
+5. **性能优化**：避免 JavaScript 精度丢失问题
+
+### 为什么还需要 LongAllowlistModule？
+虽然通过自定义序列化器已经解决了 `SecurityUser.userId` 的问题，但：
+1. **其他 Long 字段**：如果 OAuth2 授权数据中包含其他 Long 类型字段，仍需要 allowlist 支持
+2. **备用方案**：如果自定义序列化器失效，此模块仍可工作
+3. **向后兼容**：对于已经序列化为 Long 类型的旧数据，allowlist 模块可以处理
 
 ## 注意事项
 

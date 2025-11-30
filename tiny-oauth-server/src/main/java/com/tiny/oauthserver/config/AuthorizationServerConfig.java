@@ -196,17 +196,61 @@ public class AuthorizationServerConfig {
         return AuthorizationServerSettings.builder().build();
     }
 
-
+    /**
+     * JWT Token 自定义器 Bean
+     * 
+     * 用于为 access_token、id_token 和 refresh_token 添加自定义 claims（参数），
+     * 符合 OAuth 2.1 和 OpenID Connect 1.0 企业级规范。
+     * 
+     * 添加的字段包括：
+     * - 用户ID、用户名、权限列表
+     * - 客户端ID、授权范围
+     * - 认证时间（auth_time）
+     * - 认证方法引用（amr）
+     * - 用户基本信息（ID Token：name, email, phone 等）
+     * 
+     * @param userRepository 用户仓库，用于查询完整的用户信息（email, phone, nickname 等）
+     * @return JwtTokenCustomizer 实例
+     */
     @Bean
-    public OAuth2TokenGenerator<?> tokenGenerator(JwtEncoder jwtEncoder) {
+    public JwtTokenCustomizer jwtTokenCustomizer(
+            com.tiny.oauthserver.sys.repository.UserRepository userRepository) {
+        return new JwtTokenCustomizer(userRepository);
+    }
+
+    /**
+     * OAuth2 Token 生成器配置
+     * 
+     * 配置了三种 Token 生成器：
+     * 1. OAuth2AccessTokenGenerator: 生成标准的 OAuth2 Access Token（如果配置为 reference token）
+     * 2. OAuth2RefreshTokenGenerator: 生成 Refresh Token
+     * 3. JwtGenerator: 生成 JWT 格式的 Access Token 和 ID Token，并应用自定义 claims
+     * 
+     * 注意：JwtGenerator 会根据 TokenSettings 中的 accessTokenFormat 决定生成 JWT 还是 reference token。
+     * 如果配置为 SELF_CONTAINED，则 JwtGenerator 会生成 JWT 格式的 access_token 和 id_token。
+     * 
+     * @param jwtEncoder JWT 编码器，用于签名 JWT
+     * @param jwtTokenCustomizer JWT Token 自定义器，用于添加自定义 claims
+     * @return OAuth2TokenGenerator 组合器
+     */
+    @Bean
+    public OAuth2TokenGenerator<?> tokenGenerator(JwtEncoder jwtEncoder, JwtTokenCustomizer jwtTokenCustomizer) {
+        // 创建 JWT 生成器并设置自定义器
         JwtGenerator jwtGenerator = new JwtGenerator(jwtEncoder);
+        jwtGenerator.setJwtCustomizer(jwtTokenCustomizer);
+        
+        // 创建标准的 OAuth2 Access Token 生成器（用于 reference token 模式）
         OAuth2AccessTokenGenerator accessTokenGenerator = new OAuth2AccessTokenGenerator();
+        
+        // 创建 Refresh Token 生成器
         OAuth2RefreshTokenGenerator refreshTokenGenerator = new OAuth2RefreshTokenGenerator();
 
+        // 组合多个 Token 生成器
+        // DelegatingOAuth2TokenGenerator 会按顺序尝试每个生成器，直到有一个成功生成 Token
         return new DelegatingOAuth2TokenGenerator(
                 accessTokenGenerator,
                 refreshTokenGenerator,
-                jwtGenerator // 注意：不叫 OidcIdTokenGenerator，JwtGenerator 会负责处理 id_token 和 access_token
+                jwtGenerator // JwtGenerator 会负责处理 JWT 格式的 access_token 和 id_token
         );
     }
 

@@ -120,7 +120,7 @@ authentication:
       redirect-uris:
         - http://localhost:9000/
       post-logout-redirect-uris:
-        - http://127.0.0.1:8080/
+        - http://localhost:5173/
       scopes:
         - openid
         - profile
@@ -137,14 +137,13 @@ authentication:
         - http://localhost:5173/silent-renew.html # silent renew 时用于隐式授权流程的 iframe 回调页面。
       post-logout-redirect-uris:
         - http://localhost:5173/
-        - http://127.0.0.1:8080/
       scopes:
         - openid
         - profile
         - offline_access # ✅ 必须启用，否则不会发 refresh_token
       client-setting:
         require-authorization-consent: false
-        require-proof-key: false # 暂时关闭 PKCE，简化调试
+        require-proof-key: true # ✅ 强制启用 PKCE，确保公有客户端也能安全获取 refresh_token
 # Camunda BPM 配置
 camunda:
   bpm:

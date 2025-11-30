@@ -46,7 +46,7 @@ export class TranslateUtils {
    */
   private debugLog(message: string, ...args: any[]): void {
     if (this.enableDebugLogs) {
-      //console.log(message, ...args)
+      console.debug(message, ...args)
     }
   }
 
@@ -171,6 +171,9 @@ export class TranslateUtils {
   ): string {
     try {
       replacements = replacements || {}
+      if (context) {
+        this.debugLog('🌐 翻译上下文:', context)
+      }
 
       // 输入验证
       if (!template || typeof template !== 'string') {

@@ -18,6 +18,9 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     @EntityGraph(attributePaths = {"roles", "roles.resources"}, type = EntityGraph.EntityGraphType.LOAD)
     Optional<User> findUserByUsername(String username);
 
+    @Query("select u.id from User u where u.username = :username")
+    Optional<Long> findUserIdByUsername(@Param("username") String username);
+
     /**
      * 重写findById方法，使用@EntityGraph注解，在查询用户时，立即加载roles集合，解决懒加载异常
      * @param id 用户ID

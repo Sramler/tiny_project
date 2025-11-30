@@ -321,7 +321,7 @@ Browser 提交 Step-up TOTP → Filters 校验 → 再次 promoteToFullyAuthenti
    - **授权回调**：用户重定向回前端应用的 `/callback` 页面（携带 `code` 和 `state` 参数）
    - **Token 换取**：前端调用 `userManager.signinRedirectCallback()`，触发 `/oauth2/token` 端点
    - **授权信息读取**：`JdbcOAuth2AuthorizationService` 从数据库读取授权信息，使用 `ObjectMapper` 反序列化为 `OAuth2AuthorizationRequest`、`Authentication`、`Instant` 等对象
-   - **Token 返回**：授权服务器返回 `access_token`、`id_token`、`refresh_token` 等
+   - **Token 返回**：授权服务器返回 `access_token`、`id_token`，在满足条件时才会返回 `refresh_token`
    - **登录完成**：前端应用保存 token，用户登录成功 ✅
 
    **⚠️ 重要配置说明**：
@@ -332,6 +332,17 @@ Browser 提交 Step-up TOTP → Filters 校验 → 再次 promoteToFullyAuthenti
      - `JavaTimeModule`：处理 `Instant` 等时间类型
      - `SecurityJackson2Modules`：处理 `Authentication` 等安全对象
    - 详见 `JacksonConfig` 类中的问题修复说明
+
+   #### ⚠️ 刷新令牌（refresh_token）未返回的现象排查
+
+   - **已有现象**：即使 scope 已包含 `offline_access`，后端日志 (`TracingOAuth2AuthorizationService`) 仍会输出 `hasRefreshToken=false`，并提示 `authorization ... issued without refresh token`。浏览器中的 `/oauth2/token` 响应也只包含 access/id token。
+   - **根因分析**：Spring Authorization Server 对公有客户端（`authentication-methods: none`）默认不发放 refresh token，即便开启 PKCE。出于安全考虑，只有能够进行客户端认证（`client_secret_basic`、`private_key_jwt` 等）的 confidential 客户端才会收到刷新令牌。
+   - **当前实现**：前端 `vue-client` 是纯 SPA，`oidc-client-ts` 配置中没有 `client_secret`，因此被视为公有客户端。Silent renew（隐藏 iframe 静默续期）仍然可用，用以续签 access token。
+   - **可选改进**：
+     1. 将前端改成 **confidential 客户端**（配置 `client_secret`，在 `/oauth2/token` 请求中携带 Basic 认证），确保后台认可其刷新令牌需求。但要评估暴露 secret 的风险。
+     2. 在授权服务器中自定义策略，允许“公有 + PKCE”组合获取 refresh token（需要扩展 `OAuth2TokenCustomizer` 或 `OAuth2AuthorizationService`，风险自担）。
+     3. 继续沿用现有 silent renew 机制，ack 刷新令牌不可用的现实。
+   - **结论**：刷新令牌缺失并非前端实现 bug，而是默认安全策略。运维/安全团队若需要离线访问，需决定是否接受 confidential 客户端模式或自定义策略。
 
 ### MFA 模式说明
 

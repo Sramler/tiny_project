@@ -15,19 +15,14 @@
           </a-form-item>
         </a-form>
       </div>
-      
+
       <div class="toolbar-container">
         <div class="table-title">
           用户列表
         </div>
         <div class="table-actions">
           <div v-if="selectedRowKeys.length > 0" class="batch-actions">
-            <a-button 
-              type="primary" 
-              danger 
-              @click="throttledBatchDelete" 
-              class="toolbar-btn"
-            >
+            <a-button type="primary" danger @click="throttledBatchDelete" class="toolbar-btn">
               <template #icon>
                 <DeleteOutlined />
               </template>
@@ -65,10 +60,7 @@
               </template>
               批量禁用
             </a-button>
-            <a-button 
-              @click="clearSelection" 
-              class="toolbar-btn"
-            >
+            <a-button @click="clearSelection" class="toolbar-btn">
               <template #icon>
                 <CloseOutlined />
               </template>
@@ -92,7 +84,7 @@
               分配角色
             </a-button>
           </div>
-          
+
           <a-button type="link" @click="throttledCreate" class="toolbar-btn">
             <template #icon>
               <PlusOutlined />
@@ -105,50 +97,31 @@
             </span>
           </a-tooltip>
           <a-tooltip :title="showSortTooltip ? '关闭排序提示' : '开启排序提示'">
-            <PoweroffOutlined
-              :class="['action-icon', { active: showSortTooltip }]"
-              @click="showSortTooltip = !showSortTooltip"
-            />
+            <PoweroffOutlined :class="['action-icon', { active: showSortTooltip }]"
+              @click="showSortTooltip = !showSortTooltip" />
           </a-tooltip>
-          <a-popover
-            placement="bottomRight"
-            trigger="click"
-            :destroyTooltipOnHide="false"
-          >
+          <a-popover placement="bottomRight" trigger="click" :destroyTooltipOnHide="false">
             <template #content>
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
                 <div style="display: flex; align-items: center;">
-                  <a-checkbox
-                    :checked="showColumnKeys.length === allColumns.length"
+                  <a-checkbox :checked="showColumnKeys.length === allColumns.length"
                     :indeterminate="showColumnKeys.length > 0 && showColumnKeys.length < allColumns.length"
-                    @change="(e: any) => onCheckAllChange(e)"
-                  />
+                    @change="(e: any) => onCheckAllChange(e)" />
                   <span style="font-weight: bold; margin-left: 8px;">列展示/排序</span>
                 </div>
-                <span
-                  style="font-weight: bold; color: #1677ff; cursor: pointer;"
-                  @click="resetColumnOrder"
-                >
+                <span style="font-weight: bold; color: #1677ff; cursor: pointer;" @click="resetColumnOrder">
                   重置
                 </span>
               </div>
-              <VueDraggable
-                v-model="draggableColumns"
-                :item-key="(item: any) => item?.dataIndex || `col_${Math.random()}`"
-                handle=".drag-handle"
-                @end="onDragEnd"
-                class="draggable-columns"
-                ghost-class="sortable-ghost"
-                chosen-class="sortable-chosen"
-                tag="div"
-              >
+              <VueDraggable v-model="draggableColumns"
+                :item-key="(item: any) => item?.dataIndex || `col_${Math.random()}`" handle=".drag-handle"
+                @end="onDragEnd" class="draggable-columns" ghost-class="sortable-ghost" chosen-class="sortable-chosen"
+                tag="div">
                 <template #item="{ element: col }">
                   <div class="draggable-column-item">
                     <HolderOutlined class="drag-handle" />
-                    <a-checkbox
-                      :checked="showColumnKeys.includes(col.dataIndex)"
-                      @change="(e: any) => onCheckboxChange(col.dataIndex, e.target.checked)"
-                    >
+                    <a-checkbox :checked="showColumnKeys.includes(col.dataIndex)"
+                      @change="(e: any) => onCheckboxChange(col.dataIndex, e.target.checked)">
                       {{ col.title }}
                     </a-checkbox>
                   </div>
@@ -163,58 +136,32 @@
       </div>
       <div class="table-container" ref="tableContentRef">
         <div class="table-scroll-container" ref="tableScrollContainerRef">
-          <a-table
-            :columns="columns"
-            :data-source="tableData"
-            :pagination="false"
-            :row-key="(record: any) => String(record.id)"
-            bordered
-            :loading="loading"
-            @change="handleTableChange"
-            :row-selection="rowSelection"
-            :custom-row="onCustomRow"
-            :row-class-name="getRowClassName"
-            :scroll="{ x: 1500, y: tableBodyHeight }"
-            :locale="tableLocale"
-            :show-sorter-tooltip="showSortTooltip"
-          >
+          <a-table :columns="columns" :data-source="tableData" :pagination="false"
+            :row-key="(record: any) => String(record.id)" bordered :loading="loading" @change="handleTableChange"
+            :row-selection="rowSelection" :custom-row="onCustomRow" :row-class-name="getRowClassName"
+            :scroll="{ x: 1500, y: tableBodyHeight }" :locale="tableLocale" :show-sorter-tooltip="showSortTooltip">
             <template #bodyCell="{ column, record }">
-              <template v-if="['enabled','accountNonExpired','accountNonLocked','credentialsNonExpired'].includes(column.dataIndex)">
+              <template
+                v-if="['enabled', 'accountNonExpired', 'accountNonLocked', 'credentialsNonExpired'].includes(column.dataIndex)">
                 <a-tag :color="record[column.dataIndex] ? 'green' : 'red'">
                   {{ record[column.dataIndex] ? '是' : '否' }}
                 </a-tag>
               </template>
               <template v-else-if="column.dataIndex === 'action'">
                 <div class="action-buttons">
-                  <a-button 
-                    type="link" 
-                    size="small" 
-                    @click.stop="throttledEdit(record)"
-                    class="action-btn"
-                  >
+                  <a-button type="link" size="small" @click.stop="throttledEdit(record)" class="action-btn">
                     <template #icon>
                       <EditOutlined />
                     </template>
                     编辑
                   </a-button>
-                  <a-button 
-                    type="link" 
-                    size="small" 
-                    danger 
-                    @click.stop="throttledDelete(record)"
-                    class="action-btn"
-                  >
+                  <a-button type="link" size="small" danger @click.stop="throttledDelete(record)" class="action-btn">
                     <template #icon>
                       <DeleteOutlined />
                     </template>
                     删除
                   </a-button>
-                  <a-button 
-                    type="link" 
-                    size="small" 
-                    @click.stop="throttledView(record)"
-                    class="action-btn"
-                  >
+                  <a-button type="link" size="small" @click.stop="throttledView(record)" class="action-btn">
                     <template #icon>
                       <EyeOutlined />
                     </template>
@@ -226,46 +173,24 @@
           </a-table>
         </div>
         <div class="pagination-container" ref="paginationRef">
-          <a-pagination
-            v-model:current="pagination.current"
-            :page-size="pagination.pageSize"
-            :total="pagination.total"
-            :show-size-changer="pagination.showSizeChanger"
-            :page-size-options="paginationConfig.pageSizeOptions"
-            :show-total="pagination.showTotal"
-            @change="handlePageChange"
-            @showSizeChange="handlePageSizeChange"
-            :locale="{ items_per_page: '条/页' }"
-          />
+          <a-pagination v-model:current="pagination.current" :page-size="pagination.pageSize" :total="pagination.total"
+            :show-size-changer="pagination.showSizeChanger" :page-size-options="paginationConfig.pageSizeOptions"
+            :show-total="pagination.showTotal" @change="handlePageChange" @showSizeChange="handlePageSizeChange"
+            :locale="{ items_per_page: '条/页' }" />
         </div>
       </div>
     </div>
 
-    <a-drawer
-      v-model:open="drawerVisible"
-      :title="drawerMode === 'create' ? '新建用户' : drawerMode === 'edit' ? '编辑用户' : '查看用户'"
-      width="50%"
-      :get-container="false"
-      :style="{ position: 'absolute' }"
-      @close="handleDrawerClose"
-    >
-      <UserForm
-        v-if="drawerVisible"
-        :mode="drawerMode"
-        :user-data="currentUser"
-        @submit="handleFormSubmit"
-        @cancel="handleDrawerClose"
-      />
+    <a-drawer v-model:open="drawerVisible"
+      :title="drawerMode === 'create' ? '新建用户' : drawerMode === 'edit' ? '编辑用户' : '查看用户'" width="50%"
+      :get-container="false" :style="{ position: 'absolute' }" @close="handleDrawerClose">
+      <UserForm v-if="drawerVisible" :mode="drawerMode" :user-data="currentUser" @submit="handleFormSubmit"
+        @cancel="handleDrawerClose" />
     </a-drawer>
 
-    <RoleTransfer
-      v-if="showBatchRoleTransfer"
-      :open="showBatchRoleTransfer"
-      :all-roles="allRoles"
-      :model-value="batchSelectedRoleIds"
-      @update:open="showBatchRoleTransfer = $event"
-      @update:modelValue="handleBatchRoleAssign"
-    />
+    <RoleTransfer v-if="showBatchRoleTransfer" :open="showBatchRoleTransfer" :all-roles="allRoles"
+      :model-value="batchSelectedRoleIds" @update:open="showBatchRoleTransfer = $event"
+      @update:modelValue="handleBatchRoleAssign" />
   </div>
 </template>
 
@@ -400,7 +325,7 @@ console.log('showColumnKeys.value:', showColumnKeys.value)
 const columns = computed(() => {
   console.log('columns computed 触发，allColumns:', allColumns.value)
   console.log('columns computed 触发，showColumnKeys:', showColumnKeys.value)
-  
+
   // 只保留合法列
   const filtered = allColumns.value.filter(
     col =>
@@ -451,7 +376,7 @@ async function loadData() {
     }
     const res = await userList(params)
     tableData.value = Array.isArray(res.records) ? res.records : []
-    pagination.value.total = res.total || 0
+    pagination.value.total = Number(res.total ?? res.totalElements ?? 0)
   } catch (error) {
     tableData.value = []
     pagination.value.total = 0
@@ -481,7 +406,7 @@ function handleTableChange(pag: any, filters: any, sorter: any) {
   console.log('变化前的 pagination:', pagination.value)
   console.log('变化前的 paginationConfig:', paginationConfig.value)
   console.log('变化前的 columns:', columns.value)
-  
+
   // 添加安全检查
   if (pag && typeof pag.current === 'number') {
     pagination.value.current = pag.current
@@ -489,10 +414,10 @@ function handleTableChange(pag: any, filters: any, sorter: any) {
   if (pag && typeof pag.pageSize === 'number') {
     pagination.value.pageSize = pag.pageSize
   }
-  
+
   console.log('变化后的 pagination:', pagination.value)
   loadData()
-  
+
   console.log('变化后的 columns:', columns.value)
 }
 
@@ -550,7 +475,7 @@ function onDragEnd(event: any) {
 
 function handleCellClick(record: any, dataIndex: string) {
   console.log('单元格被点击:', record, dataIndex)
-  
+
   const recordId = record.id
   const isSelected = selectedRowKeys.value.includes(recordId)
 
@@ -561,7 +486,7 @@ function handleCellClick(record: any, dataIndex: string) {
     selectedRowKeys.value = [recordId]
     console.log('单元格点击: 仅选中当前行', recordId)
   }
-  
+
   console.log('更新后的复选框选中行:', selectedRowKeys.value)
 }
 
@@ -569,7 +494,7 @@ function onCustomRow(record: any) {
   return {
     onClick: (event: MouseEvent) => {
       if ((event.target as HTMLElement).closest('.ant-checkbox-wrapper')) return;
-      
+
       const recordId = String(record.id)
       const isSelected = selectedRowKeys.value.includes(recordId)
 
@@ -663,9 +588,9 @@ function handleBatchEnable() {
     message.warning('请先选择要启用的用户')
     return
   }
-  
+
   console.log('批量启用用户:', selectedRowKeys.value)
-  
+
   batchEnableUsers(selectedRowKeys.value)
     .then(() => {
       message.success('批量启用成功')
@@ -685,9 +610,9 @@ function handleBatchDisable() {
     message.warning('请先选择要禁用的用户')
     return
   }
-  
+
   console.log('批量禁用用户:', selectedRowKeys.value)
-  
+
   batchDisableUsers(selectedRowKeys.value)
     .then(() => {
       message.success('批量禁用成功')
@@ -711,7 +636,7 @@ function getRowClassName(record: any) {
   if (selectedRowKeys.value.includes(record.id)) {
     return 'checkbox-selected-row'
   }
-  
+
   return ''
 }
 
@@ -803,7 +728,7 @@ const tableLocale = computed(() => {
   if (showSortTooltip.value) {
     return {
       triggerDesc: '点击降序',
-      triggerAsc: '点击升序', 
+      triggerAsc: '点击升序',
       cancelSort: '取消排序'
     }
   }
@@ -867,14 +792,15 @@ async function handleBatchRoleAssign(newRoleIds: string[]) {
   display: flex;
   flex-direction: column;
   /* background: #f0f2f5; */
-  background: #fff; 
+  background: #fff;
 }
 
 .content-card {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 0; /* 关键，防止撑开 */
+  min-height: 0;
+  /* 关键，防止撑开 */
 }
 
 .form-container {
@@ -897,33 +823,46 @@ async function handleBatchRoleAssign(newRoleIds: string[]) {
 }
 
 .table-container {
-  display: flex;              /* 启用flex布局 */
-  flex-direction: column;     /* 垂直排列子元素 */
-  flex: 1;                    /* 占满父容器剩余空间 */
-  min-height: 0;              /* 关键，防止撑开 */
+  display: flex;
+  /* 启用flex布局 */
+  flex-direction: column;
+  /* 垂直排列子元素 */
+  flex: 1;
+  /* 占满父容器剩余空间 */
+  min-height: 0;
+  /* 关键，防止撑开 */
 }
 
 .table-scroll-container {
   /* 不要设置 flex: 1; */
-  min-height: 0; /* 可选，防止撑开 */
-  overflow: auto; /* 内容多时滚动 */
+  min-height: 0;
+  /* 可选，防止撑开 */
+  overflow: auto;
+  /* 内容多时滚动 */
 }
 
 .pagination-container {
-  display: flex;                /* 启用flex布局 */
-  align-items: center;          /* 垂直居中 */
-  justify-content: flex-end;    /* 右对齐 */
-  background: #fff;             /* 可选，分页条背景 */
+  display: flex;
+  /* 启用flex布局 */
+  align-items: center;
+  /* 垂直居中 */
+  justify-content: flex-end;
+  /* 右对齐 */
+  background: #fff;
+  /* 可选，分页条背景 */
   /* padding-right: 0px;          可选，右侧留白 */
 }
 
 :deep(.ant-pagination) {
   display: flex !important;
-  flex-direction: row !important; /* 强制横向排列 */
+  flex-direction: row !important;
+  /* 强制横向排列 */
   align-items: center !important;
 }
 
-.ml-2 { margin-left: 8px; }
+.ml-2 {
+  margin-left: 8px;
+}
 
 .table-title {
   font-size: 16px;
@@ -1077,9 +1016,12 @@ async function handleBatchRoleAssign(newRoleIds: string[]) {
 :deep(.ant-pagination),
 :deep(.ant-pagination-item),
 :deep(.ant-pagination-item-link) {
-  height: 32px !important;         /* 保证高度一致 */
-  line-height: 32px !important;    /* 保证内容垂直居中 */
-  min-width: 32px;                 /* 保证宽度一致 */
+  height: 32px !important;
+  /* 保证高度一致 */
+  line-height: 32px !important;
+  /* 保证内容垂直居中 */
+  min-width: 32px;
+  /* 保证宽度一致 */
   box-sizing: border-box;
   vertical-align: middle;
 }
@@ -1096,11 +1038,15 @@ async function handleBatchRoleAssign(newRoleIds: string[]) {
 
 /* 隐藏表格内容区的滚动条，但保留滚动功能 */
 :deep(.ant-table-body) {
-  scrollbar-width: none;           /* Firefox */
-  -ms-overflow-style: none;        /* IE 10+ */
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE 10+ */
 }
+
 :deep(.ant-table-body::-webkit-scrollbar) {
-  display: none;                   /* Chrome/Safari/Edge */
+  display: none;
+  /* Chrome/Safari/Edge */
 }
 
 /* 操作按钮样式 */
@@ -1161,9 +1107,12 @@ async function handleBatchRoleAssign(newRoleIds: string[]) {
 
 /* 保证表头永远单行显示，不出现省略号，不换行 */
 :deep(.ant-table-thead > tr > th) {
-  white-space: nowrap; /* 不换行，单行显示 */
-  text-overflow: clip; /* 不显示省略号 */
-  overflow: visible;   /* 超出内容不隐藏 */
+  white-space: nowrap;
+  /* 不换行，单行显示 */
+  text-overflow: clip;
+  /* 不显示省略号 */
+  overflow: visible;
+  /* 超出内容不隐藏 */
 }
 
 .toolbar-switch {
@@ -1173,12 +1122,13 @@ async function handleBatchRoleAssign(newRoleIds: string[]) {
 
 :deep(.ant-pagination-item-container) {
   /* 增加一点右边距，防止和"下一页"按钮重叠 */
-  margin-right: 8px; 
+  margin-right: 8px;
 }
 
 /* 修正省略号垂直居中 */
 :deep(.ant-pagination-item-ellipsis) {
-  line-height: 32px !important;   /* AntD 默认高度 */
+  line-height: 32px !important;
+  /* AntD 默认高度 */
   vertical-align: middle !important;
   display: inline-block !important;
   font-size: 16px !important;
@@ -1215,4 +1165,4 @@ async function handleBatchRoleAssign(newRoleIds: string[]) {
   display: inline-block !important;
   font-size: 16px !important;
 }
-</style> 
+</style>

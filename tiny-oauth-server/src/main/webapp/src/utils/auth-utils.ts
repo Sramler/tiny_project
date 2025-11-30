@@ -1,5 +1,6 @@
 // 认证相关工具函数
 import { userManager } from '@/auth/oidc'
+import { persistentLogger } from '@/utils/logger'
 
 /**
  * 清理所有 OIDC 相关的本地缓存
@@ -7,7 +8,7 @@ import { userManager } from '@/auth/oidc'
  */
 export async function clearOidcCache() {
   try {
-    console.log('🧹 开始清理 OIDC 缓存...')
+    persistentLogger.info('[OIDC] 开始清理本地缓存', { url: window.location.href })
 
     // 清理 localStorage 中的 OIDC 相关数据
     const keysToRemove: string[] = []
@@ -20,7 +21,7 @@ export async function clearOidcCache() {
 
     keysToRemove.forEach((key) => {
       localStorage.removeItem(key)
-      console.log('删除缓存项:', key)
+      persistentLogger.debug('[OIDC] 删除 localStorage 项', { key })
     })
 
     // 清理 sessionStorage
@@ -34,16 +35,16 @@ export async function clearOidcCache() {
 
     sessionKeysToRemove.forEach((key) => {
       sessionStorage.removeItem(key)
-      console.log('删除会话缓存项:', key)
+      persistentLogger.debug('[OIDC] 删除 sessionStorage 项', { key })
     })
 
     // 清理 userManager 中的用户数据
     await userManager.removeUser()
 
-    console.log('✅ OIDC 缓存清理完成')
+    persistentLogger.info('[OIDC] 本地缓存清理完成')
     return true
   } catch (error) {
-    console.error('❌ 清理 OIDC 缓存失败:', error)
+    persistentLogger.error('[OIDC] 本地缓存清理失败', error)
     return false
   }
 }
@@ -64,7 +65,7 @@ export async function checkUserAuthenticated(): Promise<boolean> {
     const user = await userManager.getUser()
     return !!(user && !user.expired)
   } catch (error) {
-    console.error('检查用户认证状态失败:', error)
+    persistentLogger.error('[OIDC] 检查用户认证状态失败', error)
     return false
   }
 }

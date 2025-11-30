@@ -189,7 +189,7 @@ const loadData = async () => {
     }
     const res = await taskTypeList(params)
     dataSource.value = res.records
-    pagination.total = res.total
+    pagination.total = Number(res.total ?? res.totalElements ?? 0)
   } catch (error: any) {
     message.error(error.message || '加载数据失败')
   } finally {

@@ -4,6 +4,10 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonTypeName;
+import com.tiny.oauthserver.config.jackson.SecurityUserLongDeserializer;
+import com.tiny.oauthserver.config.jackson.SecurityUserLongSerializer;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
@@ -106,6 +110,19 @@ public class SecurityUser implements UserDetails, Serializable {
         return this.authorities; // 此处原来写成 List.of() 是错误的，需返回真实权限
     }
 
+    /**
+     * 获取用户ID。
+     * <p>
+     * <b>序列化优化</b>：
+     * - 使用自定义序列化器将 Long 序列化为 String，避免 Spring Security allowlist 检查失败
+     * - 使用自定义反序列化器支持从 String 或 Number 反序列化，兼容新旧数据格式
+     * <p>
+     * 这是符合官方指南的扩展方式，通过 Jackson 注解而不是修改框架内部实现。
+     *
+     * @return 用户ID
+     */
+    @JsonSerialize(using = SecurityUserLongSerializer.class)
+    @JsonDeserialize(using = SecurityUserLongDeserializer.class)
     public Long getUserId() {
         return userId;
     }

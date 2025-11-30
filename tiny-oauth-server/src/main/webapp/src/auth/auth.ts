@@ -1,8 +1,21 @@
 import { ref, computed } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
 import { userManager, settings } from './oidc'
+import { authRuntimeConfig } from './config'
 import type { User } from 'oidc-client-ts'
 import { jwtVerify, createRemoteJWKSet } from 'jose'
+import { logger, persistentLogger } from '@/utils/logger'
+
+const OIDC_TRACE_ENABLED =
+  import.meta.env.VITE_ENABLE_OIDC_TRACE === 'true' || !import.meta.env.PROD
+const oidcTrace = (step: string, payload?: unknown) => {
+  if (!OIDC_TRACE_ENABLED) return
+  if (payload !== undefined) {
+    persistentLogger.debug(`[OIDC][${step}]`, payload)
+  } else {
+    persistentLogger.debug(`[OIDC][${step}]`)
+  }
+}
 
 const metadata = await fetch('http://localhost:9000/.well-known/openid-configuration').then((res) =>
   res.json(),
@@ -11,15 +24,14 @@ const JWKS = createRemoteJWKSet(new URL(metadata.jwks_uri))
 
 export async function verifyAccessToken(token: string) {
   try {
-    console.log(JWKS)
     const { payload, protectedHeader } = await jwtVerify(token, JWKS, {
       algorithms: ['RS256'],
     })
-    console.log('🧾 JWT Header:', protectedHeader)
-    console.log('✅ JWT Payload:', payload)
+    persistentLogger.debug('[OIDC] JWT header', protectedHeader)
+    persistentLogger.debug('[OIDC] JWT payload', payload)
     return payload
   } catch (err) {
-    console.error('❌ JWT 验证失败:', err)
+    logger.error('[OIDC] JWT 验证失败', err)
     return null
   }
 }
@@ -44,17 +56,18 @@ const LOGIN_COOLDOWN = 2000 // 2秒冷却时间
 // 顶层定义，避免 useAuth() 调用循环引用
 export const login = async () => {
   const now = Date.now()
+  oidcTrace('login.invoke', { href: window.location.href })
 
   // 防止重复重定向 - 检查冷却时间
   if (loginInProgress || now - lastLoginAttempt < LOGIN_COOLDOWN) {
-    console.log('登录重定向已在进行中或冷却期内，跳过重复操作')
+    oidcTrace('login.skip', { reason: 'in-progress or cooldown' })
     return
   }
 
   // 检查是否已经在 OIDC 流程中
   const currentUser = await userManager.getUser()
   if (currentUser && !currentUser.expired) {
-    console.log('用户已认证，无需重定向')
+    oidcTrace('login.skip', { reason: 'already authenticated' })
     user.value = currentUser
     return
   }
@@ -62,18 +75,18 @@ export const login = async () => {
   // 检查 URL 参数，避免重复重定向
   const urlParams = new URLSearchParams(window.location.search)
   if (urlParams.has('code') || urlParams.has('error')) {
-    console.log('检测到 OIDC 回调参数，不进行重定向')
+    oidcTrace('login.skip', { reason: 'callback in url' })
     return
   }
 
   // 检查是否已经在授权服务器页面
   if (window.location.href.includes('localhost:9000')) {
-    console.log('已在授权服务器页面，不进行重定向')
+    oidcTrace('login.skip', { reason: 'already on authorization server' })
     return
   }
 
   try {
-    console.log('开始 OIDC 登录重定向')
+    oidcTrace('login.redirect', { redirect_uri: settings.redirect_uri })
     loginInProgress = true
     lastLoginAttempt = now
 
@@ -83,7 +96,8 @@ export const login = async () => {
       },
     })
   } catch (error) {
-    console.error('OIDC 登录重定向失败:', error)
+    logger.error('[OIDC] 登录重定向失败', error)
+    oidcTrace('login.error', error)
     loginInProgress = false
     throw error
   }
@@ -100,7 +114,7 @@ export const logout = async () => {
       return
     }
   } catch (error) {
-    console.error('OIDC 注销重定向失败，使用本地回退逻辑:', error)
+    logger.error('[OIDC] 注销重定向失败，使用本地回退逻辑', error)
   }
 
   await userManager.removeUser()
@@ -110,7 +124,6 @@ export const logout = async () => {
 }
 
 let renewInProgress = false
-const FORCE_LOGOUT_ON_RENEW_FAIL = true
 
 async function safeSilentRenew() {
   if (renewInProgress) return null
@@ -118,11 +131,16 @@ async function safeSilentRenew() {
   try {
     const renewed = await userManager.signinSilent()
     user.value = renewed
-    console.log('🔁 Silent Renew 成功') // ✅ 这里打印
+    oidcTrace('silentRenew.success', {
+      hasRefreshToken: !!renewed?.refresh_token,
+      scope: renewed?.scope,
+      expires_at: renewed?.expires_at,
+    })
     return renewed
   } catch (e) {
-    console.error('[OIDC] Silent renew failed:', e)
-    if (FORCE_LOGOUT_ON_RENEW_FAIL) {
+    logger.error('[OIDC] Silent renew 失败', e)
+    oidcTrace('silentRenew.error', e)
+    if (authRuntimeConfig.forceLogoutOnRenewFail) {
       await userManager.removeUser()
       user.value = null
       loginInProgress = false // 重置登录状态
@@ -137,28 +155,33 @@ async function safeSilentRenew() {
 // 初始化恢复用户状态
 export async function initAuth() {
   try {
-    console.log('🔍 开始初始化认证状态...')
+    oidcTrace('initAuth.start')
 
     // 检查是否在 OIDC 回调中
     const urlParams = new URLSearchParams(window.location.search)
     if (urlParams.has('code') || urlParams.has('error')) {
-      console.log('检测到 OIDC 回调，跳过用户状态恢复')
+      oidcTrace('initAuth.skip', { reason: 'callback detected' })
       return
     }
 
     const u = await userManager.getUser()
     if (u && !u.expired) {
       user.value = u
-      console.log('✅ 用户状态恢复成功')
+      oidcTrace('initAuth.restored', {
+        hasRefreshToken: !!u.refresh_token,
+        scope: u.scope,
+        expires_at: u.expires_at,
+      })
     } else if (u && u.expired) {
-      console.log('用户 token 已过期，尝试静默续期')
+      oidcTrace('initAuth.expired', { expires_at: u.expires_at })
       await safeSilentRenew()
     } else {
-      console.log('未找到用户状态，用户需要登录')
+      oidcTrace('initAuth.noState')
       user.value = null
     }
   } catch (error) {
-    console.error('初始化认证状态失败:', error)
+    logger.error('[OIDC] 初始化认证状态失败', error)
+    oidcTrace('initAuth.error', error)
     user.value = null
   }
 }
@@ -178,14 +201,14 @@ export function useAuth(): AuthContext {
     if (!token) throw new Error('Not authenticated')
 
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 8000)
+    const timeout = setTimeout(() => controller.abort(), authRuntimeConfig.fetchTimeoutMs)
 
     try {
       // 添加 TRACE_ID 和 Authorization headers
       const { addTraceIdToFetchOptions } = await import('@/utils/traceId')
       const headers = new Headers(options.headers)
       headers.set('Authorization', `Bearer ${token}`)
-      
+
       const traceOptions = addTraceIdToFetchOptions({
         ...options,
         headers,
@@ -197,13 +220,13 @@ export function useAuth(): AuthContext {
       })
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
-        console.error('[Auth] Fetch timeout')
+        logger.warn('[Auth] 请求超时')
       } else if (!navigator.onLine) {
-        console.error('[Auth] Network offline')
+        logger.warn('[Auth] 网络离线')
       } else if (err instanceof Error) {
-        console.error('[Auth] Fetch error', err)
+        logger.error('[Auth] 请求异常', err)
       } else {
-        console.error('[Auth] Unknown fetch error', err)
+        logger.error('[Auth] 未知请求异常', err)
       }
       throw err
     } finally {
@@ -226,25 +249,28 @@ export const initPromise = initAuth()
 
 // OIDC 事件监听
 userManager.events.addUserLoaded((u) => {
-  console.debug('[OIDC] User loaded:', u)
+  oidcTrace('event.userLoaded', {
+    hasRefreshToken: !!u.refresh_token,
+    scope: u.scope,
+    expires_at: u.expires_at,
+  })
   user.value = u
   loginInProgress = false // 重置登录状态
-  //console.log(u.access_token);
   verifyAccessToken(u.access_token)
 })
 
 userManager.events.addUserUnloaded(() => {
-  console.debug('[OIDC] User unloaded')
+  oidcTrace('event.userUnloaded')
   user.value = null
   loginInProgress = false // 重置登录状态
 })
 
 userManager.events.addSilentRenewError((err) => {
-  console.error('[OIDC] Silent renew error:', err)
+  logger.error('[OIDC] Silent renew 事件异常', err)
 })
 
 userManager.events.addUserSignedOut(() => {
-  console.debug('[OIDC] User signed out')
+  oidcTrace('event.userSignedOut')
   user.value = null
   loginInProgress = false // 重置登录状态
   // 可选：跳转登录页
@@ -253,7 +279,7 @@ userManager.events.addUserSignedOut(() => {
 
 userManager.events.addAccessTokenExpiring(async () => {
   const secondsLeft = user.value?.expires_in ?? 0
-  console.debug(`[OIDC] Token expiring in ${secondsLeft}s`)
+  oidcTrace('event.tokenExpiring', { secondsLeft })
   if (secondsLeft <= 60) {
     await safeSilentRenew()
   }

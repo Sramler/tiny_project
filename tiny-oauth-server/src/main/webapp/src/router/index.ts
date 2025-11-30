@@ -1,5 +1,8 @@
 // src/router/index.ts
 import { createRouter, createWebHistory } from 'vue-router'
+import type { NavigationGuard } from 'vue-router'
+import { watch } from 'vue'
+import { message } from 'ant-design-vue'
 import HomeView from '@/views/HomeView.vue'
 import Login from '@/views/Login.vue'
 import OidcCallback from '@/views/OidcCallback.vue'
@@ -15,13 +18,17 @@ import TotpBind from '@/views/security/TotpBind.vue'
 import TotpVerify from '@/views/security/TotpVerify.vue'
 import { menuTree, type MenuItem } from '@/api/menu' // 引入菜单 API
 import logger from '@/utils/logger' // 引入日志工具
+import { useMenuRouteState, updateMenuRouteState } from './menuState'
 
-// 标记是否已加载菜单路由
-let menuRoutesLoaded = false
+const MENU_LOAD_MESSAGE_KEY = 'menu-load-error'
+const menuRouteState = useMenuRouteState()
+let menuRoutesLoading: Promise<boolean> | null = null
 
-// 递归生成路由，支持动态加载 component
+/**
+ * 递归生成菜单对应的路由配置，支持动态组件导入。
+ */
 function generateMenuRoutes(menuList: MenuItem[]) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const routes: any[] = []
   for (const item of menuList) {
     // 跳过隐藏的菜单项
@@ -100,7 +107,7 @@ async function checkBackendSession(): Promise<boolean> {
 // 路由配置
 const routes = [
   // 登录页和回调页不使用主布局
-  { path: '/login', name: 'Login', component: Login, meta: { title: '登录' } },
+  { path: '/login', name: 'Login', component: Login, meta: { title: '登录', requiresAuth: false } },
   {
     path: '/self/security/totp-bind',
     name: 'TotpBind',
@@ -202,25 +209,27 @@ const router = createRouter({
 })
 
 // 动态加载菜单路由
-async function loadMenuRoutes() {
-  if (menuRoutesLoaded) {
-    return // 已经加载过，不再重复加载
+/**
+ * 从后端加载菜单并动态注入路由。
+ * @returns 是否成功加载
+ */
+async function loadMenuRoutes(): Promise<boolean> {
+  if (menuRouteState.loaded) {
+    return true
   }
+
+  updateMenuRouteState({ loading: true, error: null })
 
   try {
     logger.log('🔄 开始从后端加载菜单路由...')
     const menuData = await menuTree()
 
     if (menuData && Array.isArray(menuData) && menuData.length > 0) {
-      const routes = generateMenuRoutes(menuData)
-
-      // 使用 router.addRoute 在主布局路由下添加子路由
+      const generatedRoutes = generateMenuRoutes(menuData)
       let addedCount = 0
       let skippedCount = 0
 
-      routes.forEach((route) => {
-        // 检查路由是否已存在，避免重复添加
-        // 注意：某些基础路由（如 /）可能在初始配置中已存在，这是正常的
+      generatedRoutes.forEach((route) => {
         const existingRoute = router.getRoutes().find((r) => r.path === route.path)
         if (!existingRoute) {
           router.addRoute('mainLayout', route)
@@ -232,102 +241,179 @@ async function loadMenuRoutes() {
         }
       })
 
-      if (addedCount > 0 || skippedCount > 0) {
-        logger.log(`✅ 菜单路由处理完成: 新增 ${addedCount} 个，跳过 ${skippedCount} 个（已存在）`)
-      }
-      menuRoutesLoaded = true
-      logger.log('✅ 菜单路由加载完成，共', routes.length, '个路由')
-    } else {
-      logger.warn('⚠️ 菜单数据为空，无法生成路由')
+      message.destroy(MENU_LOAD_MESSAGE_KEY)
+      updateMenuRouteState({
+        loading: false,
+        loaded: true,
+        error: null,
+        lastLoadedAt: Date.now(),
+      })
+      logger.log(`✅ 菜单路由处理完成: 新增 ${addedCount} 个，跳过 ${skippedCount} 个`)
+      return true
     }
+
+    const warnMsg = '⚠️ 菜单数据为空，无法生成路由'
+    logger.warn(warnMsg)
+    updateMenuRouteState({ loading: false, error: warnMsg })
+    message.warning({
+      content: warnMsg,
+      key: MENU_LOAD_MESSAGE_KEY,
+      duration: 4,
+    })
+    return false
   } catch (error) {
     logger.error('❌ 加载菜单路由失败:', error)
-    // 加载失败不影响应用运行，只是菜单路由不可用
-    // 可以在这里添加错误提示或降级处理
+    const errMsg = '菜单加载失败，请稍后重试'
+    updateMenuRouteState({ loading: false, error: errMsg })
+    message.error({
+      content: errMsg,
+      key: MENU_LOAD_MESSAGE_KEY,
+      duration: 4,
+    })
+    return false
   }
 }
 
-// 路由守卫，处理鉴权
-router.beforeEach(async (to, from, next) => {
-  // ⚠️ 重要：401 页面必须最先检查，在任何认证逻辑之前
-  // 这样可以确保即使认证状态初始化失败，401 页面也能正常访问
+/**
+ * 确保菜单路由加载完毕，避免并发重复请求。
+ */
+async function ensureMenuRoutesLoaded(): Promise<boolean> {
+  if (menuRouteState.loaded) {
+    return true
+  }
+  if (!menuRoutesLoading) {
+    menuRoutesLoading = loadMenuRoutes().finally(() => {
+      menuRoutesLoading = null
+    })
+  }
+  return menuRoutesLoading
+}
+
+const authContext = useAuth()
+
+const authGuard: NavigationGuard = async (to, _from, next) => {
   if (to.path === '/exception/401') {
-    logger.log('访问 401 页面，直接放行（跳过所有认证检查）:', to.path)
+    logger.log('访问 401 页面，直接放行')
     next()
     return
   }
 
-  const { isAuthenticated, login } = useAuth()
-
-  // 等待认证状态初始化完成
   try {
     await initPromise
   } catch (error) {
     logger.error('认证状态初始化失败:', error)
-    // 即使初始化失败，也继续执行（异常页面已经在上面的检查中处理了）
   }
 
-  // 如果用户已认证，尝试加载菜单路由
-  if (isAuthenticated.value && !menuRoutesLoaded) {
-    await loadMenuRoutes()
-    // 菜单路由加载完成后，如果当前路径应该匹配新加载的路由，需要重新导航
-    // 使用 replace: true 避免在历史记录中留下中间状态
-    if (menuRoutesLoaded) {
-      // 重新导航到当前路径，让 Vue Router 重新匹配路由
-      next({ ...to, replace: true })
-      return
-    }
-  }
+  const requiresAuth = to.meta.requiresAuth !== false
 
-  // 如果用户已认证且访问登录页，重定向到首页
-  if (to.path === '/login' && isAuthenticated.value) {
+  if (to.path === '/login' && authContext.isAuthenticated.value) {
     logger.log('用户已认证，重定向到首页')
     next('/')
     return
   }
 
-  // 如果访问需要认证的页面但用户未认证，重定向到登录页
-  if (to.meta.requiresAuth && !isAuthenticated.value) {
-    // 检查是否已经在 OIDC 回调流程中（避免重复处理）
-    const urlParams = new URLSearchParams(window.location.search)
-    if (urlParams.has('code') || urlParams.has('error')) {
-      logger.log('检测到 OIDC 回调参数，不进行重定向')
-      next()
-      return
-    }
+  if (!requiresAuth) {
+    next()
+    return
+  }
 
-    logger.log('用户未认证，重定向到登录页')
+  if (authContext.isAuthenticated.value) {
+    next()
+    return
+  }
 
-    // 检查后端会话
-    const backendSession = await checkBackendSession()
-    if (backendSession) {
-      logger.log('检测到有效的后端会话，但缺少 OIDC token，尝试自动完成授权流程')
+  const urlParams = new URLSearchParams(window.location.search)
+  if (urlParams.has('code') || urlParams.has('error')) {
+    logger.log('检测到 OIDC 回调参数，放行当前导航')
+    next()
+    return
+  }
 
-      try {
-        await login()
-        return // login() 会触发页面跳转，不需要调用 next()
-      } catch (error) {
-        logger.error('基于后端会话触发 OIDC 授权失败:', error)
-        next('/login')
-        return
-      }
-    }
+  logger.log('用户未认证，尝试触发登录流程')
 
-    // 没有后端会话，尝试登录
+  const backendSession = await checkBackendSession()
+  if (backendSession) {
+    logger.log('检测到有效后端会话，尝试静默授权')
     try {
-      await login()
-      // login() 会触发页面跳转，不需要调用 next()
+      await authContext.login()
       return
     } catch (error) {
-      logger.error('登录重定向失败:', error)
-      // 如果登录失败，跳转到登录页
+      logger.error('基于后端会话触发授权失败:', error)
       next('/login')
       return
     }
   }
 
-  // 其他情况正常放行
+  try {
+    await authContext.login()
+    return
+  } catch (error) {
+    logger.error('登录重定向失败:', error)
+    next('/login')
+  }
+}
+
+const dynamicRoutesGuard: NavigationGuard = async (to, _from, next) => {
+  if (!authContext.isAuthenticated.value || to.meta.requiresAuth === false) {
+    next()
+    return
+  }
+
+  const needRetry = to.matched.length === 0 || to.name === 'NotFound'
+  const routesReady = await ensureMenuRoutesLoaded()
+
+  if (!routesReady) {
+    logger.error('[Router] 菜单路由加载失败，保留默认导航')
+    next()
+    return
+  }
+
+  if (needRetry) {
+    logger.warn('[Router] 未匹配到路由，尝试重新解析:', to.fullPath)
+    const retry = router.resolve(to.fullPath)
+    if (retry.matched.length > 0 && retry.name !== 'NotFound') {
+      logger.info('[Router] 兜底成功，重新跳转:', to.fullPath)
+      next({
+        path: to.fullPath,
+        query: to.query,
+        hash: to.hash,
+        replace: true,
+      })
+      return
+    }
+  }
+
   next()
-})
+}
+
+router.beforeEach(authGuard)
+router.beforeEach(dynamicRoutesGuard)
+
+/**
+ * 监听认证状态，确保登录完成后尽快预加载菜单路由。
+ */
+watch(
+  () => authContext.isAuthenticated.value,
+  (authed) => {
+    if (authed) {
+      ensureMenuRoutesLoaded()
+    } else {
+      updateMenuRouteState({ loaded: false, loading: false, error: null, lastLoadedAt: undefined })
+      menuRoutesLoading = null
+    }
+  },
+  { immediate: true },
+)
+
+// 初始化完成后再次尝试预加载，防止冷启动阶段 missed
+initPromise
+  .then(() => {
+    if (authContext.isAuthenticated.value) {
+      ensureMenuRoutesLoaded()
+    }
+  })
+  .catch((error) => {
+    logger.error('[Router] 认证初始化失败，无法预加载菜单路由:', error)
+  })
 
 export default router

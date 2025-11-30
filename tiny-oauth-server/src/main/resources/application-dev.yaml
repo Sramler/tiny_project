@@ -28,6 +28,7 @@ logging:
     com.tiny.oauthserver.sys.security.UserDetailsServiceImpl: DEBUG
     com.tiny.oauthserver.sys.service.impl.SecurityServiceImpl: DEBUG
     com.tiny.oauthserver.config.CustomJdbcOAuth2AuthorizationService: DEBUG
+    com.tiny.oauthserver.config: DEBUG
     org.springframework.security: TRACE # 安全框架 TRACE，便于排查认证问题
     org.camunda.bpm.engine.persistence: DEBUG
     org.camunda.bpm.engine.impl.db.sql: DEBUG

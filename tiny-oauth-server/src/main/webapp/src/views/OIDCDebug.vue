@@ -2,94 +2,24 @@
   <div class="debug-container">
     <div class="debug-content">
       <h1>OIDC 调试工具</h1>
-      
-      <!-- 认证状态 -->
-      <div class="debug-section">
-        <h2>认证状态</h2>
-        <div class="status-grid">
-          <div class="status-item">
-            <span class="label">用户认证状态:</span>
-            <span :class="['value', isAuthenticated ? 'success' : 'error']">
-              {{ isAuthenticated ? '已认证' : '未认证' }}
-            </span>
-          </div>
-          <div class="status-item">
-            <span class="label">当前用户:</span>
-            <span class="value">{{ userInfo }}</span>
-          </div>
-          <div class="status-item">
-            <span class="label">Token 过期时间:</span>
-            <span class="value">{{ tokenExpiry }}</span>
-          </div>
-        </div>
+
+      <StatusSection :is-authenticated="isAuthenticated" :user-info="userInfo" :token-expiry="tokenExpiry" />
+
+      <TokenInfoSection :access-token="accessToken" :id-token="idToken" :refresh-token="refreshToken" :scopes="scopes"
+        :session-info="sessionInfo" :decoded-access-token="decodedAccessToken" :decoded-id-token="decodedIdToken" />
+
+      <UrlParamsSection :params="urlParams" />
+
+      <div class="responsive-grid">
+        <StorageSection :local-storage-count="localStorageCount" :session-storage-count="sessionStorageCount"
+          :oidc-keys="oidcKeys" />
+        <EnvironmentSection :user-claims="userClaims" :environment-info="environmentInfo" />
       </div>
-      
-      <!-- URL 参数 -->
-      <div class="debug-section">
-        <h2>URL 参数</h2>
-        <div class="url-params">
-          <div v-for="(value, key) in urlParams" :key="key" class="param-item">
-            <span class="param-key">{{ key }}:</span>
-            <span class="param-value">{{ value }}</span>
-          </div>
-        </div>
-      </div>
-      
-      <!-- 本地存储 -->
-      <div class="debug-section">
-        <h2>本地存储</h2>
-        <div class="storage-info">
-          <div class="storage-item">
-            <span class="label">localStorage 项数:</span>
-            <span class="value">{{ localStorageCount }}</span>
-          </div>
-          <div class="storage-item">
-            <span class="label">sessionStorage 项数:</span>
-            <span class="value">{{ sessionStorageCount }}</span>
-          </div>
-        </div>
-        <div class="storage-keys">
-          <h3>OIDC 相关缓存项:</h3>
-          <div v-for="key in oidcKeys" :key="key" class="storage-key">
-            {{ key }}
-          </div>
-        </div>
-      </div>
-      
-      <!-- 操作按钮 -->
-      <div class="debug-section">
-        <h2>操作</h2>
-        <div class="action-buttons">
-          <a-button type="primary" @click="refreshStatus" :loading="refreshing">
-            刷新状态
-          </a-button>
-          <a-button type="default" @click="clearCache" :loading="clearing">
-            清理缓存
-          </a-button>
-          <a-button type="default" @click="forceLogout">
-            强制登出
-          </a-button>
-          <a-button type="default" @click="goToLogin">
-            跳转登录
-          </a-button>
-          <a-button type="default" @click="goHome">
-            返回首页
-          </a-button>
-        </div>
-      </div>
-      
-      <!-- 日志 -->
-      <div class="debug-section">
-        <h2>操作日志</h2>
-        <div class="log-container">
-          <div v-for="(log, index) in logs" :key="index" class="log-item">
-            <span class="log-time">{{ log.time }}</span>
-            <span :class="['log-level', log.level]">{{ log.level }}</span>
-            <span class="log-message">{{ log.message }}</span>
-          </div>
-        </div>
-        <a-button type="link" @click="clearLogs">清空日志</a-button>
-      </div>
+
+      <ActionSection :refreshing="refreshing" :clearing="clearing" @refresh="refreshStatus" @clear-cache="clearCache"
+        @force-logout="forceLogout" @go-login="goToLogin" @go-home="goHome" />
+
+      <LogSection :logs="logs" @clear="clearLogs" />
     </div>
   </div>
 </template>
@@ -97,20 +27,27 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { message } from 'ant-design-vue'
 import { useAuth } from '@/auth/auth'
 import { userManager } from '@/auth/oidc'
 import { clearOidcCache, isInOidcFlow } from '@/utils/auth-utils'
-import { message } from 'ant-design-vue'
+import StatusSection from './OIDCDebug/components/StatusSection.vue'
+import TokenInfoSection from './OIDCDebug/components/TokenInfoSection.vue'
+import UrlParamsSection from './OIDCDebug/components/UrlParamsSection.vue'
+import StorageSection from './OIDCDebug/components/StorageSection.vue'
+import EnvironmentSection from './OIDCDebug/components/EnvironmentSection.vue'
+import ActionSection from './OIDCDebug/components/ActionSection.vue'
+import LogSection from './OIDCDebug/components/LogSection.vue'
 
 const router = useRouter()
 const { user, isAuthenticated } = useAuth()
 
-// 响应式数据
+type DebugLog = { time: string; level: string; message: string }
+
 const refreshing = ref(false)
 const clearing = ref(false)
-const logs = ref<Array<{ time: string; level: string; message: string }>>([])
+const logs = ref<DebugLog[]>([])
 
-// 计算属性
 const userInfo = computed(() => {
   if (!user.value) return '无用户信息'
   return `${user.value.profile?.name || user.value.profile?.preferred_username || '未知用户'} (${user.value.profile?.sub || '无ID'})`
@@ -148,14 +85,47 @@ const oidcKeys = computed(() => {
   return keys
 })
 
-// 方法
+const accessToken = computed(() => user.value?.access_token || '')
+const idToken = computed(() => user.value?.id_token || '')
+const refreshToken = computed(() => user.value?.refresh_token || '')
+const scopes = computed(() => (user.value?.scopes?.length ? user.value.scopes.join(', ') : '无'))
+
+const sessionInfo = computed(() => ({
+  tokenType: user.value?.token_type || 'unknown',
+  sessionState: user.value?.session_state || 'unknown',
+}))
+
+const userClaims = computed(() => user.value?.profile || {})
+
+const decodedAccessToken = computed(() => decodeJwt(accessToken.value))
+const decodedIdToken = computed(() => decodeJwt(idToken.value))
+
+const environmentInfo = computed(() => ({
+  origin: window.location.origin,
+  href: window.location.href,
+  userAgent: navigator.userAgent,
+  online: navigator.onLine,
+  cookieSize: document.cookie.length,
+}))
+
+function decodeJwt(token?: string | null) {
+  if (!token) return null
+  const parts = token.split('.')
+  if (parts.length !== 3) return null
+  try {
+    const payload = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))
+    return JSON.parse(decodeURIComponent(escape(payload)))
+  } catch {
+    return null
+  }
+}
+
 function addLog(level: string, message: string) {
   logs.value.unshift({
     time: new Date().toLocaleTimeString(),
     level,
-    message
+    message,
   })
-  // 限制日志数量
   if (logs.value.length > 50) {
     logs.value = logs.value.slice(0, 50)
   }
@@ -165,7 +135,6 @@ async function refreshStatus() {
   refreshing.value = true
   try {
     addLog('info', '刷新认证状态...')
-    // 强制重新获取用户信息
     const currentUser = await userManager.getUser()
     addLog('info', `当前用户状态: ${currentUser ? '已登录' : '未登录'}`)
     if (currentUser) {
@@ -206,7 +175,6 @@ async function forceLogout() {
     await userManager.removeUser()
     addLog('success', '强制登出成功')
     message.success('强制登出成功')
-    // 跳转到登录页
     router.push('/login')
   } catch (error) {
     addLog('error', `强制登出失败: ${error}`)
@@ -229,7 +197,6 @@ function clearLogs() {
   addLog('info', '日志已清空')
 }
 
-// 生命周期
 onMounted(() => {
   addLog('info', '调试页面加载完成')
   addLog('info', `当前路径: ${window.location.pathname}`)
@@ -251,7 +218,13 @@ onMounted(() => {
   text-align: center;
 }
 
-.debug-section {
+.responsive-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+:deep(.debug-section) {
   margin-bottom: 32px;
   padding: 20px;
   border: 1px solid #d9d9d9;
@@ -259,19 +232,19 @@ onMounted(() => {
   background: #fafafa;
 }
 
-.debug-section h2 {
+:deep(.debug-section h2) {
   color: #262626;
   margin-bottom: 16px;
   font-size: 18px;
 }
 
-.status-grid {
+:deep(.status-grid) {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 12px;
 }
 
-.status-item {
+:deep(.status-item) {
   display: flex;
   justify-content: space-between;
   padding: 8px 12px;
@@ -280,30 +253,30 @@ onMounted(() => {
   border: 1px solid #e8e8e8;
 }
 
-.label {
+:deep(.label) {
   font-weight: 500;
   color: #595959;
 }
 
-.value {
+:deep(.value) {
   color: #262626;
 }
 
-.value.success {
+:deep(.value.success) {
   color: #52c41a;
 }
 
-.value.error {
+:deep(.value.error) {
   color: #f5222d;
 }
 
-.url-params {
+:deep(.url-params) {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 8px;
 }
 
-.param-item {
+:deep(.param-item) {
   display: flex;
   justify-content: space-between;
   padding: 6px 10px;
@@ -312,24 +285,24 @@ onMounted(() => {
   border: 1px solid #e8e8e8;
 }
 
-.param-key {
+:deep(.param-key) {
   font-weight: 500;
   color: #1890ff;
 }
 
-.param-value {
+:deep(.param-value) {
   color: #262626;
   word-break: break-all;
 }
 
-.storage-info {
+:deep(.storage-info) {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
 
-.storage-item {
+:deep(.storage-item) {
   display: flex;
   justify-content: space-between;
   padding: 8px 12px;
@@ -338,12 +311,12 @@ onMounted(() => {
   border: 1px solid #e8e8e8;
 }
 
-.storage-keys h3 {
+:deep(.storage-keys h3) {
   margin-bottom: 8px;
   color: #595959;
 }
 
-.storage-key {
+:deep(.storage-key) {
   padding: 4px 8px;
   margin-bottom: 4px;
   background: white;
@@ -354,13 +327,13 @@ onMounted(() => {
   color: #262626;
 }
 
-.action-buttons {
+:deep(.action-buttons) {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
 }
 
-.log-container {
+:deep(.log-container) {
   max-height: 300px;
   overflow-y: auto;
   border: 1px solid #e8e8e8;
@@ -370,7 +343,7 @@ onMounted(() => {
   margin-bottom: 12px;
 }
 
-.log-item {
+:deep(.log-item) {
   display: flex;
   gap: 8px;
   margin-bottom: 4px;
@@ -378,30 +351,104 @@ onMounted(() => {
   font-size: 12px;
 }
 
-.log-time {
+:deep(.log-time) {
   color: #8c8c8c;
   min-width: 80px;
 }
 
-.log-level {
+:deep(.log-level) {
   min-width: 60px;
   font-weight: 500;
 }
 
-.log-level.info {
+:deep(.log-level.info) {
   color: #1890ff;
 }
 
-.log-level.success {
+:deep(.log-level.success) {
   color: #52c41a;
 }
 
-.log-level.error {
+:deep(.log-level.error) {
   color: #f5222d;
 }
 
-.log-message {
+:deep(.token-grid) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+:deep(.token-item) {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  background: #fff;
+}
+
+:deep(.token-label) {
+  font-weight: 600;
+  color: #1890ff;
+}
+
+:deep(.token-value) {
+  font-family: monospace;
+  font-size: 12px;
+  word-break: break-all;
+  color: #262626;
+}
+
+:deep(.token-action) {
+  font-size: 12px;
+}
+
+:deep(.token-json) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+:deep(.json-viewer) {
+  min-height: 140px;
+  max-height: 240px;
+  overflow: auto;
+  font-family: monospace;
+  font-size: 12px;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 12px;
+  border-radius: 6px;
+}
+
+:deep(.env-grid) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+:deep(.env-item) {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+  background: #fff;
+}
+
+:deep(.log-message) {
   color: #262626;
   flex: 1;
+}
+
+:deep(.log-empty) {
+  text-align: center;
+  color: #8c8c8c;
+  font-size: 12px;
+  padding: 12px 0;
 }
 </style>

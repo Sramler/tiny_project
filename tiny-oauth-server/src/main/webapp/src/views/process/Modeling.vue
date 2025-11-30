@@ -105,7 +105,7 @@ import 'diagram-js-minimap/assets/diagram-js-minimap.css'
 
 // 定义组件事件
 const emit = defineEmits<{
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   (e: 'save', bpmnXml: string, processInfo: any): void
   (e: 'cancel'): void
 }>()
@@ -208,11 +208,11 @@ const saveFormRules = {
 }
 
 // 翻译模块将在 onMounted 中异步加载
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 let customTranslateModule: any = null
 
 // 处理保存 XML 的通用函数
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 const handleSaveXML = async (err: any, xml: string, processInfo: any) => {
   console.log('🔍 handleSaveXML 被调用')
   console.log('🔍 err:', err)
@@ -276,7 +276,7 @@ const handleSaveXML = async (err: any, xml: string, processInfo: any) => {
       // 触发保存事件（可选）
       emit('save', xml, { ...processInfo, deploymentId: result.deploymentId })
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
     } catch (apiError: any) {
       loadingMessage()
       console.error('部署流程到后端失败:', apiError)
@@ -340,7 +340,7 @@ const handleCancelSave = () => {
 }
 
 // 获取 BPMN XML 并部署
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 const getBpmnXmlAndSave = async (processInfo: any) => {
   console.log('🔍 开始获取 BPMN XML 并部署')
   console.log('🔍 processInfo:', processInfo)
@@ -354,18 +354,18 @@ const getBpmnXmlAndSave = async (processInfo: any) => {
   try {
     console.log('🔍 开始调用 saveXML...')
     console.log('🔍 modeler.value:', modeler.value)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     console.log('🔍 modeler.value.saveXML:', (modeler.value as any).saveXML)
 
     // 检查 saveXML 方法是否存在
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     if (typeof (modeler.value as any).saveXML !== 'function') {
       console.error('❌ saveXML 方法不存在或不是函数')
       console.log('🔍 尝试使用 getXML 方法...')
 
       // 使用 getXML 作为备用方法
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const xml = await (modeler.value as any).getXML({ format: true })
         console.log('✅ getXML 成功，XML 长度:', xml.length)
         await handleSaveXML(null, xml, processInfo)
@@ -381,7 +381,7 @@ const getBpmnXmlAndSave = async (processInfo: any) => {
     console.log('🔍 准备调用 saveXML 方法...')
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const result = await (modeler.value as any).saveXML({ format: true })
       console.log('✅ saveXML 方法调用成功')
       console.log('🔍 返回结果:', result)
@@ -417,7 +417,7 @@ const exportBpmn = async () => {
     console.log('🔍 开始导出BPMN文件...')
 
     // 使用Promise方式获取XML
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const result = await (modeler.value as any).saveXML({ format: true })
     console.log('✅ BPMN XML获取成功，长度:', result.xml.length)
 
@@ -451,7 +451,7 @@ const exportSvg = async () => {
     console.log('🔍 开始导出SVG文件...')
 
     // 使用Promise方式获取SVG
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const result = await (modeler.value as any).saveSVG()
     console.log('✅ SVG获取成功，长度:', result.svg.length)
 
@@ -518,7 +518,7 @@ const openLocalFile = () => {
         console.log('✅ BPMN文件导入成功')
 
         // 自动调整视图以适应内容
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const canvas = modeler.value!.get('canvas') as any
         canvas.zoom('fit-viewport')
 
@@ -639,7 +639,7 @@ const createNewBpmn = async () => {
     console.log('✅ 新BPMN流程创建成功')
 
     // 自动调整视图以适应内容
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const canvas = modeler.value.get('canvas') as any
     canvas.zoom('fit-viewport')
 
@@ -842,7 +842,7 @@ onMounted(async () => {
 
       // 自动调整视图以适应内容
       if (modeler.value) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const canvas = modeler.value.get('canvas') as any
         canvas.zoom('fit-viewport')
         console.log('🔍 视图已调整')

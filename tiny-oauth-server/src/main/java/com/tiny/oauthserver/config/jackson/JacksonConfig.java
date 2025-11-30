@@ -162,8 +162,10 @@ public class JacksonConfig {
         mapper.configure(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY, true);
 
         // -----------------------------
-        // 6. 配置允许列表以支持基本 Java 类型（如 Long）
+        // 6. 配置允许列表以支持基本 Java 类型（如 Long）- 备用方案
         // -----------------------------
+        // 注意：虽然 SecurityUser 的 userId 字段已经通过 @JsonSerialize/@JsonDeserialize 注解
+        // 序列化为 String，但保留此模块作为备用方案，以防其他 Long 类型字段需要支持
         // Spring Security 的 allowlist 默认不包含 java.lang.Long，需要显式添加
         // 这修复了反序列化 OAuth2 授权数据时的 IllegalArgumentException
         // LongAllowlistModule 会在 setupModule 时自动修改 allowlist

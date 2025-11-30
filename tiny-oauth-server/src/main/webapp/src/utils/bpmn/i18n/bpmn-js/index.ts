@@ -103,7 +103,7 @@ class OfficialTranslationLoader {
       const officialModule = await import(
         /* webpackChunkName: "bpmn-official" */ 'bpmn-js-i18n/translations/en.js'
       )
-      
+
       if (officialModule.default && typeof officialModule.default === 'object') {
         officialTranslations = officialModule.default as TranslationMap
         console.debug('✅ 成功异步加载官方 bpmn-js-i18n 英文翻译包')
@@ -111,10 +111,10 @@ class OfficialTranslationLoader {
         officialTranslations = officialModule as unknown as TranslationMap
         console.debug('✅ 成功异步加载官方 bpmn-js-i18n 英文翻译包 (对象格式)')
       }
-      
+
       this.isLoaded = true
     } catch (error) {
-      console.debug('官方 bpmn-js-i18n 翻译包未安装或加载失败，跳过加载')
+      console.debug('官方 bpmn-js-i18n 翻译包未安装或加载失败，跳过加载:', error)
       this.isLoaded = true // 标记为已加载，避免重复尝试
     }
   }

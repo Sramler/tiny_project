@@ -1,7 +1,7 @@
 /**
  * Logger 工具类
  * 通过环境变量控制日志输出
- * 
+ *
  * 环境变量：
  * - VITE_APP_ENV: 应用环境 (dev | test | prod) (默认: dev)
  * - VITE_ENABLE_CONSOLE_LOG: 是否启用 console.log (默认: true)
@@ -10,11 +10,12 @@
  * - VITE_ENABLE_CONSOLE_ERROR: 是否启用 console.error (默认: true)
  * - VITE_LOG_LEVEL: 日志级别 (debug | info | warn | error | none)
  * - VITE_ENABLE_PERSISTENT_LOG: 是否启用持久化日志（保存到 localStorage）(默认: 非生产环境)
+ * - VITE_PERSISTENT_LOG_LEVELS: 允许写入持久化日志的级别列表（默认: debug,info,warn,error）
+ * - VITE_PERSISTENT_LOG_SAMPLE_RATE: 持久化日志采样率，0~1，避免 localStorage 填满
  */
 
 // 从环境变量获取配置
 const isProd = import.meta.env.PROD
-const appEnv = import.meta.env.VITE_APP_ENV || 'dev' // 默认 dev 环境
 
 // 日志级别配置
 const LOG_LEVELS = {
@@ -39,6 +40,11 @@ const getEnvString = (key: string, defaultValue: string): string => {
   return value || defaultValue
 }
 
+const clampNumber = (value: number, min: number, max: number) => {
+  if (Number.isNaN(value)) return min
+  return Math.min(Math.max(value, min), max)
+}
+
 // 日志开关配置
 const ENABLE_LOG = getEnvBool('VITE_ENABLE_CONSOLE_LOG', true)
 const ENABLE_DEBUG = getEnvBool('VITE_ENABLE_CONSOLE_DEBUG', !isProd) // 非生产环境默认启用
@@ -46,20 +52,23 @@ const ENABLE_WARN = getEnvBool('VITE_ENABLE_CONSOLE_WARN', true)
 const ENABLE_ERROR = getEnvBool('VITE_ENABLE_CONSOLE_ERROR', true)
 
 // 日志级别配置
-const LOG_LEVEL = getEnvString('VITE_LOG_LEVEL', !isProd ? 'debug' : 'info').toLowerCase() as LogLevel
+const LOG_LEVEL = getEnvString(
+  'VITE_LOG_LEVEL',
+  !isProd ? 'debug' : 'info',
+).toLowerCase() as LogLevel
 const currentLogLevel = LOG_LEVELS[LOG_LEVEL] ?? LOG_LEVELS.info
 
 // 检查是否应该输出指定级别的日志
 const shouldLog = (level: LogLevel): boolean => {
   const levelValue = LOG_LEVELS[level]
   if (levelValue === undefined) return false
-  
+
   // 如果日志级别设置为 none，不输出任何日志
   if (currentLogLevel === LOG_LEVELS.none) return false
-  
+
   // 如果当前配置的日志级别高于目标级别，不输出
   if (currentLogLevel > levelValue) return false
-  
+
   // 检查开关
   switch (level) {
     case 'debug':
@@ -162,6 +171,20 @@ const MAX_LOG_ENTRIES = 100 // 最多保存 100 条日志
 
 // 持久化日志开关配置（默认在非生产环境启用）
 const ENABLE_PERSISTENT_LOG = getEnvBool('VITE_ENABLE_PERSISTENT_LOG', !isProd)
+const PERSISTENT_LOG_SAMPLE_RATE = clampNumber(
+  Number(import.meta.env.VITE_PERSISTENT_LOG_SAMPLE_RATE ?? (isProd ? '0.3' : '1')),
+  0,
+  1,
+)
+const PERSISTENT_LOG_LEVELS = (
+  import.meta.env.VITE_PERSISTENT_LOG_LEVELS ?? 'debug,info,warn,error'
+)
+  .split(',')
+  .map((level) => level.trim().toLowerCase())
+  .filter((level) => level.length > 0)
+const ALLOWED_PERSISTENT_LEVELS = new Set(
+  PERSISTENT_LOG_LEVELS.length > 0 ? PERSISTENT_LOG_LEVELS : ['debug', 'info', 'warn', 'error'],
+)
 
 export interface LogEntry {
   timestamp: string
@@ -172,9 +195,27 @@ export interface LogEntry {
   status?: number
 }
 
-function saveToPersistentLog(level: string, message: string, data?: any, url?: string, status?: number): void {
+function saveToPersistentLog(
+  level: string,
+  message: string,
+  data?: any,
+  url?: string,
+  status?: number,
+): void {
   // 如果持久化日志未启用，直接返回
   if (!ENABLE_PERSISTENT_LOG) {
+    return
+  }
+
+  if (!ALLOWED_PERSISTENT_LEVELS.has(level)) {
+    return
+  }
+
+  if (PERSISTENT_LOG_SAMPLE_RATE <= 0) {
+    return
+  }
+
+  if (PERSISTENT_LOG_SAMPLE_RATE < 1 && Math.random() > PERSISTENT_LOG_SAMPLE_RATE) {
     return
   }
 
@@ -205,6 +246,7 @@ export function getPersistentLogs(): LogEntry[] {
     const logsJson = localStorage.getItem(PERSISTENT_LOG_KEY)
     return logsJson ? JSON.parse(logsJson) : []
   } catch (error) {
+    console.warn('读取持久化日志失败:', error)
     return []
   }
 }
@@ -264,4 +306,3 @@ export const persistentLogger = {
 
 // 导出默认 logger 实例
 export default logger
-

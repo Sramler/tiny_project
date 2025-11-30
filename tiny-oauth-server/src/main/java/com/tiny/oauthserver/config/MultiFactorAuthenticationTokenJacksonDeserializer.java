@@ -4,7 +4,11 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tiny.oauthserver.sys.model.SecurityUser;
 import com.tiny.oauthserver.sys.security.MultiFactorAuthenticationToken;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
@@ -17,9 +21,14 @@ import java.util.Set;
 /**
  * MultiFactorAuthenticationToken 的 Jackson 反序列化器
  * 使用反射直接设置 final 字段，避免调用有参构造器
+ * <p>
+ * <b>关键修复</b>：反序列化时恢复 details 字段（包含 SecurityUser），
+ * 以便在 JWT Token 生成时能够获取 userId。
  */
 public class MultiFactorAuthenticationTokenJacksonDeserializer
         extends JsonDeserializer<MultiFactorAuthenticationToken> {
+
+    private static final Logger log = LoggerFactory.getLogger(MultiFactorAuthenticationTokenJacksonDeserializer.class);
 
     @Override
     public MultiFactorAuthenticationToken deserialize(
@@ -111,6 +120,35 @@ public class MultiFactorAuthenticationTokenJacksonDeserializer
                         .getDeclaredMethod("setAuthenticated", boolean.class);
                 setAuthenticatedMethod.setAccessible(true);
                 setAuthenticatedMethod.invoke(token, authenticated);
+            }
+            
+            // ========== 关键修复：反序列化 details 字段 ==========
+            // details 可能包含 SecurityUser，需要正确恢复以便在 JWT Token 生成时获取 userId
+            if (jsonNode.has("details") && !jsonNode.get("details").isNull()) {
+                try {
+                    JsonNode detailsNode = jsonNode.get("details");
+                    ObjectMapper mapper = (ObjectMapper) jsonParser.getCodec();
+                    
+                    // 检查 details 是否是 SecurityUser
+                    if (detailsNode.has("@type") && "securityUser".equals(detailsNode.get("@type").asText())) {
+                        // 反序列化为 SecurityUser
+                        SecurityUser securityUser = mapper.treeToValue(detailsNode, SecurityUser.class);
+                        token.setDetails(securityUser);
+                        log.debug("[MultiFactorAuthenticationTokenJacksonDeserializer] 成功恢复 SecurityUser 到 details (userId: {})", 
+                                securityUser != null ? securityUser.getUserId() : "null");
+                    } else {
+                        // 尝试直接反序列化（可能是其他类型的 details）
+                        Object details = mapper.treeToValue(detailsNode, Object.class);
+                        token.setDetails(details);
+                        log.debug("[MultiFactorAuthenticationTokenJacksonDeserializer] 恢复 details: {}", 
+                                details != null ? details.getClass().getName() : "null");
+                    }
+                } catch (Exception e) {
+                    log.warn("[MultiFactorAuthenticationTokenJacksonDeserializer] 无法反序列化 details 字段: {}", e.getMessage());
+                    // 不抛出异常，允许 token 在没有 details 的情况下继续使用
+                }
+            } else {
+                log.debug("[MultiFactorAuthenticationTokenJacksonDeserializer] JSON 中没有 details 字段或为 null");
             }
             
             return token;

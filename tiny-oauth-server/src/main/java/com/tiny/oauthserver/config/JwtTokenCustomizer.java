@@ -116,19 +116,68 @@ public class JwtTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingCont
     private void customizeAccessToken(JwtEncodingContext context, Authentication principal) {
         var claims = context.getClaims();
         
-        // 从 details 中获取 SecurityUser（principal.getPrincipal() 返回的是 username 字符串）
-        SecurityUser securityUser = null;
-        if (principal.getDetails() instanceof SecurityUser) {
-            securityUser = (SecurityUser) principal.getDetails();
+        // ========== 详细日志分析 Authentication 结构 ==========
+        log.debug("[JwtTokenCustomizer] Access Token - 开始分析 Authentication 结构");
+        log.debug("[JwtTokenCustomizer]   - principal 类型: {}", principal != null ? principal.getClass().getName() : "null");
+        log.debug("[JwtTokenCustomizer]   - principal.getName(): {}", principal != null ? principal.getName() : "null");
+        
+        // 分析 principal.getPrincipal()
+        Object principalObj = principal != null ? principal.getPrincipal() : null;
+        log.debug("[JwtTokenCustomizer]   - principal.getPrincipal() 类型: {}", 
+                principalObj != null ? principalObj.getClass().getName() : "null");
+        log.debug("[JwtTokenCustomizer]   - principal.getPrincipal() 值: {}", principalObj);
+        if (principalObj instanceof SecurityUser) {
+            SecurityUser principalSecurityUser = (SecurityUser) principalObj;
+            log.debug("[JwtTokenCustomizer]   - principal.getPrincipal() 是 SecurityUser: userId={}, username={}", 
+                    principalSecurityUser.getUserId(), principalSecurityUser.getUsername());
         }
         
-        // 添加用户ID和用户名
+        // 分析 principal.getDetails()
+        Object details = principal != null ? principal.getDetails() : null;
+        log.debug("[JwtTokenCustomizer]   - principal.getDetails() 类型: {}", 
+                details != null ? details.getClass().getName() : "null");
+        log.debug("[JwtTokenCustomizer]   - principal.getDetails() 值: {}", details);
+        if (details != null) {
+            log.debug("[JwtTokenCustomizer]   - principal.getDetails() toString: {}", details.toString());
+        }
+        
+        // ========== 尝试从多个位置获取 SecurityUser ==========
+        SecurityUser securityUser = null;
+        String source = null;
+        
+        // 1. 首先尝试从 details 中获取
+        if (principal != null && principal.getDetails() instanceof SecurityUser) {
+            securityUser = (SecurityUser) principal.getDetails();
+            source = "principal.getDetails()";
+            log.debug("[JwtTokenCustomizer]   ✓ 从 principal.getDetails() 获取到 SecurityUser");
+        }
+        // 2. 如果 details 中没有，尝试从 principal 中获取
+        else if (principalObj instanceof SecurityUser) {
+            securityUser = (SecurityUser) principalObj;
+            source = "principal.getPrincipal()";
+            log.debug("[JwtTokenCustomizer]   ✓ 从 principal.getPrincipal() 获取到 SecurityUser");
+        }
+        // 3. 如果都没有，记录警告
+        else {
+            log.warn("[JwtTokenCustomizer]   ✗ 未找到 SecurityUser: details={}, principal={}", 
+                    details != null ? details.getClass().getName() : "null",
+                    principalObj != null ? principalObj.getClass().getName() : "null");
+        }
+        
+        // ========== 分析 SecurityUser 内容 ==========
         if (securityUser != null) {
             Long userId = securityUser.getUserId();
             String username = securityUser.getUsername();
+            log.info("[JwtTokenCustomizer] Access Token - SecurityUser 来源: {}, userId: {}, username: {}", 
+                    source, userId, username);
+            
+            if (userId == null) {
+                log.error("[JwtTokenCustomizer] Access Token - ⚠ SecurityUser.userId 为 null! username: {}", username);
+            }
+            
+            // 添加用户ID和用户名
             claims.claim("userId", userId);
             claims.claim("username", username);
-            log.info("[JwtTokenCustomizer] Access Token - 添加 userId: {}, username: {}", userId, username);
             
             // 添加权限列表（角色和资源权限）
             Set<String> authorities = principal.getAuthorities().stream()
@@ -136,10 +185,12 @@ public class JwtTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingCont
                     .collect(Collectors.toSet());
             claims.claim("authorities", authorities);
             log.debug("[JwtTokenCustomizer] Access Token - 添加 authorities: {}", authorities);
-        } else if (principal.getName() != null) {
+        } else if (principal != null && principal.getName() != null) {
             // 如果 details 中没有 SecurityUser，至少添加用户名（从 principal.getName() 获取）
-            claims.claim("username", principal.getName());
-            log.warn("[JwtTokenCustomizer] Access Token - SecurityUser 为空，仅添加 username: {}", principal.getName());
+            String username = principal.getName();
+            claims.claim("username", username);
+            log.warn("[JwtTokenCustomizer] Access Token - SecurityUser 为空，仅添加 username: {}", username);
+            log.warn("[JwtTokenCustomizer] Access Token - 无法添加 userId，因为未找到 SecurityUser");
         }
         
         // 添加客户端ID

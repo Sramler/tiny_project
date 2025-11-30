@@ -3,6 +3,8 @@ package com.tiny.oauthserver.config;
 import com.tiny.oauthserver.sys.model.SecurityUser;
 import com.tiny.oauthserver.sys.repository.UserRepository;
 import com.tiny.oauthserver.sys.security.MultiFactorAuthenticationToken;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
@@ -56,6 +58,7 @@ import java.util.stream.Collectors;
  */
 public class JwtTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingContext> {
 
+    private static final Logger log = LoggerFactory.getLogger(JwtTokenCustomizer.class);
     private final UserRepository userRepository;
 
     /**
@@ -121,17 +124,22 @@ public class JwtTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingCont
         
         // 添加用户ID和用户名
         if (securityUser != null) {
-            claims.claim("userId", securityUser.getUserId());
-            claims.claim("username", securityUser.getUsername());
+            Long userId = securityUser.getUserId();
+            String username = securityUser.getUsername();
+            claims.claim("userId", userId);
+            claims.claim("username", username);
+            log.info("[JwtTokenCustomizer] Access Token - 添加 userId: {}, username: {}", userId, username);
             
             // 添加权限列表（角色和资源权限）
             Set<String> authorities = principal.getAuthorities().stream()
                     .map(GrantedAuthority::getAuthority)
                     .collect(Collectors.toSet());
             claims.claim("authorities", authorities);
+            log.debug("[JwtTokenCustomizer] Access Token - 添加 authorities: {}", authorities);
         } else if (principal.getName() != null) {
             // 如果 details 中没有 SecurityUser，至少添加用户名（从 principal.getName() 获取）
             claims.claim("username", principal.getName());
+            log.warn("[JwtTokenCustomizer] Access Token - SecurityUser 为空，仅添加 username: {}", principal.getName());
         }
         
         // 添加客户端ID
@@ -190,10 +198,14 @@ public class JwtTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingCont
         
         // 添加用户ID和用户名（用于刷新时的验证和审计）
         if (securityUser != null) {
-            claims.claim("userId", securityUser.getUserId());
-            claims.claim("username", securityUser.getUsername());
+            Long userId = securityUser.getUserId();
+            String username = securityUser.getUsername();
+            claims.claim("userId", userId);
+            claims.claim("username", username);
+            log.info("[JwtTokenCustomizer] Refresh Token - 添加 userId: {}, username: {}", userId, username);
         } else if (principal.getName() != null) {
             claims.claim("username", principal.getName());
+            log.warn("[JwtTokenCustomizer] Refresh Token - SecurityUser 为空，仅添加 username: {}", principal.getName());
         }
         
         // 添加客户端ID（用于验证刷新请求是否来自正确的客户端）
@@ -264,6 +276,7 @@ public class JwtTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingCont
             username = securityUser.getUsername();
             claims.claim("userId", userId);
             claims.claim("username", username);
+            log.info("[JwtTokenCustomizer] ID Token - 添加 userId: {}, username: {}", userId, username);
             
             // 标准 OIDC claims: sub (subject) 通常由框架自动设置
             // 这里确保设置 subject（如果框架未设置，则使用用户名）
@@ -273,6 +286,7 @@ public class JwtTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingCont
             username = principal.getName();
             claims.subject(username);
             claims.claim("username", username);
+            log.warn("[JwtTokenCustomizer] ID Token - SecurityUser 为空，仅添加 username: {}", username);
         }
         
         // 添加认证时间（auth_time）- OIDC 标准必需字段

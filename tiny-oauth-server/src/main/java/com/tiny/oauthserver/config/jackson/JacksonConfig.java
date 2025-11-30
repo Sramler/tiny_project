@@ -9,7 +9,10 @@ import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer;
 import com.tiny.oauthserver.config.CustomWebAuthenticationDetailsJacksonDeserializer;
 import com.tiny.oauthserver.config.CustomWebAuthenticationDetailsSource;
 import com.tiny.oauthserver.config.MultiFactorAuthenticationTokenJacksonDeserializer;
+import com.tiny.oauthserver.sys.model.SecurityUser;
 import com.tiny.oauthserver.sys.security.MultiFactorAuthenticationToken;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -56,6 +59,8 @@ import java.util.TimeZone;
  */
 @Configuration
 public class JacksonConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(JacksonConfig.class);
 
     /**
      * Web API 专用的 ObjectMapper（用于前后端 HTTP 请求/响应）。
@@ -170,6 +175,27 @@ public class JacksonConfig {
         // 这修复了反序列化 OAuth2 授权数据时的 IllegalArgumentException
         // LongAllowlistModule 会在 setupModule 时自动修改 allowlist
         mapper.registerModule(new LongAllowlistModule());
+
+        // -----------------------------
+        // 7. 验证 SecurityUser 序列化配置
+        // -----------------------------
+        // 确认 SecurityUser 的 userId 字段已正确配置自定义序列化器/反序列化器
+        try {
+            var securityUserClass = SecurityUser.class;
+            var userIdMethod = securityUserClass.getMethod("getUserId");
+            var serializeAnnotation = userIdMethod.getAnnotation(com.fasterxml.jackson.databind.annotation.JsonSerialize.class);
+            var deserializeAnnotation = userIdMethod.getAnnotation(com.fasterxml.jackson.databind.annotation.JsonDeserialize.class);
+            
+            if (serializeAnnotation != null && deserializeAnnotation != null) {
+                log.info("[JacksonConfig] ✓ SecurityUser.userId 已配置自定义序列化器: {}, 反序列化器: {}", 
+                        serializeAnnotation.using().getSimpleName(),
+                        deserializeAnnotation.using().getSimpleName());
+            } else {
+                log.warn("[JacksonConfig] ⚠ SecurityUser.userId 未找到序列化/反序列化注解");
+            }
+        } catch (Exception e) {
+            log.warn("[JacksonConfig] 无法验证 SecurityUser.userId 配置: {}", e.getMessage());
+        }
 
         return mapper;
     }

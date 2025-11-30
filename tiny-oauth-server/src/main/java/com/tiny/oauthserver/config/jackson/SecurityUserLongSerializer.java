@@ -3,6 +3,8 @@ package com.tiny.oauthserver.config.jackson;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
@@ -19,13 +21,18 @@ import java.io.IOException;
  */
 public class SecurityUserLongSerializer extends JsonSerializer<Long> {
 
+    private static final Logger log = LoggerFactory.getLogger(SecurityUserLongSerializer.class);
+
     @Override
     public void serialize(Long value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
         if (value == null) {
+            log.debug("[SecurityUserLongSerializer] 序列化 userId: null");
             gen.writeNull();
         } else {
             // 将 Long 序列化为 String
-            gen.writeString(String.valueOf(value));
+            String stringValue = String.valueOf(value);
+            log.debug("[SecurityUserLongSerializer] 序列化 userId: {} (Long) -> \"{}\" (String)", value, stringValue);
+            gen.writeString(stringValue);
         }
     }
 }

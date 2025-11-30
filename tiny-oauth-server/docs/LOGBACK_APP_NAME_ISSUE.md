@@ -25,49 +25,38 @@
 
 ## 解决方案
 
-### 方案 1：使用系统属性或环境变量（推荐）
+### 方案：符合 Spring Boot 官方指南的混合配置（已实施）
 
-在启动应用时，通过系统属性或环境变量设置应用名：
+**Spring Boot 官方指南**：使用 `springProperty` 标签可以从 `application.yaml` 中读取配置。
 
-```bash
-# 方式 1：使用系统属性
-java -DAPP_NAME=oauth-server -DLOG_PATH=logs -jar app.jar
+**问题**：logback 在 Spring 环境初始化之前就开始初始化，此时 `springProperty` 可能返回占位符字符串。
 
-# 方式 2：使用环境变量
-export APP_NAME=oauth-server
-export LOG_PATH=logs
-java -jar app.jar
-```
-
-### 方案 2：确保所有应用都配置了 spring.application.name
-
-检查并确保所有模块的 `application.yaml` 或 `application.yml` 中都配置了 `spring.application.name`：
-
-```yaml
-spring:
-  application:
-    name: oauth-server  # 必须配置
-```
-
-### 方案 3：改进 logback 配置（已实施）
+**解决方案**：使用混合配置，既支持在 `application.yaml` 中配置（符合官方指南），又解决了初始化时机问题。
 
 修改 `logback-spring.xml`，使用多级备选方案：
 
 ```xml
-<!-- LOG_PATH: 优先使用系统属性/环境变量，其次使用 Spring 配置，最后使用默认值 -->
+<!-- LOG_PATH: 支持在 application.yaml 中配置，同时支持系统属性/环境变量覆盖 -->
 <springProperty scope="context" name="LOG_PATH_SPRING" source="logging.file.path" defaultValue="logs"/>
+<!-- 优先使用系统属性/环境变量，如果不存在则使用 Spring 配置的值，最后使用默认值 -->
 <property name="LOG_PATH" value="${LOG_PATH:-${LOG_PATH_SPRING:-logs}}"/>
 
-<!-- APP_NAME: 优先使用系统属性/环境变量，其次使用 Spring 配置，最后使用默认值 -->
+<!-- APP_NAME: 支持在 application.yaml 中配置，同时支持系统属性/环境变量覆盖 -->
 <springProperty scope="context" name="APP_NAME_SPRING" source="spring.application.name" defaultValue="oauth-server"/>
+<!-- 优先使用系统属性/环境变量，如果不存在则使用 Spring 配置的值，最后使用默认值 -->
 <property name="APP_NAME" value="${APP_NAME:-${APP_NAME_SPRING:-oauth-server}}"/>
 ```
 
 **配置优先级**：
-1. 系统属性（`-DAPP_NAME=xxx`）
-2. 环境变量（`APP_NAME=xxx`）
-3. Spring 配置（`spring.application.name`）
-4. 默认值（`oauth-server`）
+1. 系统属性（`-DAPP_NAME=xxx` 或 `-DLOG_PATH=xxx`）
+2. 环境变量（`APP_NAME=xxx` 或 `LOG_PATH=xxx`）
+3. `application.yaml` 中的配置（`spring.application.name` 或 `logging.file.path`，通过 `springProperty` 读取）
+4. 默认值（`oauth-server` 或 `logs`）
+
+**优势**：
+- ✅ 符合 Spring Boot 官方指南（支持在 `application.yaml` 中配置）
+- ✅ 解决了初始化时机问题（即使 Spring 环境未初始化，也能使用默认值）
+- ✅ 支持系统属性/环境变量覆盖（便于不同环境部署）
 
 ## 验证方法
 

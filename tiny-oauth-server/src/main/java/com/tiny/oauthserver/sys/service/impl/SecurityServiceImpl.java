@@ -58,6 +58,10 @@ public class SecurityServiceImpl implements SecurityService {
             otpauthUri = totp.map(m -> (String) m.getAuthenticationConfiguration().get("otpauthUri")).orElse(null);
         }
         boolean skipMfaRemind = false; // TODO: 持久化用户偏好
+
+        // 基于全局配置 + 用户绑定状态计算本次会话“是否要求 TOTP”
+        boolean requireTotpThisSession = isTotpRequiredForUser(totpBound, totpActivated);
+
         boolean forceMfa = mfaProperties.isRequired();
         boolean disableMfa = mfaProperties.isDisabled();
         String safeOtpauthUri = otpauthUri == null ? "" : otpauthUri;
@@ -66,9 +70,53 @@ public class SecurityServiceImpl implements SecurityService {
                 "totpActivated", totpActivated,
                 "skipMfaRemind", skipMfaRemind,
                 "otpauthUri", safeOtpauthUri,
-                "forceMfa", forceMfa,         // true: 页面不能跳过
-                "disableMfa", disableMfa      // true: 完全不弹窗不推荐
+                "forceMfa", forceMfa,                    // true: 页面不能跳过
+                "disableMfa", disableMfa,                // true: 完全不弹窗不推荐
+                "requireTotp", requireTotpThisSession    // ✅ 思路 A：本次会话是否必须完成 TOTP
         );
+    }
+
+    /**
+     * 根据全局配置（security.mfa.mode）和用户当前 TOTP 绑定/激活状态，
+     * 计算“本次会话是否要求 TOTP 作为必需因子”。
+     * <p>
+     * 思路 A 的核心就是：先算出本次会话的必需因子集合 requiredFactors，再在所有必需因子完成后才发最终 Token。
+     * 这里先聚焦在 PASSWORD / TOTP 两种因子的决策：
+     * <ul>
+     *   <li>NONE：完全关闭 MFA，本次永远不要求 TOTP</li>
+     *   <li>OPTIONAL：已绑定且已激活时，推荐启用 TOTP（可根据后续风控扩展）；当前实现按“已绑定+激活 ⇒ 要 TOTP”处理</li>
+     *   <li>REQUIRED：全局强制 MFA，只要用户已绑定且已激活，就必须走 TOTP；未绑定时由上层流程引导绑定</li>
+     * </ul>
+     *
+     * @param totpBound     用户是否存在 LOCAL+TOTP 方法
+     * @param totpActivated 用户 TOTP 是否已激活
+     * @return 本次会话是否必须完成 TOTP
+     */
+    private boolean isTotpRequiredForUser(boolean totpBound, boolean totpActivated) {
+        // 全局关闭：永远不要求 TOTP
+        if (mfaProperties.isDisabled()) {
+            return false;
+        }
+
+        // 未绑定 / 未激活：无 TOTP 可用，当前会话不要求，但上层可以引导用户去绑定
+        if (!totpBound || !totpActivated) {
+            return false;
+        }
+
+        // REQUIRED：只要用户有已激活的 TOTP，本次会话必须走 TOTP
+        if (mfaProperties.isRequired()) {
+            return true;
+        }
+
+        // OPTIONAL：推荐但可跳过
+        // 这里默认“已绑定且已激活时，本次会话要求 TOTP”，
+        // 后续可以在此增加风控策略（设备指纹、风险评分等）决定是否强制本次会话走 TOTP。
+        if (mfaProperties.isRecommended()) {
+            return true;
+        }
+
+        // 兜底：未知模式时不强制
+        return false;
     }
 
     /**

@@ -5,6 +5,7 @@ import com.tiny.oauthserver.sys.model.User;
 import com.tiny.oauthserver.sys.model.UserAuthenticationMethod;
 import com.tiny.oauthserver.sys.repository.UserAuthenticationMethodRepository;
 import com.tiny.oauthserver.sys.repository.UserRepository;
+import com.tiny.oauthserver.sys.service.SecurityService;
 import com.tiny.oauthserver.util.IpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,17 +48,20 @@ public class MultiAuthenticationProvider implements AuthenticationProvider {
     private final PasswordEncoder passwordEncoder;
     private final UserDetailsService userDetailsService;
     private final TotpService totpService;
+    private final SecurityService securityService;
 
     public MultiAuthenticationProvider(UserRepository userRepository,
                                        UserAuthenticationMethodRepository authenticationMethodRepository,
                                        PasswordEncoder passwordEncoder,
                                        UserDetailsService userDetailsService,
-                                       TotpService totpService) {
+                                       TotpService totpService,
+                                       SecurityService securityService) {
         this.userRepository = userRepository;
         this.authenticationMethodRepository = authenticationMethodRepository;
         this.passwordEncoder = passwordEncoder;
         this.userDetailsService = userDetailsService;
         this.totpService = totpService;
+        this.securityService = securityService;
     }
 
     @Override
@@ -164,7 +168,31 @@ public class MultiAuthenticationProvider implements AuthenticationProvider {
                 .toList();
 
         if (mfaCandidates.size() > 1) {
-            // 需要走 MFA 分步或一次性验证流程
+            // ===== 思路 A + 企业级 MFA 策略集成点 =====
+            // 通过 SecurityService + MfaProperties 计算当前会话是否“必须”走 TOTP。
+            // 如果本次会话不要求 TOTP，则即使用户配置了 PASSWORD+TOTP 组合，也按单因子流程处理，
+            // 直接在这里完成最终认证并交给后续 OAuth2/OIDC 流程签发 Token。
+            boolean requireTotpThisSession = false;
+            try {
+                Map<String, Object> securityStatus = securityService.getSecurityStatus(user);
+                Object requireTotpFlag = securityStatus.get("requireTotp");
+                requireTotpThisSession = Boolean.TRUE.equals(requireTotpFlag);
+            } catch (Exception ex) {
+                logger.warn("计算用户 {} 的 MFA 策略时发生异常，降级为仅 PASSWORD 流程: {}", username, ex.getMessage());
+            }
+
+            if (!requireTotpThisSession) {
+                // 当前会话允许跳过 TOTP：按单因子方式直接认证（通常就是 PASSWORD），
+                // 保证符合思路 A：本次 requiredFactors = {PASSWORD}，完成后即可发最终 Token。
+                String cred = credentials != null ? credentials.toString() : null;
+                return switch (finalType) {
+                    case FACTOR_PASSWORD -> authenticatePassword(user, cred, method, finalProvider, finalType);
+                    case FACTOR_TOTP -> authenticateTotp(user, cred, method, finalProvider, finalType);
+                    default -> throw new BadCredentialsException("不支持的认证类型: " + finalType);
+                };
+            }
+
+            // 当前会话“必须”完成 TOTP：走原有 MFA 分步/一次性流程。
             return handleMultiFactorAuthentication(user, credentials, mfaCandidates, finalProvider, finalType);
         } else {
             // 普通单因子认证

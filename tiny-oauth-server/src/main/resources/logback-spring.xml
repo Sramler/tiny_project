@@ -176,12 +176,14 @@
         </root>
     </springProfile>
     
-    <!-- 默认环境：使用异步写入 -->
-    <root level="INFO">
-        <appender-ref ref="STDOUT"/>
-        <appender-ref ref="ASYNC_FILE"/>
-        <appender-ref ref="ASYNC_ERROR_FILE"/>
-    </root>
+    <!-- 默认环境：使用异步写入（仅在未匹配到 dev 或 prod profile 时生效） -->
+    <springProfile name="!dev,!prod">
+        <root level="INFO">
+            <appender-ref ref="STDOUT"/>
+            <appender-ref ref="ASYNC_FILE"/>
+            <appender-ref ref="ASYNC_ERROR_FILE"/>
+        </root>
+    </springProfile>
 
 </configuration>
 

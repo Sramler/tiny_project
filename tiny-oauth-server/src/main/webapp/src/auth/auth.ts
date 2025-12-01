@@ -3,7 +3,7 @@ import type { Ref, ComputedRef } from 'vue'
 import { userManager, settings } from './oidc'
 import { authRuntimeConfig } from './config'
 import type { User } from 'oidc-client-ts'
-import { jwtVerify, createRemoteJWKSet } from 'jose'
+import { jwtVerify, createRemoteJWKSet, type JWKS } from 'jose'
 import { logger, persistentLogger } from '@/utils/logger'
 
 const OIDC_TRACE_ENABLED =
@@ -17,13 +17,47 @@ const oidcTrace = (step: string, payload?: unknown) => {
   }
 }
 
-const metadata = await fetch('http://localhost:9000/.well-known/openid-configuration').then((res) =>
-  res.json(),
-)
-const JWKS = createRemoteJWKSet(new URL(metadata.jwks_uri))
+/**
+ * 企业级前后端分离实践：
+ *
+ * - 访问 `/.well-known/openid-configuration` 的职责交给 OIDC 客户端库（oidc-client-ts）
+ * - 业务代码不再硬编码 discovery 地址（如 http://localhost:9000/.well-known/openid-configuration）
+ * - 如需在前端做 JWT 校验，仅作为调试/审计用途，且复用 OIDC 客户端内部的 metadata / jwks_uri
+ *
+ * 说明：
+ * - `userManager.metadataService.getMetadata()` 会根据 authority 加载并缓存 discovery 文档
+ * - 这样既避免了多余的一次 `fetch /.well-known/openid-configuration`，又不破坏企业级职责边界
+ */
+let jwks: ReturnType<typeof createRemoteJWKSet<JWKS.JSONWebKeySet>> | null = null
 
-export async function verifyAccessToken(token: string) {
+async function getJWKS() {
+  if (jwks) {
+    return jwks
+  }
+
   try {
+    const metadata = await userManager.metadataService.getMetadata()
+    if (!metadata.jwks_uri) {
+      logger.warn('[OIDC] discovery 文档中未找到 jwks_uri，跳过前端 JWT 校验')
+      throw new Error('jwks_uri not found in metadata')
+    }
+
+    jwks = createRemoteJWKSet(new URL(metadata.jwks_uri))
+    oidcTrace('jwks.initialized', { jwks_uri: metadata.jwks_uri })
+    return jwks
+  } catch (error) {
+    logger.error('[OIDC] 获取 JWKS 失败，跳过前端 JWT 校验', error)
+    throw error
+  }
+}
+
+export async function verifyAccessToken(token: string | null | undefined) {
+  if (!token) {
+    return null
+  }
+
+  try {
+    const JWKS = await getJWKS()
     const { payload, protectedHeader } = await jwtVerify(token, JWKS, {
       algorithms: ['RS256'],
     })
@@ -31,7 +65,8 @@ export async function verifyAccessToken(token: string) {
     persistentLogger.debug('[OIDC] JWT payload', payload)
     return payload
   } catch (err) {
-    logger.error('[OIDC] JWT 验证失败', err)
+    // 注意：前端 JWT 验证仅用于调试，不影响实际认证与授权流程
+    logger.error('[OIDC] JWT 验证失败（前端调试用，不影响正常流程）', err)
     return null
   }
 }

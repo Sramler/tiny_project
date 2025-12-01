@@ -60,9 +60,11 @@ public class AuthorizationServerConfig {
                 //开启OpenID Connect 1.0（其中oidc为OpenID Connect的缩写）。
                 .oidc(Customizer.withDefaults());
         http
-                // 在授权端点前增加 MFA 拦截，确保在所有必需因子完成后才进入授权码流程
+                // 在主要安全过滤器链中尽早增加 MFA 拦截，
+                // 通过 URL 匹配仅拦截 /oauth2/authorize，避免与其他端点冲突。
+                // 这里选择挂在 AnonymousAuthenticationFilter 之前，这是常用且稳定的锚点。
                 .addFilterBefore(mfaAuthorizationEndpointFilter,
-                        org.springframework.security.oauth2.server.authorization.web.OAuth2AuthorizationEndpointFilter.class)
+                        org.springframework.security.web.authentication.AnonymousAuthenticationFilter.class)
                 //将需要认证的请求，重定向到login页面行登录认证。
                 // 注意：只对 HTML 请求重定向到登录页，API 请求（如 /oauth2/token）返回 JSON 错误
                 .exceptionHandling((exceptions) -> exceptions

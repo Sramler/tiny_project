@@ -78,6 +78,9 @@ public class MfaAuthorizationEndpointFilter extends OncePerRequestFilter {
         // 读取安全状态，判断本次会话是否必须 TOTP
         Map<String, Object> status = securityService.getSecurityStatus(user);
         boolean requireTotp = Boolean.TRUE.equals(status.get("requireTotp"));
+        if (log.isDebugEnabled()) {
+            log.debug("[MFA] /oauth2/authorize 拦截检查 - userId={}, username={}, requireTotp={}", user.getId(), username, requireTotp);
+        }
         if (!requireTotp) {
             // 本次会话不要求 TOTP，直接进入授权端点
             filterChain.doFilter(request, response);
@@ -88,10 +91,15 @@ public class MfaAuthorizationEndpointFilter extends OncePerRequestFilter {
         boolean totpCompleted = false;
         if (authentication instanceof MultiFactorAuthenticationToken mfaToken) {
             totpCompleted = mfaToken.hasCompletedFactor(MultiFactorAuthenticationToken.AuthenticationFactorType.TOTP);
+            if (log.isDebugEnabled()) {
+                log.debug("[MFA] 当前 MultiFactorAuthenticationToken.completedFactors={} (user={})",
+                        mfaToken.getCompletedFactors(), username);
+            }
         }
 
         if (totpCompleted) {
             // 已完成 TOTP，允许进入授权端点
+            log.info("[MFA] 用户 {} 已完成 TOTP，本次允许进入 /oauth2/authorize", username);
             filterChain.doFilter(request, response);
             return;
         }

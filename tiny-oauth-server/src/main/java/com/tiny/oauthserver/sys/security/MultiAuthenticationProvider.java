@@ -177,6 +177,8 @@ public class MultiAuthenticationProvider implements AuthenticationProvider {
                 Map<String, Object> securityStatus = securityService.getSecurityStatus(user);
                 Object requireTotpFlag = securityStatus.get("requireTotp");
                 requireTotpThisSession = Boolean.TRUE.equals(requireTotpFlag);
+                logger.debug("[MFA] MultiAuthenticationProvider - userId={}, username={}, requireTotpThisSession={}, enabledMethods={}",
+                        user.getId(), user.getUsername(), requireTotpThisSession, enabledMethods.size());
             } catch (Exception ex) {
                 logger.warn("计算用户 {} 的 MFA 策略时发生异常，降级为仅 PASSWORD 流程: {}", username, ex.getMessage());
             }
@@ -184,6 +186,7 @@ public class MultiAuthenticationProvider implements AuthenticationProvider {
             if (!requireTotpThisSession) {
                 // 当前会话允许跳过 TOTP：按单因子方式直接认证（通常就是 PASSWORD），
                 // 保证符合思路 A：本次 requiredFactors = {PASSWORD}，完成后即可发最终 Token。
+                logger.info("[MFA] 本次会话不要求 TOTP，按单因子 {} 完成认证 (user={})", finalType, username);
                 String cred = credentials != null ? credentials.toString() : null;
                 return switch (finalType) {
                     case FACTOR_PASSWORD -> authenticatePassword(user, cred, method, finalProvider, finalType);
@@ -193,6 +196,7 @@ public class MultiAuthenticationProvider implements AuthenticationProvider {
             }
 
             // 当前会话“必须”完成 TOTP：走原有 MFA 分步/一次性流程。
+            logger.info("[MFA] 本次会话要求 TOTP，进入多因子分步流程 (user={})", username);
             return handleMultiFactorAuthentication(user, credentials, mfaCandidates, finalProvider, finalType);
         } else {
             // 普通单因子认证

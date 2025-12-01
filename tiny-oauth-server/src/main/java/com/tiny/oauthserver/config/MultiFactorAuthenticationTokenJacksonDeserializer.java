@@ -34,9 +34,10 @@ public class MultiFactorAuthenticationTokenJacksonDeserializer
     public MultiFactorAuthenticationToken deserialize(
             JsonParser jsonParser,
             DeserializationContext deserializationContext) throws IOException {
-        
         JsonNode jsonNode = jsonParser.getCodec().readTree(jsonParser);
-        
+        // 统一打印原始 JSON，便于排查 DB 中存储结构
+        log.debug("[MultiFactorAuthenticationTokenJacksonDeserializer] 原始 JSON 节点: {}", jsonNode.toString());
+
         String username = jsonNode.has("username") ? jsonNode.get("username").asText() : null;
         Object credentials = jsonNode.has("credentials") && !jsonNode.get("credentials").isNull() 
             ? jsonNode.get("credentials").asText() : null;
@@ -44,17 +45,35 @@ public class MultiFactorAuthenticationTokenJacksonDeserializer
             ? jsonNode.get("provider").asText() : (jsonNode.has("authenticationProvider") 
                 ? jsonNode.get("authenticationProvider").asText() : null);
         
-        // 解析 completedFactors（支持 Factor 枚举或字符串）
+        // 解析 completedFactors（支持 Factor 枚举或 JSON 数组，包括 ["java.util.Collections$UnmodifiableSet", [...]] 这种带类型注入的结构）
         Set<MultiFactorAuthenticationToken.AuthenticationFactorType> completedFactors = new HashSet<>();
-        if (jsonNode.has("completedFactors") && jsonNode.get("completedFactors").isArray()) {
-            for (JsonNode factor : jsonNode.get("completedFactors")) {
-                if (factor.isTextual()) {
-                    MultiFactorAuthenticationToken.AuthenticationFactorType f = MultiFactorAuthenticationToken.AuthenticationFactorType.from(factor.asText());
-                    if (f != MultiFactorAuthenticationToken.AuthenticationFactorType.UNKNOWN) {
-                        completedFactors.add(f);
+        if (jsonNode.has("completedFactors")) {
+            JsonNode factorsNode = jsonNode.get("completedFactors");
+            if (factorsNode.isArray()) {
+                if (factorsNode.size() == 2 && "java.util.Collections$UnmodifiableSet".equals(factorsNode.get(0).asText())
+                        && factorsNode.get(1).isArray()) {
+                    // 处理 Jackson 自带 @class 注入产生的 ["java.util.Collections$UnmodifiableSet", [...]] 结构
+                    factorsNode = factorsNode.get(1);
+                }
+                for (JsonNode factor : factorsNode) {
+                    if (factor.isTextual()) {
+                        MultiFactorAuthenticationToken.AuthenticationFactorType f =
+                                MultiFactorAuthenticationToken.AuthenticationFactorType.from(factor.asText());
+                        if (f != MultiFactorAuthenticationToken.AuthenticationFactorType.UNKNOWN) {
+                            completedFactors.add(f);
+                        }
                     }
                 }
+                log.debug("[MultiFactorAuthenticationTokenJacksonDeserializer] 解析 completedFactors 成功, username={}, provider={}, completedFactors={}",
+                        username, providerStr, completedFactors);
+            } else {
+                log.debug("[MultiFactorAuthenticationTokenJacksonDeserializer] completedFactors 字段不是数组, username={}, provider={}, rawNode={}",
+                        username, providerStr, jsonNode.toString());
             }
+        } else {
+            // 便于排查：记录反序列化时没有 completedFactors 字段的情况
+            log.debug("[MultiFactorAuthenticationTokenJacksonDeserializer] JSON 中缺少 completedFactors 字段, username={}, provider={}, rawNode={}",
+                    username, providerStr, jsonNode.toString());
         }
         
         // 如果没有 completedFactors，尝试从 authenticationType 获取初始因子
@@ -151,6 +170,12 @@ public class MultiFactorAuthenticationTokenJacksonDeserializer
                 log.debug("[MultiFactorAuthenticationTokenJacksonDeserializer] JSON 中没有 details 字段或为 null");
             }
             
+            try {
+                log.debug("[MultiFactorAuthenticationTokenJacksonDeserializer] 反序列化后 token.completedFactors={} (username={})",
+                        token.getCompletedFactors(), username);
+            } catch (Exception ignored) {
+                // 日志失败不影响正常反序列化
+            }
             return token;
         } catch (Exception e) {
             throw new IOException("Failed to deserialize MultiFactorAuthenticationToken", e);

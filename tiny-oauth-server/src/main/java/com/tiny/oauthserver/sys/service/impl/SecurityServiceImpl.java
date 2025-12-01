@@ -61,6 +61,10 @@ public class SecurityServiceImpl implements SecurityService {
 
         // 基于全局配置 + 用户绑定状态计算本次会话“是否要求 TOTP”
         boolean requireTotpThisSession = isTotpRequiredForUser(totpBound, totpActivated);
+        if (logger.isDebugEnabled()) {
+            logger.debug("[MFA] getSecurityStatus - userId={}, mode={}, totpBound={}, totpActivated={}, requireTotp={}",
+                    user.getId(), mfaProperties.getMode(), totpBound, totpActivated, requireTotpThisSession);
+        }
 
         boolean forceMfa = mfaProperties.isRequired();
         boolean disableMfa = mfaProperties.isDisabled();
@@ -95,16 +99,19 @@ public class SecurityServiceImpl implements SecurityService {
     private boolean isTotpRequiredForUser(boolean totpBound, boolean totpActivated) {
         // 全局关闭：永远不要求 TOTP
         if (mfaProperties.isDisabled()) {
+            logger.debug("[MFA] mode=NONE, 全局关闭 MFA，本次不要求 TOTP");
             return false;
         }
 
         // 未绑定 / 未激活：无 TOTP 可用，当前会话不要求，但上层可以引导用户去绑定
         if (!totpBound || !totpActivated) {
+            logger.debug("[MFA] 用户未绑定或未激活 TOTP (bound={}, activated={})，本次不要求 TOTP", totpBound, totpActivated);
             return false;
         }
 
         // REQUIRED：只要用户有已激活的 TOTP，本次会话必须走 TOTP
         if (mfaProperties.isRequired()) {
+            logger.debug("[MFA] mode=REQUIRED，用户已绑定且激活 TOTP，本次必须要求 TOTP");
             return true;
         }
 
@@ -112,6 +119,7 @@ public class SecurityServiceImpl implements SecurityService {
         // 这里默认“已绑定且已激活时，本次会话要求 TOTP”，
         // 后续可以在此增加风控策略（设备指纹、风险评分等）决定是否强制本次会话走 TOTP。
         if (mfaProperties.isRecommended()) {
+            logger.debug("[MFA] mode=OPTIONAL，用户已绑定且激活 TOTP，本次默认要求 TOTP");
             return true;
         }
 

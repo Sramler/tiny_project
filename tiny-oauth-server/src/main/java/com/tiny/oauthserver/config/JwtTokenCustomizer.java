@@ -113,8 +113,13 @@ public class JwtTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingCont
      * - principal.getPrincipal() 返回的是 username（字符串）
      * - SecurityUser 对象存储在 principal.getDetails() 中
      */
-    private void customizeAccessToken(JwtEncodingContext context, Authentication principal) {
+        private void customizeAccessToken(JwtEncodingContext context, Authentication principal) {
         var claims = context.getClaims();
+
+            if (principal == null) {
+                log.warn("[JwtTokenCustomizer] Access Token - principal 为 null，无法计算自定义 claims");
+                return;
+            }
         
         // ========== 详细日志分析 Authentication 结构 ==========
         log.debug("[JwtTokenCustomizer] Access Token - 开始分析 Authentication 结构");
@@ -208,10 +213,11 @@ public class JwtTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingCont
         }
         
         // 添加认证方法引用（amr）- 企业级字段
-        List<String> amr = getAuthenticationMethods(principal);
-        if (!amr.isEmpty()) {
-            claims.claim("amr", amr);
-        }
+            List<String> amr = getAuthenticationMethods(principal);
+            if (!amr.isEmpty()) {
+                claims.claim("amr", amr);
+                log.debug("[JwtTokenCustomizer] Access Token - 计算 amr: {}", amr);
+            }
     }
 
     /**
@@ -347,10 +353,11 @@ public class JwtTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingCont
         }
         
         // 添加认证方法引用（amr）
-        List<String> amr = getAuthenticationMethods(principal);
-        if (!amr.isEmpty()) {
-            claims.claim("amr", amr);
-        }
+            List<String> amr = getAuthenticationMethods(principal);
+            if (!amr.isEmpty()) {
+                claims.claim("amr", amr);
+                log.debug("[JwtTokenCustomizer] ID Token - 计算 amr: {}", amr);
+            }
         
         // 查询完整的 User 信息以获取 email、phone、nickname 等字段
         if (username != null && userRepository != null) {
@@ -436,9 +443,21 @@ public class JwtTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingCont
      */
     private List<String> getAuthenticationMethods(Authentication principal) {
         List<String> amr = new ArrayList<>();
+        if (principal == null) {
+            log.debug("[JwtTokenCustomizer] getAuthenticationMethods - principal 为 null, 返回空 amr");
+            return amr;
+        }
+        log.debug("[JwtTokenCustomizer] getAuthenticationMethods - principalClass={}, authenticated={}",
+                principal.getClass().getName(), principal.isAuthenticated());
         
         // 如果是 MultiFactorAuthenticationToken，从 completedFactors 获取
         if (principal instanceof MultiFactorAuthenticationToken mfaToken) {
+            try {
+                log.debug("[JwtTokenCustomizer] getAuthenticationMethods - principal 是 MultiFactorAuthenticationToken, completedFactors={}",
+                        mfaToken.getCompletedFactors());
+            } catch (Exception ignored) {
+                // 日志失败不影响后续逻辑
+            }
             mfaToken.getCompletedFactors().forEach(factor -> {
                 String method = mapFactorToAmr(factor.name());
                 if (method != null && !amr.contains(method)) {

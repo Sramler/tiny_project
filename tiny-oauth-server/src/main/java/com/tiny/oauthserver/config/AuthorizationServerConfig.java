@@ -5,6 +5,7 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 import com.tiny.oauthserver.util.PemUtils;
+import com.tiny.oauthserver.sys.security.MfaAuthorizationEndpointFilter;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -51,13 +52,17 @@ public class AuthorizationServerConfig {
      */
     @Bean
     @Order(1)
-    public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http)
+    public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http,
+                                                                     MfaAuthorizationEndpointFilter mfaAuthorizationEndpointFilter)
             throws Exception {
         OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
         http.getConfigurer(OAuth2AuthorizationServerConfigurer.class)
                 //开启OpenID Connect 1.0（其中oidc为OpenID Connect的缩写）。
                 .oidc(Customizer.withDefaults());
         http
+                // 在授权端点前增加 MFA 拦截，确保在所有必需因子完成后才进入授权码流程
+                .addFilterBefore(mfaAuthorizationEndpointFilter,
+                        org.springframework.security.oauth2.server.authorization.web.OAuth2AuthorizationEndpointFilter.class)
                 //将需要认证的请求，重定向到login页面行登录认证。
                 // 注意：只对 HTML 请求重定向到登录页，API 请求（如 /oauth2/token）返回 JSON 错误
                 .exceptionHandling((exceptions) -> exceptions
@@ -257,6 +262,24 @@ public class AuthorizationServerConfig {
     @Bean
     public JwtEncoder jwtEncoder(JWKSource<SecurityContext> jwkSource) {
         return new NimbusJwtEncoder(jwkSource);
+    }
+
+    /**
+     * MFA 授权端点过滤器 Bean。
+     * <p>
+     * 仅拦截 /oauth2/authorize：
+     * <ul>
+     *   <li>根据 security.mfa.mode 和用户 TOTP 绑定状态判断本次是否必须 TOTP</li>
+     *   <li>如果需要 TOTP 且当前认证未完成 TOTP，则重定向到 TOTP 验证页</li>
+     *   <li>确保发出的 Access/ID Token 的 amr 字段能准确反映 PASSWORD/TOTP 等因子</li>
+     * </ul>
+     */
+    @Bean
+    public MfaAuthorizationEndpointFilter mfaAuthorizationEndpointFilter(
+            com.tiny.oauthserver.sys.service.SecurityService securityService,
+            com.tiny.oauthserver.sys.repository.UserRepository userRepository,
+            FrontendProperties frontendProperties) {
+        return new MfaAuthorizationEndpointFilter(securityService, userRepository, frontendProperties);
     }
 
 }

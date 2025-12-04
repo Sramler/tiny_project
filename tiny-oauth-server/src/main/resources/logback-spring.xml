@@ -63,7 +63,8 @@
     <!-- 开发环境使用，包含 traceId/requestId 等上下文 -->
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} traceId=%X{traceId} requestId=%X{requestId} userId=%X{userId} - %msg%n</pattern>
+            <!-- 控制台：时间用短格式，logger 截断到 36，便于开发查看 -->
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} traceId=%X{traceId} requestId=%X{requestId} userId=%X{userId} ip=%X{clientIp} - %msg%n</pattern>
             <charset>UTF-8</charset>
         </encoder>
     </appender>
@@ -79,7 +80,8 @@
             <totalSizeCap>10GB</totalSizeCap>
         </rollingPolicy>
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} traceId=%X{traceId} requestId=%X{requestId} userId=%X{userId} - %msg%n</pattern>
+            <!-- 业务日志文件：logger 不截断，便于精确检索 -->
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger traceId=%X{traceId} requestId=%X{requestId} userId=%X{userId} ip=%X{clientIp} - %msg%n</pattern>
             <charset>UTF-8</charset>
         </encoder>
     </appender>
@@ -99,7 +101,8 @@
             <totalSizeCap>20GB</totalSizeCap>
         </rollingPolicy>
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} traceId=%X{traceId} requestId=%X{requestId} userId=%X{userId} - %msg%n%ex</pattern>
+            <!-- 错误日志文件：同样使用完整 logger 名称 -->
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger traceId=%X{traceId} requestId=%X{requestId} userId=%X{userId} ip=%X{clientIp} - %msg%n%ex</pattern>
             <charset>UTF-8</charset>
         </encoder>
     </appender>
@@ -178,11 +181,11 @@
     
     <!-- 默认环境：使用异步写入（仅在未匹配到 dev 或 prod profile 时生效） -->
     <springProfile name="!dev,!prod">
-        <root level="INFO">
-            <appender-ref ref="STDOUT"/>
-            <appender-ref ref="ASYNC_FILE"/>
-            <appender-ref ref="ASYNC_ERROR_FILE"/>
-        </root>
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="ASYNC_FILE"/>
+        <appender-ref ref="ASYNC_ERROR_FILE"/>
+    </root>
     </springProfile>
 
 </configuration>

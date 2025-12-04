@@ -110,7 +110,7 @@ TOTP (Time-Based One-Time Password) 是基于时间的一次性密码算法，�
 
 ```plantuml
 @startuml
-title MFA + Session + OIDC (PKCE) – Full Flow
+title MFA + Session + OIDC (PKCE) – Full Flow（思路 A：先完成 MFA，再发 Token）
 
 actor User
 participant "Browser (Vue)" as Browser
@@ -148,9 +148,10 @@ Filters --> Browser: 跳转 /oauth2/authorize
 
 == Phase 5: OIDC Authorization ==
 Browser -> Filters: GET /oauth2/authorize (PKCE)
-Filters -> Session: loadContext(FULLY_AUTH)
+Filters -> Session: loadContext(FULLY_AUTH)  # 必须是 FULLY_AUTH（PASSWORD+TOTP）
 Session --> Filters: OK
-Filters -> Auth: 创建 authorization_code
+Filters -> Auth: MfaAuthorizationEndpointFilter 检查 requireTotp/已完成因子
+Filters -> Auth: 创建 authorization_code（仅 FULLY_AUTH 时）
 Filters --> Browser: 302 → redirect_uri?code=XYZ
 
 == Phase 6: Token Exchange ==
@@ -204,10 +205,14 @@ RS --> Browser: Access Granted
    - 用户提交 TOTP，后台完成校验。
 4. **升级为 FULLY_AUTH**
    - 调用 `promoteToFullyAuthenticated()`：创建 `PASSWORD+TOTP` 的 token，`changeSessionId()`，保存新 `SecurityContext`。
-5. **发起 OIDC 授权**
-   - 浏览器访问 `/oauth2/authorize`，服务器加载 FULLY_AUTH Session，生成 `authorization_code` 并 302 回调。
+5. **发起 OIDC 授权（受 MfaAuthorizationEndpointFilter 保护）**
+   - 浏览器访问 `/oauth2/authorize`。
+   - 服务器从 Session 加载 FULLY_AUTH（`completedFactors` 至少包含 `PASSWORD` + `TOTP`），由 `MfaAuthorizationEndpointFilter` 校验：
+     - 如果本次会话需要 TOTP 但未完成，则拦截并重定向到 `/self/security/totp-verify`，**不生成授权码**；
+     - 只有当必需因子全部完成时，才真正生成 `authorization_code` 并 302 回调到 `redirect_uri?code=...`。
 6. **Code 换 Token**
    - 浏览器 `POST /oauth2/token`，校验 code+PKCE 后返回 Access/ID/Refresh Token。
+   - Token 自定义器 `JwtTokenCustomizer` 根据授权快照中的 `MultiFactorAuthenticationToken.completedFactors` 计算 `amr`，例如 `["password","totp"]`。
 7. **调用业务 API**
    - 携带 Access Token 访问 Resource Server，验证通过后返回数据。
 8. **Token 过期 → Refresh**
@@ -250,11 +255,15 @@ Filters 调用 promoteToFullyAuthenticated()
 
 Phase 5  发起 OIDC 授权
 Browser GET /oauth2/authorize (PKCE)
-Filters loadContext(FULLY_AUTH) → 创建 authorization_code → 302 redirect_uri?code=XYZ
+Filters:
+  • loadContext(FULLY_AUTH)  # 必须是 PASSWORD+TOTP 的 FULLY_AUTH
+  • MfaAuthorizationEndpointFilter 检查 requireTotp / completedFactors
+  • 仅在 FULLY_AUTH 且满足本次会话要求时，创建 authorization_code → 302 redirect_uri?code=XYZ
 
 Phase 6  Code 换 Token
 Browser POST /oauth2/token (code + verifier)
 授权服务器校验 code + PKCE，返回 Access/ID/Refresh Token
+JwtTokenCustomizer 基于授权快照中的 MultiFactorAuthenticationToken.completedFactors 计算 amr（如 ["password","totp"]）
 
 Phase 7  调用业务 API
 Browser 携带 Bearer access_token 访问 Resource Server，验证通过后返回数据
@@ -269,7 +278,6 @@ Phase 10 Step-up TOTP
 Browser 提交 Step-up TOTP → Filters 校验 → 再次 promoteToFullyAuthenticated()
 → saveContext(FULLY_AUTH step-up) → 敏感 API 调用放行
 ```
-
 
 ### 核心流程说明
 

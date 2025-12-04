@@ -15,14 +15,21 @@ frontend:
 logging:
   # 日志文件路径（开发环境可以使用相对路径）
   file:
-    path: logs
+    path: ./logs
   # 异步日志配置（开发环境使用较小的队列，便于快速发现问题）
   async:
     queue-size: 256 # 队列大小：开发环境较小，便于快速响应
     discard-threshold: 0 # 不丢弃日志：开发环境需要完整日志
   # 日志级别：开发环境可以更详细
   level:
-    root: INFO
+    root: DEBUG
+    # 关闭或压低 RMI/JMX 相关日志
+    sun.rmi.transport.tcp: WARN
+    sun.rmi.loader: WARN
+    javax.management.remote.rmi: WARN
+    # Hibernate Validator 启动噪音
+    #org.hibernate.validator: WARN
+    #org.hibernate.validator.internal: WARN
     com.tiny.oauthserver: DEBUG # 业务代码 DEBUG 级别，便于调试
     com.tiny.oauthserver.sys.security.MultiAuthenticationProvider: DEBUG
     com.tiny.oauthserver.sys.security.UserDetailsServiceImpl: DEBUG

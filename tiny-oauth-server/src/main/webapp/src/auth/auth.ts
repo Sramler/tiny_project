@@ -5,6 +5,7 @@ import { authRuntimeConfig } from './config'
 import type { User } from 'oidc-client-ts'
 import { jwtVerify, createRemoteJWKSet, type JWKS } from 'jose'
 import { logger, persistentLogger } from '@/utils/logger'
+import { getOrCreateTraceId } from '@/utils/traceId'
 
 const OIDC_TRACE_ENABLED =
   import.meta.env.VITE_ENABLE_OIDC_TRACE === 'true' || !import.meta.env.PROD
@@ -121,13 +122,18 @@ export const login = async () => {
   }
 
   try {
-    oidcTrace('login.redirect', { redirect_uri: settings.redirect_uri })
+    const traceId = getOrCreateTraceId()
+    oidcTrace('login.redirect', { redirect_uri: settings.redirect_uri, trace_id: traceId })
     loginInProgress = true
     lastLoginAttempt = now
 
     await userManager.signinRedirect({
       state: {
         returnUrl: window.location.pathname + window.location.search,
+        trace_id: traceId,
+      },
+      extraQueryParams: {
+        trace_id: traceId,
       },
     })
   } catch (error) {
@@ -142,9 +148,14 @@ export const logout = async () => {
   try {
     const currentUser = await userManager.getUser()
     if (currentUser && currentUser.id_token) {
+      // 为注销流程也绑定当前会话的 traceId，方便串起整条链路
+      const traceId = getOrCreateTraceId()
+      const postLogoutUrl = new URL(settings.post_logout_redirect_uri)
+      postLogoutUrl.searchParams.set('trace_id', traceId)
+
       await userManager.signoutRedirect({
         id_token_hint: currentUser.id_token,
-        post_logout_redirect_uri: settings.post_logout_redirect_uri,
+        post_logout_redirect_uri: postLogoutUrl.toString(),
       })
       return
     }
@@ -155,7 +166,11 @@ export const logout = async () => {
   await userManager.removeUser()
   user.value = null
   loginInProgress = false
-  window.location.href = settings.post_logout_redirect_uri
+  // 本地回退逻辑也带上 trace_id，保持一致
+  const traceId = getOrCreateTraceId()
+  const fallbackUrl = new URL(settings.post_logout_redirect_uri)
+  fallbackUrl.searchParams.set('trace_id', traceId)
+  window.location.href = fallbackUrl.toString()
 }
 
 let renewInProgress = false

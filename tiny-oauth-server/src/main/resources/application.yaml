@@ -179,33 +179,6 @@ security:
   mfa:
     mode: OPTIONAL # MFA模式: NONE(完全禁用), OPTIONAL(推荐可跳过), REQUIRED(强制必须绑定)
 
-# 日志配置（默认配置，可被 dev/prod 环境覆盖）
-logging:
-  file:
-    path: logs # 默认使用相对路径
-  async:
-    queue-size: 512 # 默认队列大小
-    discard-threshold: 0 # 默认不丢弃日志
-  level:
-    root: INFO
-    com.tiny.oauthserver: INFO
-    org.springframework: WARN
-    org.springframework.security: WARN
-    org.hibernate.SQL: INFO
-    org.hibernate.type.descriptor.sql.BasicBinder: WARN
-
-# HTTP 请求日志配置（默认配置，可被 dev/prod 环境覆盖）
-http:
-  request-log:
-    enabled: true
-    include-request-body: false # 默认不记录请求体，避免敏感信息泄露
-    include-response-body: false # 默认不记录响应体，避免敏感信息泄露
-    max-body-length: 5120 # 默认 5KB
-    excluded-path-prefixes:
-      - /actuator
-      - /dist
-      - /static
-      - /webjars
 # 前端页面配置
 # 默认配置为生产环境（forward 到打包后的静态文件）
 # 开发环境请使用 application-dev.yaml 覆盖配置

@@ -6,6 +6,7 @@
 import { UserManager, WebStorageStateStore } from 'oidc-client-ts'
 import type { UserManagerSettings } from 'oidc-client-ts'
 import { logger } from '@/utils/logger'
+import { addTraceIdToFetchOptions } from '@/utils/traceId'
 
 type Env = {
   VITE_OIDC_AUTHORITY?: string
@@ -78,6 +79,54 @@ const scopes = resolveEnvValue(env.VITE_OIDC_SCOPES, 'openid profile offline_acc
 })
 
 /**
+ * 为 oidc-client-ts 使用的 fetch 安装 TRACE_ID 支持
+ *
+ * 说明：
+ * - oidc-client-ts 内部通过全局 fetch 访问：
+ *   - /.well-known/openid-configuration
+ *   - /oauth2/authorize
+ *   - /connect/logout
+ *   - /userinfo 等端点
+ * - 这些请求不会经过我们封装的 fetchWithTraceId/axios 拦截器
+ * - 这里通过包装 window.fetch，在访问 authority 域名下的 OIDC 相关路径时自动注入 X-Trace-Id / X-Request-Id
+ */
+function installOidcFetchWithTraceId(oidcAuthority: string): void {
+  if (typeof window === 'undefined' || typeof window.fetch !== 'function') {
+    return
+  }
+
+  // 避免重复安装
+  const anyWindow = window as any
+  if (anyWindow.__oidcTraceFetchInstalled) {
+    return
+  }
+  anyWindow.__oidcTraceFetchInstalled = true
+
+  const originalFetch = window.fetch.bind(window)
+
+  window.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    try {
+      const urlString =
+        typeof input === 'string' || input instanceof URL ? input.toString() : input.url
+
+      // 仅对指向同一 authority 的请求注入 traceId，避免影响其他第三方域名
+      // 例如 authority = http://localhost:9000
+      const isSameAuthority = urlString.startsWith(oidcAuthority)
+
+      if (isSameAuthority) {
+        const optionsWithTrace = addTraceIdToFetchOptions(init ?? {})
+        return originalFetch(input, optionsWithTrace)
+      }
+    } catch (e) {
+      // 失败时退回原始 fetch，避免影响正常功能
+      logger.warn('[OIDC][trace] 安装 OIDC fetch traceId 包装时出错，回退到原始 fetch', e)
+    }
+
+    return originalFetch(input, init as any)
+  }
+}
+
+/**
  * 根据 `VITE_OIDC_STORAGE` 选择 localStorage 或 sessionStorage。
  * SSR/单测场景下 window 不存在时自动跳过，避免构建失败。
  */
@@ -110,6 +159,9 @@ const baseSettings: UserManagerSettings = {
 if (userStore) {
   baseSettings.userStore = userStore
 }
+
+// 在创建 UserManager 之前安装带 TRACE_ID 的 fetch 包装
+installOidcFetchWithTraceId(authority)
 
 export type OidcSettings = Readonly<UserManagerSettings>
 

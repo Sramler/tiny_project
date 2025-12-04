@@ -20,22 +20,58 @@ export function generateRequestId(): string {
   return generateTraceId().substring(0, 16)
 }
 
+const TRACE_STORAGE_KEY = 'app_trace_id'
+let inMemoryTraceId: string | null = null
+
+const safeSessionStorage = {
+  get(): string | null {
+    if (typeof sessionStorage === 'undefined') {
+      return inMemoryTraceId
+    }
+    try {
+      const value = sessionStorage.getItem(TRACE_STORAGE_KEY)
+      return value ?? inMemoryTraceId
+    } catch (error) {
+      console.warn('[TRACE_ID] 访问 sessionStorage 失败，使用内存 traceId 兜底', error)
+      return inMemoryTraceId
+    }
+  },
+  set(value: string): void {
+    inMemoryTraceId = value
+    if (typeof sessionStorage === 'undefined') {
+      return
+    }
+    try {
+      sessionStorage.setItem(TRACE_STORAGE_KEY, value)
+    } catch (error) {
+      console.warn('[TRACE_ID] 写入 sessionStorage 失败，仅保存到内存', error)
+    }
+  },
+  remove(): void {
+    inMemoryTraceId = null
+    if (typeof sessionStorage === 'undefined') {
+      return
+    }
+    try {
+      sessionStorage.removeItem(TRACE_STORAGE_KEY)
+    } catch (error) {
+      console.warn('[TRACE_ID] 移除 sessionStorage 失败，已清理内存 traceId', error)
+    }
+  },
+}
+
 /**
  * 获取当前会话的 TRACE_ID
  * 如果不存在则生成一个新的
  */
 export function getOrCreateTraceId(): string {
-  const storageKey = 'app_trace_id'
-  
-  // 尝试从 sessionStorage 获取（同一浏览器标签页/窗口会话中共享）
-  let traceId = sessionStorage.getItem(storageKey)
-  
+  let traceId = safeSessionStorage.get()
+
   if (!traceId) {
-    // 如果不存在，生成一个新的
     traceId = generateTraceId()
-    sessionStorage.setItem(storageKey, traceId)
+    safeSessionStorage.set(traceId)
   }
-  
+
   return traceId
 }
 
@@ -43,9 +79,8 @@ export function getOrCreateTraceId(): string {
  * 创建新的 TRACE_ID 并替换会话中的旧值
  */
 export function createNewTraceId(): string {
-  const storageKey = 'app_trace_id'
   const traceId = generateTraceId()
-  sessionStorage.setItem(storageKey, traceId)
+  safeSessionStorage.set(traceId)
   return traceId
 }
 
@@ -53,16 +88,14 @@ export function createNewTraceId(): string {
  * 清除当前会话的 TRACE_ID
  */
 export function clearTraceId(): void {
-  const storageKey = 'app_trace_id'
-  sessionStorage.removeItem(storageKey)
+  safeSessionStorage.remove()
 }
 
 /**
  * 获取当前的 TRACE_ID（不创建新的）
  */
 export function getCurrentTraceId(): string | null {
-  const storageKey = 'app_trace_id'
-  return sessionStorage.getItem(storageKey)
+  return safeSessionStorage.get()
 }
 
 /**
@@ -73,12 +106,12 @@ export function getCurrentTraceId(): string | null {
 export function addTraceIdToFetchOptions(options: RequestInit = {}): RequestInit {
   const traceId = getOrCreateTraceId()
   const requestId = generateRequestId()
-  
+
   // 处理 headers，支持 Headers 对象或普通对象
   const headers = new Headers(options.headers)
   headers.set('X-Trace-Id', traceId)
   headers.set('X-Request-Id', requestId)
-  
+
   return {
     ...options,
     headers,
@@ -103,7 +136,7 @@ async function handleUnauthorized(): Promise<void> {
     }
 
     isRedirectingTo401 = true
-    
+
     // 记录持久化日志（避免302跳转清空控制台）
     const { persistentLogger } = await import('@/utils/logger')
     persistentLogger.warn('[401] 检测到未授权，准备跳转到 401 页面', {
@@ -111,23 +144,28 @@ async function handleUnauthorized(): Promise<void> {
       timestamp: new Date().toISOString(),
       userAgent: navigator.userAgent,
     })
-    
+
     console.log('[401] 检测到未授权，准备跳转到 401 页面，当前路径:', currentPath)
-    
+
     // ⚠️ 重要：先跳转到 401 页面，再处理 logout
     // 因为 logout() 会触发 window.location.href，会覆盖我们的跳转
     // 所以我们先跳转，然后在 401 页面中再处理 logout
-    
+
     // 延迟跳转，给时间查看日志（开发环境）
     if (import.meta.env.DEV) {
-      await new Promise(resolve => setTimeout(resolve, 100))
+      await new Promise((resolve) => setTimeout(resolve, 100))
     }
-    
+
     // 使用 window.location 跳转，确保页面完全刷新并显示 401 页面
     // 这样可以避免路由守卫的干扰，确保 401 页面能正确显示
     const targetUrl = '/exception/401'
-    console.log('[401] 准备跳转到 401 页面，当前 URL:', window.location.href, '目标 URL:', targetUrl)
-    
+    console.log(
+      '[401] 准备跳转到 401 页面，当前 URL:',
+      window.location.href,
+      '目标 URL:',
+      targetUrl,
+    )
+
     // 记录跳转前的状态
     persistentLogger.debug('[401] 跳转前状态', {
       currentPath: window.location.pathname,
@@ -135,12 +173,12 @@ async function handleUnauthorized(): Promise<void> {
       targetUrl,
       timestamp: new Date().toISOString(),
     })
-    
+
     try {
       // 方法1: 使用 window.location.href（推荐，会触发完整页面刷新）
       window.location.href = targetUrl
       console.log('[401] ✅ 已执行 window.location.href =', targetUrl)
-      
+
       // 设置一个检查点，如果 500ms 后还在当前页面，尝试其他方法
       const checkInterval = setInterval(() => {
         const currentPath = window.location.pathname
@@ -166,21 +204,20 @@ async function handleUnauthorized(): Promise<void> {
           }
         }
       }, 100)
-      
+
       // 5秒后清除检查（避免内存泄漏）
       setTimeout(() => clearInterval(checkInterval), 5000)
-      
     } catch (error) {
       console.error('[401] ❌ window.location.href 失败:', error)
       persistentLogger.error('[401] 跳转失败', error)
-      
+
       // 备选方案1: 使用 replace
       try {
         window.location.replace(targetUrl)
         console.log('[401] ✅ 已执行 window.location.replace =', targetUrl)
       } catch (replaceError) {
         console.error('[401] ❌ replace 也失败:', replaceError)
-        
+
         // 备选方案2: 使用 router（可能被路由守卫拦截，但至少尝试）
         import('@/router').then(({ default: router }) => {
           router.replace(targetUrl).catch((routerError) => {
@@ -221,22 +258,27 @@ export async function fetchWithTraceId(
       signal: controller.signal,
     })
 
-      // 统一处理 401 未授权错误（后端 Session 丢失）
-      // 注意：Spring Security 可能返回 302 重定向到登录页，这表示未认证
-      // fetch 默认不会自动跟随重定向，所以 response.status 会是 302
-      // 我们需要检查 response.status === 302 或 response.redirected === true
-      const isUnauthorized = response.status === 401 || 
-                            (response.status === 302 && response.redirected) ||
-                            (response.status === 302 && response.url.includes('/login'))
-      
-      if (isUnauthorized && !skipAuthError) {
-        const statusCode = response.status
-        const redirectUrl = response.url
-        console.warn(`检测到 ${statusCode} ${statusCode === 302 ? '重定向' : '未授权'}，后端 Session 可能已丢失，跳转到 401 页面`)
-        
-        // 记录持久化日志（避免302跳转清空控制台）
-        const { persistentLogger } = await import('@/utils/logger')
-        persistentLogger.warn(`[${statusCode}] fetchWithTraceId 检测到未授权/重定向`, {
+    // 统一处理 401 未授权错误（后端 Session 丢失）
+    // 注意：Spring Security 可能返回 302 重定向到登录页，这表示未认证
+    // fetch 默认不会自动跟随重定向，所以 response.status 会是 302
+    // 我们需要检查 response.status === 302 或 response.redirected === true
+    const isUnauthorized =
+      response.status === 401 ||
+      (response.status === 302 && response.redirected) ||
+      (response.status === 302 && response.url.includes('/login'))
+
+    if (isUnauthorized && !skipAuthError) {
+      const statusCode = response.status
+      const redirectUrl = response.url
+      console.warn(
+        `检测到 ${statusCode} ${statusCode === 302 ? '重定向' : '未授权'}，后端 Session 可能已丢失，跳转到 401 页面`,
+      )
+
+      // 记录持久化日志（避免302跳转清空控制台）
+      const { persistentLogger } = await import('@/utils/logger')
+      persistentLogger.warn(
+        `[${statusCode}] fetchWithTraceId 检测到未授权/重定向`,
+        {
           url,
           redirectUrl,
           method: options.method || 'GET',
@@ -244,20 +286,23 @@ export async function fetchWithTraceId(
           status: statusCode,
           redirected: response.redirected,
           timestamp: new Date().toISOString(),
-        }, url, statusCode)
-        
-        // 先执行跳转，再抛出错误
-        // 注意：handleUnauthorized 会执行 window.location.href，这会触发页面跳转
-        // 但为了确保跳转执行，我们需要等待一小段时间
-        await handleUnauthorized()
-        
-        // 给跳转一些时间执行（开发环境延迟更长以便调试）
-        const delay = import.meta.env.DEV ? 200 : 50
-        await new Promise(resolve => setTimeout(resolve, delay))
-        
-        // 抛出错误，让调用方知道请求失败
-        throw new Error('未授权，请重新登录')
-      }
+        },
+        url,
+        statusCode,
+      )
+
+      // 先执行跳转，再抛出错误
+      // 注意：handleUnauthorized 会执行 window.location.href，这会触发页面跳转
+      // 但为了确保跳转执行，我们需要等待一小段时间
+      await handleUnauthorized()
+
+      // 给跳转一些时间执行（开发环境延迟更长以便调试）
+      const delay = import.meta.env.DEV ? 200 : 50
+      await new Promise((resolve) => setTimeout(resolve, delay))
+
+      // 抛出错误，让调用方知道请求失败
+      throw new Error('未授权，请重新登录')
+    }
 
     return response
   } catch (error) {

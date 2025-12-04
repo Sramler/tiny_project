@@ -37,11 +37,19 @@ public class CustomLoginFailureHandler implements AuthenticationFailureHandler {
     @Override
     public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response,
                                         AuthenticationException exception) throws IOException, ServletException {
-        
+
         String username = request.getParameter("username");
         String authProvider = request.getParameter("authenticationProvider");
         String authType = request.getParameter("authenticationType");
-        
+
+        if (username != null && !username.isBlank()) {
+            logger.info("用户 {} 登录失败，provider={}, type={}, reason={}",
+                    username,
+                    authProvider != null ? authProvider : "LOCAL",
+                    authType != null ? authType : "PASSWORD",
+                    exception.getMessage());
+        }
+
         if (username != null && !username.isBlank()) {
             try {
                 // 尝试查找用户并记录失败登录信息

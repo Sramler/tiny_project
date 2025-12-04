@@ -91,7 +91,7 @@ public class CustomLoginSuccessHandler implements AuthenticationSuccessHandler {
 
         // 1️⃣ 完全关闭 MFA，直接跳转
         if (disableMfa) {
-            logger.debug("用户 {} 已关闭 MFA，直接跳转 {}", user.getUsername(), intendedUrl);
+            logger.info("用户 {} 登录成功（MFA 已关闭），将跳转 {}", user.getUsername(), intendedUrl);
             // 记录登录IP和登录时间
             recordLoginInfo(user, request);
             // 记录登录成功审计
@@ -135,6 +135,7 @@ public class CustomLoginSuccessHandler implements AuthenticationSuccessHandler {
         recordLoginInfo(user, request);
         // 记录登录成功审计
         auditService.recordLoginSuccess(user.getUsername(), user.getId(), authProvider, authFactor, request);
+        logger.info("用户 {} 登录成功（MFA 校验完成或不需要 MFA），将跳转 {}", user.getUsername(), intendedUrl);
         
         sessionManager.promoteToFullyAuthenticated(user, request, response);
         

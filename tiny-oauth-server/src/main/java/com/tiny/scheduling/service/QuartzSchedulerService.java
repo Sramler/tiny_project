@@ -5,6 +5,7 @@ import com.tiny.scheduling.job.DagExecutionJob;
 import org.quartz.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,9 +19,11 @@ public class QuartzSchedulerService {
     private static final Logger logger = LoggerFactory.getLogger(QuartzSchedulerService.class);
 
     private final Scheduler scheduler;
+    private final Environment environment;
 
-    public QuartzSchedulerService(Scheduler scheduler) {
+    public QuartzSchedulerService(Scheduler scheduler, Environment environment) {
         this.scheduler = scheduler;
+        this.environment = environment;
     }
 
     /**
@@ -154,6 +157,131 @@ public class QuartzSchedulerService {
                     .build();
             scheduler.rescheduleJob(triggerKeyObj, newTrigger);
             logger.info("更新 DAG Cron, dagId: {}, cron: {}", dagId, cronExpression);
+        }
+    }
+
+    /**
+     * 检查 Quartz 是否以集群模式运行
+     * 
+     * @return 集群状态信息
+     */
+    public ClusterStatusInfo getClusterStatus() {
+        try {
+            SchedulerMetaData metaData = scheduler.getMetaData();
+            String schedulerName = metaData.getSchedulerName();
+            String schedulerInstanceId = metaData.getSchedulerInstanceId();
+            int numberOfJobsExecuted = metaData.getNumberOfJobsExecuted();
+            
+            // 从配置中读取集群状态
+            // 优先从 Spring 环境配置读取，如果不存在则尝试从 Scheduler 上下文获取
+            boolean isClustered = false;
+            try {
+                String clusteredProperty = environment.getProperty("spring.quartz.properties.org.quartz.jobStore.isClustered");
+                if (clusteredProperty != null) {
+                    isClustered = Boolean.parseBoolean(clusteredProperty);
+                    } else {
+                        // 尝试从 Scheduler 上下文获取
+                        Object clusteredObj = scheduler.getContext().get("org.quartz.jobStore.isClustered");
+                        if (clusteredObj != null) {
+                            isClustered = Boolean.parseBoolean(clusteredObj.toString());
+                        } else {
+                            logger.debug("无法从配置中获取集群状态，使用默认值 false");
+                        }
+                    }
+            } catch (Exception e) {
+                logger.warn("读取集群配置失败，默认使用 false", e);
+            }
+            
+            // 获取启动时间
+            long schedulerStarted = 0;
+            try {
+                if (metaData.getRunningSince() != null) {
+                    schedulerStarted = metaData.getRunningSince().getTime();
+                }
+            } catch (Exception e) {
+                logger.debug("无法获取调度器启动时间", e);
+            }
+            
+            return new ClusterStatusInfo(
+                    schedulerName,
+                    schedulerInstanceId,
+                    isClustered,
+                    numberOfJobsExecuted,
+                    schedulerStarted,
+                    scheduler.isStarted(),
+                    scheduler.isInStandbyMode()
+            );
+        } catch (SchedulerException e) {
+            logger.error("获取 Quartz 集群状态失败", e);
+            return new ClusterStatusInfo(
+                    "UNKNOWN",
+                    "UNKNOWN",
+                    false,
+                    0,
+                    0,
+                    false,
+                    false
+            );
+        }
+    }
+
+    /**
+     * Quartz 集群状态信息
+     */
+    public static class ClusterStatusInfo {
+        private final String schedulerName;
+        private final String schedulerInstanceId;
+        private final boolean isClustered;
+        private final int numberOfJobsExecuted;
+        private final long schedulerStarted;
+        private final boolean isStarted;
+        private final boolean isInStandbyMode;
+
+        public ClusterStatusInfo(String schedulerName, String schedulerInstanceId, boolean isClustered,
+                                 int numberOfJobsExecuted, long schedulerStarted, boolean isStarted, boolean isInStandbyMode) {
+            this.schedulerName = schedulerName;
+            this.schedulerInstanceId = schedulerInstanceId;
+            this.isClustered = isClustered;
+            this.numberOfJobsExecuted = numberOfJobsExecuted;
+            this.schedulerStarted = schedulerStarted;
+            this.isStarted = isStarted;
+            this.isInStandbyMode = isInStandbyMode;
+        }
+
+        public String getSchedulerName() {
+            return schedulerName;
+        }
+
+        public String getSchedulerInstanceId() {
+            return schedulerInstanceId;
+        }
+
+        public boolean isClustered() {
+            return isClustered;
+        }
+
+        public int getNumberOfJobsExecuted() {
+            return numberOfJobsExecuted;
+        }
+
+        public long getSchedulerStarted() {
+            return schedulerStarted;
+        }
+
+        public boolean isStarted() {
+            return isStarted;
+        }
+
+        public boolean isInStandbyMode() {
+            return isInStandbyMode;
+        }
+
+        @Override
+        public String toString() {
+            return String.format(
+                    "Quartz Scheduler Status: name=%s, instanceId=%s, clustered=%s, jobsExecuted=%d, started=%s, standby=%s",
+                    schedulerName, schedulerInstanceId, isClustered, numberOfJobsExecuted, isStarted, isInStandbyMode
+            );
         }
     }
 }

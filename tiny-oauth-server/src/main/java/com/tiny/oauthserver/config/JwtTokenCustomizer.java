@@ -113,9 +113,9 @@ public class JwtTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingCont
      * - principal.getPrincipal() 返回的是 username（字符串）
      * - SecurityUser 对象存储在 principal.getDetails() 中
      */
-        private void customizeAccessToken(JwtEncodingContext context, Authentication principal) {
+    private void customizeAccessToken(JwtEncodingContext context, Authentication principal) {
         var claims = context.getClaims();
-
+        
             if (principal == null) {
                 log.warn("[JwtTokenCustomizer] Access Token - principal 为 null，无法计算自定义 claims");
                 return;
@@ -213,11 +213,11 @@ public class JwtTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingCont
         }
         
         // 添加认证方法引用（amr）- 企业级字段
-            List<String> amr = getAuthenticationMethods(principal);
-            if (!amr.isEmpty()) {
-                claims.claim("amr", amr);
+        List<String> amr = getAuthenticationMethods(principal);
+        if (!amr.isEmpty()) {
+            claims.claim("amr", amr);
                 log.debug("[JwtTokenCustomizer] Access Token - 计算 amr: {}", amr);
-            }
+        }
     }
 
     /**
@@ -353,11 +353,11 @@ public class JwtTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingCont
         }
         
         // 添加认证方法引用（amr）
-            List<String> amr = getAuthenticationMethods(principal);
-            if (!amr.isEmpty()) {
-                claims.claim("amr", amr);
+        List<String> amr = getAuthenticationMethods(principal);
+        if (!amr.isEmpty()) {
+            claims.claim("amr", amr);
                 log.debug("[JwtTokenCustomizer] ID Token - 计算 amr: {}", amr);
-            }
+        }
         
         // 查询完整的 User 信息以获取 email、phone、nickname 等字段
         if (username != null && userRepository != null) {

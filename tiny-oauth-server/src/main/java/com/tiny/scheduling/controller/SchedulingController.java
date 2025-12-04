@@ -3,6 +3,7 @@ package com.tiny.scheduling.controller;
 import com.tiny.oauthserver.sys.model.PageResponse;
 import com.tiny.scheduling.dto.*;
 import com.tiny.scheduling.model.*;
+import com.tiny.scheduling.service.QuartzSchedulerService;
 import com.tiny.scheduling.service.SchedulingService;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -11,7 +12,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 企业级 DAG 调度控制器
@@ -21,9 +24,11 @@ import java.util.List;
 public class SchedulingController {
 
     private final SchedulingService schedulingService;
+    private final QuartzSchedulerService quartzSchedulerService;
 
-    public SchedulingController(SchedulingService schedulingService) {
+    public SchedulingController(SchedulingService schedulingService, QuartzSchedulerService quartzSchedulerService) {
         this.schedulingService = schedulingService;
+        this.quartzSchedulerService = quartzSchedulerService;
     }
 
     // ==================== TaskType - 任务类型 ====================
@@ -524,6 +529,30 @@ public class SchedulingController {
         return schedulingService.getTask(taskId)
                 .map(task -> ResponseEntity.ok(task.getParams() != null ? task.getParams() : "{}"))
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    // ==================== Quartz 集群状态 ====================
+
+    /**
+     * 获取 Quartz 调度器集群状态
+     * 用于确认当前 Quartz 是以集群模式还是单机模式运行
+     */
+    @GetMapping("/quartz/cluster-status")
+    public ResponseEntity<Map<String, Object>> getQuartzClusterStatus() {
+        QuartzSchedulerService.ClusterStatusInfo status = quartzSchedulerService.getClusterStatus();
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("schedulerName", status.getSchedulerName());
+        result.put("schedulerInstanceId", status.getSchedulerInstanceId());
+        result.put("isClustered", status.isClustered());
+        result.put("isStarted", status.isStarted());
+        result.put("isInStandbyMode", status.isInStandbyMode());
+        result.put("numberOfJobsExecuted", status.getNumberOfJobsExecuted());
+        result.put("schedulerStarted", status.getSchedulerStarted());
+        result.put("clusterMode", status.isClustered() ? "集群模式" : "单机模式");
+        result.put("status", status.isStarted() ? (status.isInStandbyMode() ? "待机" : "运行中") : "已停止");
+        
+        return ResponseEntity.ok(result);
     }
 }
 

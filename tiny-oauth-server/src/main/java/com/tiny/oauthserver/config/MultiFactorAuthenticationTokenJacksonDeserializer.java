@@ -37,7 +37,7 @@ public class MultiFactorAuthenticationTokenJacksonDeserializer
         JsonNode jsonNode = jsonParser.getCodec().readTree(jsonParser);
         // 统一打印原始 JSON，便于排查 DB 中存储结构
         log.debug("[MultiFactorAuthenticationTokenJacksonDeserializer] 原始 JSON 节点: {}", jsonNode.toString());
-
+        
         String username = jsonNode.has("username") ? jsonNode.get("username").asText() : null;
         Object credentials = jsonNode.has("credentials") && !jsonNode.get("credentials").isNull() 
             ? jsonNode.get("credentials").asText() : null;
@@ -56,11 +56,11 @@ public class MultiFactorAuthenticationTokenJacksonDeserializer
                     factorsNode = factorsNode.get(1);
                 }
                 for (JsonNode factor : factorsNode) {
-                    if (factor.isTextual()) {
+                if (factor.isTextual()) {
                         MultiFactorAuthenticationToken.AuthenticationFactorType f =
                                 MultiFactorAuthenticationToken.AuthenticationFactorType.from(factor.asText());
-                        if (f != MultiFactorAuthenticationToken.AuthenticationFactorType.UNKNOWN) {
-                            completedFactors.add(f);
+                    if (f != MultiFactorAuthenticationToken.AuthenticationFactorType.UNKNOWN) {
+                        completedFactors.add(f);
                         }
                     }
                 }

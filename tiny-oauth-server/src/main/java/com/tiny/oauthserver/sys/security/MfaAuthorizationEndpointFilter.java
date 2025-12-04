@@ -56,14 +56,37 @@ public class MfaAuthorizationEndpointFilter extends OncePerRequestFilter {
                                     @org.springframework.lang.NonNull jakarta.servlet.http.HttpServletResponse response,
                                     @org.springframework.lang.NonNull jakarta.servlet.FilterChain filterChain) throws jakarta.servlet.ServletException, IOException {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated()) {
-            // 没有登录，由 Spring Security 走默认登录流程
+        if (authentication == null) {
+            // 完全未登录，由 Spring Security 走默认登录流程（展示登录页等）
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // ✅ 关键点：支持“部分认证”的 MultiFactorAuthenticationToken
+        // - 对于 mfaToken，只要已经完成了至少一个因子（例如 PASSWORD），就认为可以参与 MFA 策略判断
+        // - 对于其他类型的 Authentication，则仍然要求 isAuthenticated()==true
+        boolean isMfaTokenWithFactors = false;
+        if (authentication instanceof MultiFactorAuthenticationToken mfaToken) {
+            isMfaTokenWithFactors = !mfaToken.getCompletedFactors().isEmpty();
+            if (log.isDebugEnabled()) {
+                log.debug("[MFA] /oauth2/authorize 当前认证为 MultiFactorAuthenticationToken, completedFactors={}, authenticated={}",
+                        mfaToken.getCompletedFactors(), mfaToken.isAuthenticated());
+            }
+        }
+
+        if (!authentication.isAuthenticated() && !isMfaTokenWithFactors) {
+            // 对于非 MFA Token 的未认证请求，继续让 Spring Security 处理（例如首次访问授权端点时还未登录）
             filterChain.doFilter(request, response);
             return;
         }
 
         // 解析当前用户
-        String username = authentication.getName();
+        String username;
+        if (authentication instanceof MultiFactorAuthenticationToken mfaToken) {
+            username = mfaToken.getUsername();
+        } else {
+            username = authentication.getName();
+        }
         if (username == null || username.isBlank()) {
             filterChain.doFilter(request, response);
             return;
@@ -75,14 +98,46 @@ public class MfaAuthorizationEndpointFilter extends OncePerRequestFilter {
             return;
         }
 
-        // 读取安全状态，判断本次会话是否必须 TOTP
+        // 读取安全状态，判断本次会话是否需要绑定 / 必须 TOTP
         Map<String, Object> status = securityService.getSecurityStatus(user);
+        boolean totpBound = Boolean.TRUE.equals(status.get("totpBound"));
+        boolean totpActivated = Boolean.TRUE.equals(status.get("totpActivated"));
+        boolean forceMfa = Boolean.TRUE.equals(status.get("forceMfa")); // REQUIRED => 必须绑定 + 必须验证
         boolean requireTotp = Boolean.TRUE.equals(status.get("requireTotp"));
         if (log.isDebugEnabled()) {
-            log.debug("[MFA] /oauth2/authorize 拦截检查 - userId={}, username={}, requireTotp={}", user.getId(), username, requireTotp);
+            log.debug("[MFA] /oauth2/authorize 拦截检查 - userId={}, username={}, totpBound={}, totpActivated={}, forceMfa={}, requireTotp={}",
+                    user.getId(), username, totpBound, totpActivated, forceMfa, requireTotp);
         }
+
+        // 1) 全局强制 MFA（mode=REQUIRED），但当前用户尚未完成 TOTP 绑定/激活 ⇒ 先去绑定页面
+        if (forceMfa && (!totpBound || !totpActivated)) {
+            String originalUrl = buildOriginalUrl(request);
+            String encodedRedirect = URLEncoder.encode(originalUrl, StandardCharsets.UTF_8);
+
+            String totpBindUrl = frontendProperties.getTotpBindUrl();
+            if (totpBindUrl == null || totpBindUrl.isBlank()) {
+                // 兜底：使用服务器端 TOTP 绑定页
+                totpBindUrl = "/self/security/totp-bind";
+            }
+
+            String redirectUrl;
+            if (totpBindUrl.startsWith("redirect:")) {
+                String base = totpBindUrl.substring("redirect:".length());
+                String separator = base.contains("?") ? "&" : "?";
+                redirectUrl = base + separator + "redirect=" + encodedRedirect;
+            } else {
+                String separator = totpBindUrl.contains("?") ? "&" : "?";
+                redirectUrl = totpBindUrl + separator + "redirect=" + encodedRedirect;
+            }
+
+            log.info("[MFA] 用户 {} 处于强制 MFA 模式但尚未绑定/激活 TOTP (bound={}, activated={})，拦截 /oauth2/authorize，重定向到绑定页 {}",
+                    username, totpBound, totpActivated, redirectUrl);
+            response.sendRedirect(redirectUrl);
+            return;
+        }
+
+        // 2) 本次会话不要求 TOTP ⇒ 直接进入授权端点（mode=NONE 或 OPTIONAL+未绑定等）
         if (!requireTotp) {
-            // 本次会话不要求 TOTP，直接进入授权端点
             filterChain.doFilter(request, response);
             return;
         }

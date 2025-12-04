@@ -18,6 +18,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import org.slf4j.MDC;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.util.ContentCachingRequestWrapper;
@@ -46,7 +47,12 @@ public class HttpRequestLoggingInterceptor implements HandlerInterceptor {
                              @NonNull HttpServletResponse response,
                              @NonNull Object handler) {
         if (properties.isEnabled()) {
-            request.setAttribute(HttpRequestLoggingFilter.ATTR_USER_ID, resolveCurrentUserId());
+            String userId = resolveCurrentUserId();
+            request.setAttribute(HttpRequestLoggingFilter.ATTR_USER_ID, userId);
+            // 设置到 MDC，供 Logback 日志格式使用
+            if (userId != null) {
+                MDC.put("userId", userId);
+            }
         }
         return true;
     }

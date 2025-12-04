@@ -119,6 +119,14 @@ public final class OAuth2PasswordAuthenticationProvider implements Authenticatio
 
 		Set<String> authorizedScopes = new LinkedHashSet<>(passwordGrantAuthenticationToken.getScopes());
 
+		if (this.logger.isInfoEnabled()) {
+			this.logger.info(LogMessage.format(
+					"Handling password grant token request: client_id=%s, username=%s, scopes=%s",
+					registeredClient.getClientId(),
+					passwordGrantAuthenticationToken.getUsername(),
+					authorizedScopes));
+		}
+
 		Object credentials = passwordGrantAuthenticationToken.getCredentials();
 		String username = passwordGrantAuthenticationToken.getUsername();
 		String password = passwordGrantAuthenticationToken.getPassword();
@@ -157,6 +165,11 @@ public final class OAuth2PasswordAuthenticationProvider implements Authenticatio
 		if (this.logger.isTraceEnabled()) {
 			this.logger.trace("Generated access token");
 		}
+		if (this.logger.isInfoEnabled()) {
+			this.logger.info(LogMessage.format(
+					"Issued access token (password grant): client_id=%s, username=%s, scopes=%s",
+					registeredClient.getClientId(), username, authorizedScopes));
+		}
 
 		OAuth2Authorization.Builder authorizationBuilder = OAuth2Authorization.withRegisteredClient(registeredClient)
 			.principalName(username)
@@ -181,6 +194,11 @@ public final class OAuth2PasswordAuthenticationProvider implements Authenticatio
 
 				if (this.logger.isTraceEnabled()) {
 					this.logger.trace("Generated refresh token");
+				}
+				if (this.logger.isInfoEnabled()) {
+					this.logger.info(LogMessage.format(
+							"Issued refresh token (password grant): client_id=%s, username=%s",
+							registeredClient.getClientId(), username));
 				}
 
 				refreshToken = (OAuth2RefreshToken) generatedRefreshToken;

@@ -595,7 +595,9 @@ public class SchedulingService {
         run.setTriggeredBy(triggeredBy);
         run.setStatus("SCHEDULED");
         run = dagRunRepository.save(run);
-        
+
+        logger.info("手动触发 DAG, dagId: {}, runId: {}, triggeredBy: {}", dagId, run.getId(), triggeredBy);
+
         // 然后使用 Quartz 立即触发 DAG 执行，传递 dagRunId 和 dagVersionId
         try {
             quartzSchedulerService.triggerDagNow(dag, run.getId(), version.getId());
@@ -603,6 +605,7 @@ public class SchedulingService {
             // 如果触发失败，更新 run 状态为失败
             run.setStatus("FAILED");
             dagRunRepository.save(run);
+            logger.error("触发 DAG 执行失败, dagId: {}, runId: {}, message: {}", dagId, run.getId(), e.getMessage(), e);
             throw SchedulingExceptions.systemError("触发 DAG 执行失败: %s", e, e.getMessage());
         }
         
@@ -693,13 +696,17 @@ public class SchedulingService {
             retryRun.setTriggeredBy(failedRun.getTriggeredBy());
             retryRun.setStatus("SCHEDULED");
             retryRun = dagRunRepository.save(retryRun);
-            
+
+            logger.info("开始重试 DAG, dagId: {}, sourceRunId: {}, retryRunId: {}", dagId, failedRun.getId(), retryRun.getId());
+
             // 触发 Quartz Job 执行重试
             try {
                 quartzSchedulerService.triggerDagNow(dag, retryRun.getId(), retryRun.getDagVersionId());
             } catch (Exception e) {
                 retryRun.setStatus("FAILED");
-            dagRunRepository.save(retryRun);
+                dagRunRepository.save(retryRun);
+                logger.error("重试 DAG 执行失败, dagId: {}, sourceRunId: {}, retryRunId: {}, message: {}",
+                        dagId, failedRun.getId(), retryRun.getId(), e.getMessage(), e);
                 throw SchedulingExceptions.systemError("重试 DAG 执行失败: %s", e, e.getMessage());
             }
 

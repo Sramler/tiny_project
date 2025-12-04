@@ -28,7 +28,6 @@ let menuRoutesLoading: Promise<boolean> | null = null
  * 递归生成菜单对应的路由配置，支持动态组件导入。
  */
 function generateMenuRoutes(menuList: MenuItem[]) {
-   
   const routes: any[] = []
   for (const item of menuList) {
     // 跳过隐藏的菜单项
@@ -79,31 +78,6 @@ function generateMenuRoutes(menuList: MenuItem[]) {
   return routes
 }
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:9000'
-const baseUrl = apiBaseUrl.endsWith('/') ? apiBaseUrl.slice(0, -1) : apiBaseUrl
-
-async function checkBackendSession(): Promise<boolean> {
-  try {
-    const { fetchWithTraceId } = await import('@/utils/traceId')
-    // 使用 skipAuthError，避免在路由守卫中触发跳转（路由守卫会自己处理）
-    const resp = await fetchWithTraceId(`${baseUrl}/self/security/status`, {
-      method: 'GET',
-      credentials: 'include',
-      skipAuthError: true, // 跳过自动跳转，由路由守卫处理
-    })
-    if (resp.ok) {
-      const data = await resp.json()
-      const valid = !('success' in data) || data.success !== false
-      logger.debug('[Auth] 后端会话检测成功:', { valid, data })
-      return valid
-    }
-    logger.warn('[Auth] 后端会话检测失败，状态码:', resp.status)
-  } catch (error) {
-    logger.error('检查后端会话失败:', error)
-  }
-  return false
-}
-
 // 路由配置
 const routes = [
   // 登录页和回调页不使用主布局
@@ -112,13 +86,13 @@ const routes = [
     path: '/self/security/totp-bind',
     name: 'TotpBind',
     component: TotpBind,
-    meta: { title: '绑定二步验证' },
+    meta: { title: '绑定二步验证', requiresAuth: false },
   },
   {
     path: '/self/security/totp-verify',
     name: 'TotpVerify',
     component: TotpVerify,
-    meta: { title: '二步验证' },
+    meta: { title: '二步验证', requiresAuth: false },
   },
   { path: '/callback', name: 'OidcCallback', component: OidcCallback },
   // 401 页面保持独立（登录状态失效，不需要布局）
@@ -329,22 +303,13 @@ const authGuard: NavigationGuard = async (to, _from, next) => {
     return
   }
 
-  logger.log('用户未认证，尝试触发登录流程')
-
-  const backendSession = await checkBackendSession()
-  if (backendSession) {
-    logger.log('检测到有效后端会话，尝试静默授权')
-    try {
-      await authContext.login()
-      return
-    } catch (error) {
-      logger.error('基于后端会话触发授权失败:', error)
-      next('/login')
-      return
-    }
-  }
+  logger.log('用户未认证，直接交给后端控制登录与 MFA 路由')
 
   try {
+    // 由后端根据 security.mfa.mode 与用户状态决定：
+    // 1) 直接进入授权流程
+    // 2) 重定向到 TOTP 绑定页
+    // 3) 重定向到 TOTP 验证页
     await authContext.login()
     return
   } catch (error) {

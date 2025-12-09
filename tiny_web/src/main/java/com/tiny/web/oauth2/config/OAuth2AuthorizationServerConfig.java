@@ -13,6 +13,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.oauth2.core.OAuth2Token;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
@@ -20,12 +21,12 @@ import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.authorization.*;
 import org.springframework.security.oauth2.server.authorization.client.JdbcRegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
-import org.springframework.security.oauth2.server.authorization.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.oauth2.server.authorization.token.*;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
@@ -35,9 +36,6 @@ public class OAuth2AuthorizationServerConfig {
 
     @Autowired
     private ClientProperties authProperties;
-
-    @Autowired
-    private AuthenticationManager authenticationManager;
     /**
      * 授权信息（如 access_token、refresh_token）存储到数据库
      */
@@ -80,11 +78,9 @@ public class OAuth2AuthorizationServerConfig {
                                                                       OAuth2AuthorizationService authorizationService,
                                                                       OAuth2TokenGenerator<? extends OAuth2Token> tokenGenerator) throws Exception {
 
-        // 应用 Spring Authorization Server 默认配置（已初始化内部 matcher）
-        OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
-
-        // 手动扩展 password 模式支持
-        http.getConfigurer(OAuth2AuthorizationServerConfigurer.class)
+        OAuth2AuthorizationServerConfigurer authorizationServerConfigurer = new OAuth2AuthorizationServerConfigurer();
+        // 手动扩展 password 模式支持并关闭授权同意页
+        authorizationServerConfigurer
                 .tokenEndpoint(tokenEndpoint -> tokenEndpoint
                         .accessTokenRequestConverter(new OAuth2PasswordAuthenticationConverter())
                         .authenticationProvider(
@@ -93,14 +89,22 @@ public class OAuth2AuthorizationServerConfig {
                                         authorizationService,
                                         tokenGenerator
                                 )
-                        )
-                )
+                        ))
                 .authorizationEndpoint(authorizationEndpoint -> authorizationEndpoint
-                        .consentPage(null)  // 禁用授权同意页面
-                );
+                        .consentPage(null));
 
-        // 可选配置：关闭 CSRF（仅用于开发）
-        http.csrf(csrf -> csrf.disable());
+        RequestMatcher endpointsMatcher = authorizationServerConfigurer.getEndpointsMatcher();
+
+        http
+                // 仅对授权服务器端点应用此过滤器链
+                .securityMatcher(endpointsMatcher)
+                .authorizeHttpRequests(authorize -> authorize.anyRequest().authenticated())
+                .csrf(csrf -> csrf.ignoringRequestMatchers(endpointsMatcher))
+                .with(authorizationServerConfigurer, Customizer.withDefaults());
+
+        // 资源服务器支持（与 applyDefaultSecurity 原行为保持一致）
+        // jwt() 无参方法在 Spring Security 6.1 起已弃用，改为使用 Customizer 形式
+        http.oauth2ResourceServer(resourceServer -> resourceServer.jwt(Customizer.withDefaults()));
 
         return http.build();
     }

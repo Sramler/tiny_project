@@ -58,7 +58,11 @@ public class BpmnValidationHelper {
 
     /**
      * 修复排他网关的条件问题
+     *
+     * <p>当前未在默认修复流程中调用（可能导致 DOM 验证异常），
+     * 为避免 IDE 未使用警告而保留给后续启用，添加 suppress 注解。</p>
      */
+    @SuppressWarnings("unused")
     private void fixExclusiveGatewayConditions(BpmnModelInstance modelInstance) {
         try {
             Collection<ExclusiveGateway> gateways = modelInstance.getModelElementsByType(ExclusiveGateway.class);

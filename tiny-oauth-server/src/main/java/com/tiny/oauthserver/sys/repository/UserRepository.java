@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -28,7 +29,7 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
      */
     @Override
     @EntityGraph(attributePaths = "roles")
-    Optional<User> findById(Long id);
+    Optional<User> findById(@NonNull Long id);
 
     /**
      * 根据角色ID查询所有拥有该角色的用户ID列表

@@ -597,18 +597,17 @@ public class MenuServiceImpl implements MenuService {
             
             return dto;
         } catch (Exception e) {
-            // 如果转换失败，返回一个基本的DTO
+            // 如果转换失败，返回一个基本的DTO，并确保空指针安全
             ResourceResponseDto dto = new ResourceResponseDto();
-            dto.setId(resource.getId());
-            dto.setName(resource.getName());
-            dto.setTitle(resource.getTitle());
-            dto.setType(resource.getType() != null ? resource.getType().getCode() : null);
-            dto.setParentId(resource.getParentId());
+            if (resource != null) {
+                dto.setId(resource.getId());
+                dto.setName(resource.getName());
+                dto.setTitle(resource.getTitle());
+                dto.setType(resource.getType() != null ? resource.getType().getCode() : null);
+                dto.setParentId(resource.getParentId());
+            }
             dto.setEnabled(false);
-            
-            // 判断是否为叶子节点（没有子资源）
             dto.setLeaf(true);
-            
             dto.setChildren(new ArrayList<>());
             return dto;
         }
@@ -618,6 +617,7 @@ public class MenuServiceImpl implements MenuService {
      * 原生 SQL 方式分页查询菜单
      * 使用 Repository 的 @Query 注解，直接返回 leaf 字段
      */
+    @SuppressWarnings("unused") // retained for potential native SQL path
     private Page<ResourceResponseDto> findMenusByNativeSql(ResourceRequestDto query, List<Integer> typeCodes, Pageable pageable) {
         Page<ResourceProjection> page = resourceRepository.findMenusByNativeSql(
             typeCodes,
@@ -655,6 +655,7 @@ public class MenuServiceImpl implements MenuService {
      * JPQL DTO 投影方式分页查询菜单
      * 使用 Repository 的 JPQL 查询，直接返回 DTO 对象
      */
+    @SuppressWarnings("unused") // kept for future switch to JPQL projection query
     private Page<ResourceResponseDto> findMenusByJpqlDto(ResourceRequestDto query, List<Integer> typeCodes, Pageable pageable) {
         return resourceRepository.findMenusByJpqlDto(
             typeCodes,
@@ -671,6 +672,7 @@ public class MenuServiceImpl implements MenuService {
      * 按条件查询菜单（type=0/1），返回list结构
      */
     @Override
+    @SuppressWarnings("unchecked")
     public List<ResourceResponseDto> list(ResourceRequestDto query) {
         // 查询 type=0/1（目录和菜单）
         List<ResourceType> types = List.of(ResourceType.DIRECTORY, ResourceType.MENU); // 目录和菜单

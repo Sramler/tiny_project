@@ -58,7 +58,7 @@ class UserServiceImplTest {
         UserRequestDto query = new UserRequestDto();
         Pageable pageable = PageRequest.of(0, 10);
         Page<User> page = new PageImpl<>(List.of(user));
-        when(userRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
+        when(userRepository.findAll(Mockito.<Specification<User>>any(), eq(pageable))).thenReturn(page);
 
         Page<UserResponseDto> result = userService.users(query, pageable);
         assertEquals(1, result.getTotalElements());

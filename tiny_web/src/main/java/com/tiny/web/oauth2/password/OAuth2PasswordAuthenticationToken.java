@@ -2,8 +2,6 @@ package com.tiny.web.oauth2.password;
 
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
-
 import java.util.Collections;
 import java.util.Set;
 

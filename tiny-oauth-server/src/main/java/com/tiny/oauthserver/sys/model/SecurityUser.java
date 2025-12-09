@@ -11,7 +11,6 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import java.io.Serializable;
 import java.util.Collection;
 
 /**
@@ -20,7 +19,7 @@ import java.util.Collection;
  */
 @JsonTypeName("securityUser")
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "@type")
-public class SecurityUser implements UserDetails, Serializable {
+public class SecurityUser implements UserDetails {
 
     private final Long userId;
 

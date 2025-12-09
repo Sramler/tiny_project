@@ -4,7 +4,6 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.authentication.OAuth2AccessTokenAuthenticationToken;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenContext;
@@ -16,14 +15,11 @@ import java.util.Map;
 public class PasswordTokenGranter implements OAuth2TokenCustomizer<OAuth2TokenContext> {
 
     private final AuthenticationManager authenticationManager;
-    private final OAuth2AuthorizationService authorizationService;
     private final OAuth2TokenGenerator<?> tokenGenerator;
 
     public PasswordTokenGranter(AuthenticationManager authenticationManager,
-                                OAuth2AuthorizationService authorizationService,
                                 OAuth2TokenGenerator<?> tokenGenerator) {
         this.authenticationManager = authenticationManager;
-        this.authorizationService = authorizationService;
         this.tokenGenerator = tokenGenerator;
     }
 

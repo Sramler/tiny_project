@@ -1,0 +1,17 @@
+databaseChangeLog:
+  - changeSet:
+      id: fix-resource-url-format
+      author: tiny
+      comment: 修复资源表中 URL 字段格式，确保所有菜单 URL 都以 / 开头
+      changes:
+        - sql:
+            dbms: mysql
+            sql: |
+              -- 修复缺少前导斜杠的 URL（排除空字符串和已经是绝对路径的 URL）
+              UPDATE resource 
+              SET url = CONCAT('/', url) 
+              WHERE url IS NOT NULL 
+                AND url != '' 
+                AND url NOT LIKE '/%' 
+                AND type IN (0, 1); -- 0=目录，1=菜单
+

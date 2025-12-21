@@ -144,26 +144,34 @@
         <appender-ref ref="ERROR_FILE"/>
     </appender>
 
-    <!-- ==================== 日志级别配置 ==================== -->
-    <!-- 业务包日志默认 INFO，避免第三方库噪音 -->
-    <logger name="com.tiny.oauthserver" level="INFO"/>
-    <!-- 审计相关日志单独记录 -->
-    <logger name="com.tiny.oauthserver.sys.service.AuthenticationAuditService" level="INFO" additivity="false">
+    <!-- ==================== 日志输出配置 ==================== -->
+    <!-- 
+        配置原则：
+        1. logback-spring.xml 专注于日志输出形式（appender、格式、滚动策略）
+        2. 日志级别由 application.yaml 统一管理，支持不同环境的不同配置
+        3. 只配置必要的输出形式相关设置（如审计日志的独立输出）
+    -->
+    
+    <!-- 审计日志独立输出配置 -->
+    <!-- 使用 additivity="false" 避免审计日志重复输出到其他 appender -->
+    <!-- 日志级别由 application.yaml 中的 logging.level 控制 -->
+    <logger name="com.tiny.oauthserver.sys.service.AuthenticationAuditService" additivity="false">
         <appender-ref ref="AUDIT_FILE"/>
         <appender-ref ref="STDOUT"/>
     </logger>
-    <logger name="com.tiny.oauthserver.sys.service.HttpRequestLogService" level="INFO"/>
-    <!-- Spring 框架日志降级，减少噪音 -->
-    <logger name="org.springframework" level="WARN"/>
-    <logger name="org.springframework.security" level="WARN"/>
-    <!-- SQL 日志：开发环境可设为 DEBUG，生产环境建议 INFO 或关闭 -->
-    <logger name="org.hibernate.SQL" level="INFO"/>
-    <logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="WARN"/>
 
     <!-- ==================== 环境配置 ==================== -->
+    <!-- 
+        配置原则：
+        1. 只配置 appender 的选择（输出形式），不配置日志级别
+        2. 日志级别由 application.yaml 中的 logging.level.root 控制
+        3. 开发环境使用同步写入，便于实时查看
+        4. 生产环境使用异步写入，提升性能
+    -->
+    
     <!-- 开发环境：同步写入，便于实时查看 -->
     <springProfile name="dev">
-        <root level="INFO">
+        <root>
             <appender-ref ref="STDOUT"/>
             <appender-ref ref="FILE"/>
             <appender-ref ref="ERROR_FILE"/>
@@ -172,7 +180,7 @@
 
     <!-- 生产环境：异步写入，提升性能 -->
     <springProfile name="prod">
-        <root level="INFO">
+        <root>
             <appender-ref ref="STDOUT"/>
             <appender-ref ref="ASYNC_FILE"/>
             <appender-ref ref="ASYNC_ERROR_FILE"/>
@@ -181,11 +189,11 @@
     
     <!-- 默认环境：使用异步写入（仅在未匹配到 dev 或 prod profile 时生效） -->
     <springProfile name="!dev,!prod">
-    <root level="INFO">
-        <appender-ref ref="STDOUT"/>
-        <appender-ref ref="ASYNC_FILE"/>
-        <appender-ref ref="ASYNC_ERROR_FILE"/>
-    </root>
+        <root>
+            <appender-ref ref="STDOUT"/>
+            <appender-ref ref="ASYNC_FILE"/>
+            <appender-ref ref="ASYNC_ERROR_FILE"/>
+        </root>
     </springProfile>
 
 </configuration>

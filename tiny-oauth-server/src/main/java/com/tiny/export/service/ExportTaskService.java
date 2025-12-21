@@ -4,6 +4,7 @@ import com.tiny.export.persistence.ExportTaskEntity;
 import com.tiny.export.persistence.ExportTaskRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Sort;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -120,6 +121,11 @@ public class ExportTaskService {
     @Transactional(readOnly = true)
     public List<ExportTaskEntity> findUserTasks(String userId) {
         return repository.findByUserIdOrderByCreatedAtDesc(userId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ExportTaskEntity> findAllTasks() {
+        return repository.findAll(Sort.by(Sort.Direction.DESC, "createdAt"));
     }
 
     @Transactional(readOnly = true)

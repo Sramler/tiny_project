@@ -150,12 +150,14 @@ export const logout = async () => {
     if (currentUser && currentUser.id_token) {
       // 为注销流程也绑定当前会话的 traceId，方便串起整条链路
       const traceId = getOrCreateTraceId()
-      const postLogoutUrl = new URL(settings.post_logout_redirect_uri)
-      postLogoutUrl.searchParams.set('trace_id', traceId)
-
       await userManager.signoutRedirect({
         id_token_hint: currentUser.id_token,
-        post_logout_redirect_uri: postLogoutUrl.toString(),
+        // post_logout_redirect_uri 必须与后端注册值完全一致，禁止追加 query
+        post_logout_redirect_uri: settings.post_logout_redirect_uri,
+        // 将 trace_id 作为额外查询参数传给注销端点，后端过滤器会读取
+        extraQueryParams: {
+          trace_id: traceId,
+        },
       })
       return
     }
@@ -166,11 +168,8 @@ export const logout = async () => {
   await userManager.removeUser()
   user.value = null
   loginInProgress = false
-  // 本地回退逻辑也带上 trace_id，保持一致
-  const traceId = getOrCreateTraceId()
-  const fallbackUrl = new URL(settings.post_logout_redirect_uri)
-  fallbackUrl.searchParams.set('trace_id', traceId)
-  window.location.href = fallbackUrl.toString()
+  // 本地回退：使用与后端注册值一致的固定跳转地址，避免 OIDC 校验失败
+  window.location.href = settings.post_logout_redirect_uri
 }
 
 let renewInProgress = false

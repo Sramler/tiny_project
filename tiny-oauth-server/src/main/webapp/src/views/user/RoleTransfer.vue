@@ -11,7 +11,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, defineProps } from 'vue'
+import { ref, watch } from 'vue'
 const props = defineProps({
   modelValue: { type: Array as () => string[], default: () => [] },
   allRoles: { type: Array as () => { key: string, name: string, code: string }[], default: () => [] },

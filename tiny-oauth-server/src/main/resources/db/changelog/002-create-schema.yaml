@@ -1,0 +1,13 @@
+databaseChangeLog:
+  - changeSet:
+      id: create-schema-tables
+      author: tiny
+      comment: 创建所有业务表和 Quartz 表结构
+      changes:
+        - sqlFile:
+            path: classpath:schema.sql
+            relativeToChangelogFile: false
+            splitStatements: true
+            stripComments: false
+            endDelimiter: ;
+            dbms: mysql

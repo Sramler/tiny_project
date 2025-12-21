@@ -61,8 +61,10 @@ function generateMenuRoutes(menuList: MenuItem[]) {
         // 没有 component 字段时 fallback 到 DefaultView
         component = DefaultView
       }
+      // 确保路由路径以 / 开头
+      const routePath = item.url.startsWith('/') ? item.url : `/${item.url}`
       routes.push({
-        path: item.url, // 使用 url 字段作为路由路径
+        path: routePath, // 使用 url 字段作为路由路径，确保以 / 开头
         component,
         meta: {
           menuInfo: item,

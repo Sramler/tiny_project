@@ -37,13 +37,17 @@ logging:
     com.tiny.oauthserver.config.CustomJdbcOAuth2AuthorizationService: DEBUG
     com.tiny.oauthserver.config: DEBUG
     org.springframework.security: TRACE # 安全框架 TRACE，便于排查认证问题
+    # Spring Security 配置警告：开发环境保持 WARN，便于发现问题
+    # 这是预期的配置：MultiAuthenticationProvider 内部使用 UserDetailsService，符合设计
+    org.springframework.security.config.annotation.authentication.configuration.InitializeUserDetailsBeanManagerConfigurer: WARN
     org.camunda.bpm.engine.persistence: DEBUG
     org.camunda.bpm.engine.impl.db.sql: DEBUG
     org.camunda.bpm.engine.impl.persistence.entity: DEBUG
     org.camunda.bpm.engine.impl.persistence: DEBUG
     com.zaxxer.hikari: DEBUG
     org.hibernate.SQL: DEBUG # SQL 日志 DEBUG，便于查看完整 SQL
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE # 参数绑定 TRACE
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.hibernate.orm.jdbc.bind: TRACE # 参数绑定 TRACE
 
 # HTTP 请求日志配置（开发环境：记录更多信息，便于调试）
 http:

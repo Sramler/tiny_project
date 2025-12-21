@@ -38,7 +38,7 @@
   </a-form>
 </template>
 <script setup lang="ts">
-import { ref, watch, defineProps, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { getRoleUsers, updateRoleUsers } from '@/api/role' // 角色相关API
 import { userList } from '@/api/user' // 用户列表API

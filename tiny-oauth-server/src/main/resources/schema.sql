@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS `user` (
     `last_login_device` VARCHAR(200) DEFAULT NULL COMMENT '最后登录设备',
     `failed_login_count` INT NOT NULL DEFAULT 0 COMMENT '失败登录次数',
     `last_failed_login_at` TIMESTAMP NULL COMMENT '最后失败登录时间',
-    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY `uk_user_username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
@@ -64,8 +64,9 @@ CREATE TABLE IF NOT EXISTS `resource` (
     `permission` VARCHAR(100) NOT NULL DEFAULT '' COMMENT '权限标识，用于前端控制',
     `type` TINYINT NOT NULL DEFAULT 0 COMMENT '资源类型：0-目录，1-菜单，2-按钮，3-接口',
     `parent_id` BIGINT DEFAULT NULL COMMENT '父资源ID',
-    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `enabled` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否启用',
     KEY `idx_resource_parent_id` (`parent_id`),
     KEY `idx_resource_type` (`type`),
     KEY `idx_resource_sort` (`sort`),
@@ -140,8 +141,8 @@ CREATE TABLE IF NOT EXISTS `user_avatar` (
     `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE,
     KEY `idx_content_hash` (`content_hash`) COMMENT '索引：用于去重查询',
-    CONSTRAINT `chk_file_size` CHECK (`file_size` <= 1048576) COMMENT '文件大小限制：最大1MB'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户头像表'; 
+    CONSTRAINT `chk_file_size` CHECK (`file_size` <= 1048576)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户头像表，文件大小限制：最大1MB'; 
 
 -- 创建 HTTP 请求日志表
 CREATE TABLE IF NOT EXISTS `http_request_log` (
@@ -210,6 +211,153 @@ CREATE TABLE IF NOT EXISTS `export_task` (
     KEY `idx_created_at` (`created_at`),
     KEY `idx_expire_at` (`expire_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='导出任务表';
+
+-- 导出教学示例：用量/账单混合场景
+CREATE TABLE IF NOT EXISTS `demo_export_usage` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `tenant_code` VARCHAR(64) NOT NULL COMMENT '租户/客户编码',
+    `usage_date` DATE NOT NULL COMMENT '用量日期',
+    `product_code` VARCHAR(64) NOT NULL COMMENT '产品编码',
+    `product_name` VARCHAR(128) NOT NULL COMMENT '产品名称',
+    `plan_tier` VARCHAR(32) NOT NULL DEFAULT 'standard' COMMENT '套餐档位',
+    `region` VARCHAR(64) DEFAULT NULL COMMENT '区域/可用区',
+    `usage_qty` DECIMAL(18,4) NOT NULL COMMENT '用量数量（支持小数）',
+    `unit` VARCHAR(32) NOT NULL COMMENT '用量单位，例如 GB、req',
+    `unit_price` DECIMAL(12,4) NOT NULL COMMENT '单价',
+    `amount` DECIMAL(14,4) NOT NULL COMMENT '小计金额',
+    `currency` CHAR(3) NOT NULL DEFAULT 'CNY' COMMENT '币种',
+    `tax_rate` DECIMAL(5,4) DEFAULT 0 COMMENT '税率，如 0.0600=6%',
+    `is_billable` BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否计费',
+    `status` VARCHAR(20) NOT NULL DEFAULT 'UNBILLED' COMMENT '状态：UNBILLED/BILLED/ADJUSTED',
+    `metadata` JSON DEFAULT NULL COMMENT '扩展信息（JSON）',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_demo_usage_tenant_date` (`tenant_code`, `usage_date`),
+    KEY `idx_demo_usage_product` (`product_code`),
+    KEY `idx_demo_usage_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='导出教学示例表：用量/账单型数据';
+
+-- 生成 demo_export_usage 测试数据的存储过程
+-- 注意：
+-- 下面这段存储过程定义在 Spring Boot 启动时通过 schema.sql 执行会有两个问题：
+-- 1）`DROP PROCEDURE` 会在每次重启时删除已有存储过程；
+-- 2）`DELIMITER` 语法 JDBC 不支持，导致 `CREATE PROCEDURE` 无法成功执行。
+-- 结果就是：每次应用重启后，存储过程都会被删掉且无法重新创建，只能手工在 Navicat 中执行。
+-- 为避免这个问题，我们不再由 Spring 自动执行这段定义，而是建议在数据库里手动执行一次并持久化。
+-- 如需重新创建或更新存储过程，请在 Navicat 中执行下方 SQL（去掉前面的注释符号）：
+-- DROP PROCEDURE IF EXISTS `sp_generate_demo_export_usage`;
+-- DELIMITER $$
+-- CREATE PROCEDURE `sp_generate_demo_export_usage`(
+--     IN p_days INT,
+--     IN p_rows_per_day INT,
+--     IN p_target_rows INT,
+--     IN p_clear_existing TINYINT(1)
+-- )
+-- BEGIN
+--     DECLARE d INT DEFAULT 0;
+--     DECLARE i INT;
+--     DECLARE usage_dt DATE;
+--     DECLARE tenant_code VARCHAR(64);
+--     DECLARE product_code VARCHAR(64);
+--     DECLARE product_name VARCHAR(128);
+--     DECLARE plan_tier VARCHAR(32);
+--     DECLARE region VARCHAR(64);
+--     DECLARE unit VARCHAR(32);
+--     DECLARE unit_price DECIMAL(12,4);
+--     DECLARE qty DECIMAL(18,4);
+--     DECLARE status_val VARCHAR(20);
+--     DECLARE currency_val CHAR(3);
+--     DECLARE tax_val DECIMAL(5,4);
+--     DECLARE target_rows INT;
+--     DECLARE inserted_rows INT DEFAULT 0;
+--
+--     -- 如果 p_clear_existing 为 1（true），则先清空表中的所有数据
+--     IF p_clear_existing IS NOT NULL AND p_clear_existing = 1 THEN
+--         TRUNCATE TABLE `demo_export_usage`;
+--     END IF;
+--
+--     IF p_rows_per_day IS NULL OR p_rows_per_day <= 0 THEN SET p_rows_per_day = 2000; END IF;
+--     IF p_days IS NULL OR p_days <= 0 THEN SET p_days = 7; END IF;
+--
+--     IF p_target_rows IS NOT NULL AND p_target_rows > 0 THEN
+--         SET target_rows = p_target_rows;
+--     ELSE
+--         SET target_rows = p_days * p_rows_per_day;
+--     END IF;
+--
+--     WHILE inserted_rows < target_rows DO
+--         SET d = inserted_rows DIV p_rows_per_day;
+--         SET usage_dt = CURDATE() - INTERVAL d DAY;
+--         SET i = 0;
+--         WHILE i < p_rows_per_day AND inserted_rows < target_rows DO
+--             SET tenant_code = ELT(1 + FLOOR(RAND() * 3), 'tenant-alpha', 'tenant-beta', 'tenant-gamma');
+--             SET product_code = ELT(1 + FLOOR(RAND() * 5), 'cdn', 'oss', 'api', 'mq', 'db');
+--             SET product_name = CASE product_code
+--                 WHEN 'cdn' THEN 'CDN 流量'
+--                 WHEN 'oss' THEN '对象存储'
+--                 WHEN 'api' THEN 'API 调用'
+--                 WHEN 'mq'  THEN '消息队列'
+--                 ELSE '托管数据库'
+--             END;
+--             SET plan_tier = ELT(1 + FLOOR(RAND() * 3), 'basic', 'standard', 'enterprise');
+--             SET region = ELT(1 + FLOOR(RAND() * 4), 'cn-north-1', 'ap-southeast-1', 'us-west-1', 'eu-central-1');
+--             SET unit = CASE product_code
+--                 WHEN 'cdn' THEN 'GB'
+--                 WHEN 'oss' THEN 'GB'
+--                 WHEN 'api' THEN 'req'
+--                 WHEN 'mq'  THEN 'msg'
+--                 ELSE 'hours'
+--             END;
+--             SET unit_price = CASE product_code
+--                 WHEN 'cdn' THEN 0.1200
+--                 WHEN 'oss' THEN 0.0800
+--                 WHEN 'api' THEN 0.0008
+--                 WHEN 'mq'  THEN 0.0005
+--                 ELSE 2.8000
+--             END;
+--             SET qty = ROUND(
+--                 CASE unit
+--                     WHEN 'GB' THEN (50 + RAND() * 150)
+--                     WHEN 'req' THEN (50000 + RAND() * 150000)
+--                     WHEN 'msg' THEN (10000 + RAND() * 80000)
+--                     ELSE (10 + RAND() * 80)
+--                 END, 4);
+--             SET currency_val = ELT(1 + FLOOR(RAND() * 2), 'CNY', 'USD');
+--             SET tax_val = CASE currency_val WHEN 'USD' THEN 0.0725 ELSE 0.0600 END;
+--             SET status_val = ELT(1 + FLOOR(RAND() * 3), 'UNBILLED', 'BILLED', 'ADJUSTED');
+--
+--             INSERT INTO `demo_export_usage` (
+--                 `tenant_code`, `usage_date`, `product_code`, `product_name`, `plan_tier`, `region`,
+--                 `usage_qty`, `unit`, `unit_price`, `amount`, `currency`, `tax_rate`, `is_billable`,
+--                 `status`, `metadata`, `created_at`
+--             ) VALUES (
+--                 tenant_code,
+--                 usage_dt,
+--                 product_code,
+--                 product_name,
+--                 plan_tier,
+--                 region,
+--                 qty,
+--                 unit,
+--                 unit_price,
+--                 ROUND(qty * unit_price, 4),
+--                 currency_val,
+--                 tax_val,
+--                 ELT(1 + FLOOR(RAND() * 2), TRUE, FALSE),
+--                 status_val,
+--                 JSON_OBJECT(
+--                     'run', CONCAT('day-', d, '-row-', i),
+--                     'tier', plan_tier,
+--                     'region', region
+--                 ),
+--                 NOW() - INTERVAL d DAY
+--             );
+--             SET i = i + 1;
+--             SET inserted_rows = inserted_rows + 1;
+--         END WHILE;
+--     END WHILE;
+-- END$$
+-- DELIMITER ;
 
 -- ========================================================================
 -- 企业级 DAG 调度系统（带 scheduling_ 前缀、无外键）

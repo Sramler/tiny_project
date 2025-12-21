@@ -9,6 +9,8 @@ import com.tiny.oauthserver.sys.model.SecurityUser;
 import jakarta.servlet.AsyncContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -30,7 +33,7 @@ import java.util.Map;
 import java.util.Optional;
 
 @RestController
-@RequestMapping("/api/export")
+@RequestMapping("/export")
 public class ExportController {
 
     private final ExportService exportService;
@@ -41,17 +44,32 @@ public class ExportController {
         this.exportTaskService = exportTaskService;
     }
 
-    /** 同步导出（阻塞） */
+    /** 同步导出（阻塞，使用 StreamingResponseBody 避免错误状态下写入 Excel 头） */
     @PostMapping("/sync")
-    public void exportSync(@RequestBody ExportRequest request,
-                           HttpServletResponse response) throws Exception {
+    public ResponseEntity<StreamingResponseBody> exportSync(@RequestBody ExportRequest request) {
+        // 先做轻量级参数校验，确保 4xx 在构造响应头之前就返回
+        if (request == null || request.getSheets() == null || request.getSheets().isEmpty()) {
+            throw new IllegalArgumentException("sheets 不能为空，至少包含一个 sheet");
+        }
+
         String filename = (request.getFileName() == null || request.getFileName().isBlank())
             ? "export.xlsx" : request.getFileName() + ".xlsx";
-        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
-        try (OutputStream out = response.getOutputStream()) {
+
+        StreamingResponseBody body = out -> {
+            try {
             exportService.exportSync(request, out, currentUserId());
-        }
+            } catch (Exception ex) {
+                // 让全局异常处理接管，避免在流中吞掉错误
+                throw new RuntimeException("exportSync failed", ex);
+            }
+        };
+
+        return ResponseEntity
+            .ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+            .contentType(MediaType.parseMediaType(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            .body(body);
     }
 
     /** 异步任务提交 */
@@ -70,6 +88,18 @@ public class ExportController {
         Optional<ExportTaskEntity> task = exportTaskService.findByTaskId(taskId);
         return task.<ResponseEntity<?>>map(ResponseEntity::ok)
             .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /** 查询当前用户任务，管理员可查看全部 */
+    @GetMapping("/task")
+    public ResponseEntity<?> listTasks() {
+        Authentication auth = currentAuthentication();
+        boolean isAdmin = hasAdminAuthority(auth);
+        String uid = currentUserId(auth);
+        if (isAdmin) {
+            return ResponseEntity.ok(exportTaskService.findAllTasks());
+        }
+        return ResponseEntity.ok(exportTaskService.findUserTasks(uid));
     }
 
     /** 下载异步结果 */

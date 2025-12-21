@@ -12,6 +12,10 @@ server:
 spring:
   application:
     name: oauth-server
+  # JMX 配置：禁用 JMX 以避免 RMI 连接时的 InstanceNotFoundException
+  # 如果不需要 JMX 监控，建议禁用以减少日志噪音
+  jmx:
+    enabled: false
   quartz:
     job-store-type: jdbc # 使用数据库存储调度元数据，确保多节点共享
     jdbc:
@@ -76,7 +80,8 @@ spring:
       # 设置事务隔离级别为 READ_COMMITTED
       connection-init-sql: "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED"
   jpa:
-    database-platform: org.hibernate.dialect.MySQL8Dialect
+    # 移除 database-platform 配置，Hibernate 会根据数据库 URL 自动选择正确的方言
+    # 如需显式指定，使用: org.hibernate.dialect.MySQLDialect (MySQL8Dialect 已弃用)
     open-in-view: false # 避免延迟加载导致的 session 泄露警告
 
     hibernate:
@@ -91,12 +96,13 @@ spring:
         order_inserts: true
         order_updates: true
   # 数据初始化配置
+  # 注意：已迁移到 Liquibase，禁用 Spring SQL 初始化以避免冲突
   sql:
     init:
-      mode: always # 总是执行数据初始化脚本
-      schema-locations: classpath:schema.sql # 指定表结构初始化脚本位置（包含 Quartz 表）
-      data-locations: classpath:data.sql # 指定数据初始化脚本位置
-      continue-on-error: true # 遇到错误继续执行
+      mode: never # 禁用 Spring SQL 初始化，由 Liquibase 统一管理数据库变更
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
   profiles:
     active: dev
 

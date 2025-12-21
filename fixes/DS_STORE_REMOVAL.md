@@ -1,24 +1,32 @@
-# .DS_Store 清理方案
+# .DS_Store 清理与防护
 
-## 问题
+## 现象
 
-- 远程仓库存在 macOS 系统文件 `.DS_Store`（路径：`tiny_web/.DS_Store` 与仓库根目录 `.DS_Store`），属环境产物，不应入库。
+- 远程与本地均出现 `.DS_Store`（根目录和 `tiny_web/.DS_Store`），属于 macOS Finder 生成的环境文件，不应入库。
 
-## 处理动作（已执行）
+## 已采取的修复
 
-1. 删除并从 Git 追踪中移除：`git rm tiny_web/.DS_Store` 与 `git rm ./.DS_Store`
-2. 确认忽略规则已存在：`.gitignore` 中包含 `**/.DS_Store`
+1. 从 Git 追踪中移除：`git rm ./.DS_Store` 与 `git rm tiny_web/.DS_Store`
+2. 确认忽略规则：`.gitignore` 已包含 `**/.DS_Store`
 
-## 预防与建议
+## 诊断与验证
 
-- 如再次出现 `.DS_Store`，可在仓库根目录执行：
+- 检查远程是否仍含 `.DS_Store`：
+  ```bash
+  git ls-tree -r origin/main | grep DS_Store || true
+  ```
+- 检查本地已跟踪的 `.DS_Store`：
+  ```bash
+  git ls-files '**/.DS_Store'
+  ```
+- 命令输出为空即已清除。
+
+## 预防操作
+
+- 清理所有工作副本中的 `.DS_Store`：
   ```bash
   find . -name '.DS_Store' -print -delete
   git status
   ```
 - 保持 `.gitignore` 中的 `**/.DS_Store` 规则。
-- 尽量在源码目录执行操作前清理工作区（例如使用 `rm -f **/.DS_Store` 或在 macOS Finder 设置隐藏文件不生成）。
-
-## 验证
-
-- `git ls-files '**/.DS_Store'` 输出为空即表示仓库不再追踪该文件（包含根目录与子模块）。
+- 习惯性在提交前清理（如 `rm -f **/.DS_Store`），避免再入库。

@@ -14,7 +14,7 @@
   </a-modal>
 </template>
 <script setup lang="ts">
-import { ref, watch, defineProps, computed } from 'vue'
+import { ref, watch, computed } from 'vue'
 // 定义props
 const props = defineProps({
   modelValue: { type: Array as () => string[], default: () => [] },

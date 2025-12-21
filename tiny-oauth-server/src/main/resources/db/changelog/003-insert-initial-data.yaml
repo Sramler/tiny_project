@@ -1,0 +1,13 @@
+databaseChangeLog:
+  - changeSet:
+      id: insert-initial-data
+      author: tiny
+      comment: 插入初始数据（用户、角色、资源等）
+      changes:
+        - sqlFile:
+            path: classpath:data.sql
+            relativeToChangelogFile: false
+            splitStatements: true
+            stripComments: false
+            endDelimiter: ;
+            dbms: mysql

@@ -763,7 +763,10 @@ async function handleResourceAssign(newResourceIds: number[]) {
   align-items: center;          /* 垂直居中 */
   justify-content: flex-end;    /* 右对齐 */
   background: #fff;             /* 可选，分页条背景 */
-/* 不要设置height/line-height/padding-top/padding-bottom */
+  padding: 12px 24px;
+  /* 上下留白，确保有足够空间垂直居中 */
+  min-height: 56px;
+  /* 最小高度，确保有足够的垂直空间 */
 }
 
 :deep(.ant-pagination) {

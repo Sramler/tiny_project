@@ -850,7 +850,10 @@ async function handleBatchRoleAssign(newRoleIds: string[]) {
   /* 右对齐 */
   background: #fff;
   /* 可选，分页条背景 */
-  /* padding-right: 0px;          可选，右侧留白 */
+  padding: 12px 24px;
+  /* 上下留白，确保有足够空间垂直居中 */
+  min-height: 56px;
+  /* 最小高度，确保有足够的垂直空间 */
 }
 
 :deep(.ant-pagination) {

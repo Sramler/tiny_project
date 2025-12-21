@@ -621,6 +621,10 @@ watch(() => pagination.value.pageSize, () => {
     align-items: center;
     justify-content: flex-end;
     background: #fff;
+    padding: 12px 24px;
+    /* 上下留白，确保有足够空间垂直居中 */
+    min-height: 56px;
+    /* 最小高度，确保有足够的垂直空间 */
 }
 
 ::deep(.ant-pagination) {

@@ -49,6 +49,33 @@
             <PoweroffOutlined :class="['action-icon', { active: showSortTooltip }]"
               @click="showSortTooltip = !showSortTooltip" />
           </a-tooltip>
+          <a-tooltip :title="zebraStripeEnabled ? '关闭斑马纹' : '开启斑马纹'">
+            <div class="zebra-stripe-switch">
+              <a-switch v-model:checked="zebraStripeEnabled" size="small" />
+            </div>
+          </a-tooltip>
+          <a-tooltip :title="cellCopyEnabled ? '关闭单元格复制' : '开启单元格复制'">
+            <CopyOutlined :class="['action-icon', { active: cellCopyEnabled }]"
+              @click="cellCopyEnabled = !cellCopyEnabled" />
+          </a-tooltip>
+          <a-dropdown placement="bottomRight" trigger="click">
+            <a-tooltip title="表格密度">
+              <ColumnHeightOutlined class="action-icon" />
+            </a-tooltip>
+            <template #overlay>
+              <a-menu @click="handleDensityMenuClick" :selected-keys="[tableSize]">
+                <a-menu-item key="default">
+                  <span>默认</span>
+                </a-menu-item>
+                <a-menu-item key="middle">
+                  <span>中等</span>
+                </a-menu-item>
+                <a-menu-item key="small">
+                  <span>紧凑</span>
+                </a-menu-item>
+              </a-menu>
+            </template>
+          </a-dropdown>
           <a-popover placement="bottomRight" trigger="click" :destroyTooltipOnHide="false">
             <template #content>
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
@@ -88,7 +115,8 @@
         <div class="table-scroll-container">
           <a-table :columns="columns" :data-source="tableData" :pagination="false"
             :row-key="(record: any) => String(record.id)" bordered :loading="loading"
-            :scroll="{ x: 1500, y: tableBodyHeight }" :locale="tableLocale" :show-sorter-tooltip="showSortTooltip">
+            :scroll="{ x: 1500, y: tableBodyHeight }" :locale="tableLocale" :show-sorter-tooltip="showSortTooltip"
+            :row-class-name="getRowClassName" :size="tableSize === 'default' ? undefined : tableSize">
             <template #bodyCell="{ column, record }">
               <template v-if="column.dataIndex === 'status'">
                 <a-tag :color="statusColorMap[record.status] || 'default'">
@@ -116,14 +144,41 @@
                   </a-button>
                 </div>
               </template>
+              <template v-else>
+                <template v-if="cellCopyEnabled && column.dataIndex && column.dataIndex !== 'action'">
+                  <span class="cell-text">
+                    {{ record[column.dataIndex as string] ?? '-' }}
+                  </span>
+                  <CopyOutlined class="cell-copy-icon"
+                    @click.stop="handleCellCopy(record[column.dataIndex as string], (column.title as string) || '')" />
+                </template>
+                <span v-else-if="column.dataIndex">{{ record[column.dataIndex as string] }}</span>
+                <span v-else>-</span>
+              </template>
             </template>
           </a-table>
         </div>
         <div class="pagination-container" ref="paginationRef">
-          <a-pagination v-model:current="pagination.current" :page-size="pagination.pageSize" :total="paginationConfig.total"
-            :show-size-changer="pagination.showSizeChanger" :page-size-options="paginationConfig.pageSizeOptions"
-            :show-total="pagination.showTotal" @change="handlePageChange" @showSizeChange="handlePageSizeChange"
-            :locale="{ items_per_page: '条/页' }" />
+          <div class="pagination-left">
+            <div class="export-group">
+              <a-button type="primary" :loading="exporting" @click="handleExportSync" class="export-btn">
+                <template #icon>
+                  <DownloadOutlined />
+                </template>
+                导出当前页
+              </a-button>
+              <a-button :loading="exportingAsync" @click="handleExportAsync" class="export-btn">
+                <template #icon>
+                  <DownloadOutlined />
+                </template>
+                导出全部（异步）
+              </a-button>
+            </div>
+          </div>
+          <a-pagination v-model:current="pagination.current" :page-size="pagination.pageSize"
+            :total="paginationConfig.total" :show-size-changer="pagination.showSizeChanger"
+            :page-size-options="paginationConfig.pageSizeOptions" :show-total="pagination.showTotal"
+            @change="handlePageChange" @showSizeChange="handlePageSizeChange" :locale="{ items_per_page: '条/页' }" />
         </div>
       </div>
     </div>
@@ -232,8 +287,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
-import { PlusOutlined, ReloadOutlined, EditOutlined, DeleteOutlined, PoweroffOutlined, SettingOutlined, HolderOutlined } from '@ant-design/icons-vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { PlusOutlined, ReloadOutlined, EditOutlined, DeleteOutlined, PoweroffOutlined, SettingOutlined, HolderOutlined, DownloadOutlined, DownOutlined, ColumnHeightOutlined, CopyOutlined } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import dayjs, { Dayjs } from 'dayjs'
 import VueDraggable from 'vuedraggable'
@@ -246,6 +301,7 @@ import {
   clearDemoExportUsage,
 } from '@/api/demoExportUsage'
 import { useThrottle } from '@/utils/debounce'
+import request from '@/utils/request'
 
 interface DemoUsageFormState {
   id?: number
@@ -281,6 +337,11 @@ const tableData = ref<any[]>([])
 const loading = ref(false)
 const refreshing = ref(false)
 const showSortTooltip = ref(true)
+const zebraStripeEnabled = ref(true) // 斑马纹开关，默认开启
+const cellCopyEnabled = ref(false) // 单元格复制开关，默认关闭
+const tableSize = ref<'default' | 'small' | 'middle' | 'large'>('default') // 表格密度，default 对应 undefined（组件默认值），middle 对应 'middle'
+const exporting = ref(false)
+const exportingAsync = ref(false)
 
 const pagination = ref({
   current: 1,
@@ -612,25 +673,58 @@ function onCheckboxChange(dataIndex: string, checked: boolean) {
 }
 
 function resetColumnOrder() {
-  allColumns.value = [...INITIAL_COLUMNS]
-  draggableColumns.value = [...INITIAL_COLUMNS]
-  showColumnKeys.value = INITIAL_COLUMNS.map((col) => col.dataIndex)
+  try {
+    // 设置同步标志，防止触发 watch 监听器
+    isSyncingColumns.value = true
+    try {
+      allColumns.value = [...INITIAL_COLUMNS]
+      draggableColumns.value = [...INITIAL_COLUMNS]
+      showColumnKeys.value = INITIAL_COLUMNS.map((col) => col.dataIndex).filter((key): key is string => typeof key === 'string')
+    } finally {
+      // 使用 nextTick 确保所有更新完成后再重置标志
+      nextTick(() => {
+        isSyncingColumns.value = false
+      })
+    }
+  } catch (error) {
+    console.error('重置列顺序失败:', error)
+    message.error('重置列顺序失败')
+    isSyncingColumns.value = false
+  }
 }
 
 function onDragEnd(event: any) {
   // 拖拽结束后，同步 draggableColumns 到 allColumns
-  allColumns.value = draggableColumns.value.filter((col) => col && typeof col.dataIndex === 'string')
-  // showColumnKeys 只保留 allColumns 里存在的 dataIndex
-  showColumnKeys.value = showColumnKeys.value.filter((key) =>
-    allColumns.value.some((col) => col.dataIndex === key),
-  )
+  // 设置同步标志，防止触发 watch 监听器
+  isSyncingColumns.value = true
+  try {
+    allColumns.value = draggableColumns.value.filter((col) => col && typeof col.dataIndex === 'string')
+    // showColumnKeys 只保留 allColumns 里存在的 dataIndex
+    showColumnKeys.value = showColumnKeys.value.filter((key) =>
+      allColumns.value.some((col) => col.dataIndex === key),
+    )
+  } finally {
+    // 使用 nextTick 确保所有更新完成后再重置标志
+    nextTick(() => {
+      isSyncingColumns.value = false
+    })
+  }
 }
+
+// 防止循环更新的标志
+const isSyncingColumns = ref(false)
 
 // 监听 allColumns 变化，同步到 draggableColumns
 watch(
   allColumns,
   (val) => {
-    draggableColumns.value = val.filter((col) => col && typeof col.dataIndex === 'string')
+    if (isSyncingColumns.value) return
+    isSyncingColumns.value = true
+    try {
+      draggableColumns.value = val.filter((col) => col && typeof col.dataIndex === 'string')
+    } finally {
+      isSyncingColumns.value = false
+    }
   },
   { deep: true },
 )
@@ -639,11 +733,17 @@ watch(
 watch(
   draggableColumns,
   (val) => {
-    allColumns.value = val.filter((col) => col && typeof col.dataIndex === 'string')
-    // showColumnKeys 只保留 allColumns 里存在的 dataIndex
-    showColumnKeys.value = showColumnKeys.value.filter((key) =>
-      allColumns.value.some((col) => col.dataIndex === key),
-    )
+    if (isSyncingColumns.value) return
+    isSyncingColumns.value = true
+    try {
+      allColumns.value = val.filter((col) => col && typeof col.dataIndex === 'string')
+      // showColumnKeys 只保留 allColumns 里存在的 dataIndex
+      showColumnKeys.value = showColumnKeys.value.filter((key) =>
+        allColumns.value.some((col) => col.dataIndex === key),
+      )
+    } finally {
+      isSyncingColumns.value = false
+    }
   },
   { deep: true },
 )
@@ -654,13 +754,20 @@ const tableBodyHeight = ref(400)
 
 function updateTableBodyHeight() {
   nextTick(() => {
-    if (tableContentRef.value && paginationRef.value) {
+    // 添加更严格的 null 检查，防止组件卸载后访问
+    if (!tableContentRef.value || !paginationRef.value) {
+      return
+    }
+    try {
       const tableHeader = tableContentRef.value.querySelector('.ant-table-header') as HTMLElement
       const containerHeight = tableContentRef.value.clientHeight
       const paginationHeight = paginationRef.value.clientHeight
       const tableHeaderHeight = tableHeader ? tableHeader.clientHeight : 55
       const bodyHeight = containerHeight - paginationHeight - tableHeaderHeight
       tableBodyHeight.value = Math.max(bodyHeight, 200)
+    } catch (error) {
+      // 静默处理错误，避免在组件卸载时抛出异常
+      console.warn('updateTableBodyHeight error:', error)
     }
   })
 }
@@ -671,12 +778,199 @@ onMounted(() => {
   window.addEventListener('resize', updateTableBodyHeight)
 })
 
+onBeforeUnmount(() => {
+  // 清理事件监听器，防止内存泄漏
+  window.removeEventListener('resize', updateTableBodyHeight)
+})
+
 watch(
   () => pagination.value.pageSize,
   () => {
     updateTableBodyHeight()
   },
 )
+
+// 获取行类名，用于斑马纹和悬停效果
+function getRowClassName(_record: any, index: number) {
+  if (!zebraStripeEnabled.value) {
+    return ''
+  }
+  return index % 2 === 0 ? 'table-row-even' : 'table-row-odd'
+}
+
+// 处理表格密度菜单点击
+function handleDensityMenuClick({ key }: { key: string }) {
+  if (key === 'default' || key === 'small' || key === 'middle' || key === 'large') {
+    tableSize.value = key as 'default' | 'small' | 'middle' | 'large'
+    // 密度变化时，重新计算表格高度
+    updateTableBodyHeight()
+  }
+}
+
+// 处理单元格复制
+function handleCellCopy(value: any, columnTitle: string) {
+  if (!cellCopyEnabled.value) {
+    return
+  }
+
+  try {
+    // 将值转换为字符串
+    const textToCopy = value !== null && value !== undefined ? String(value) : ''
+
+    if (!textToCopy.trim()) {
+      message.warning('单元格内容为空，无法复制')
+      return
+    }
+
+    // 使用 Clipboard API 复制文本
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(textToCopy)
+        .then(() => {
+          const title = columnTitle || '单元格'
+          message.success(`已复制 ${title}：${textToCopy}`)
+        })
+        .catch((error) => {
+          console.error('复制失败:', error)
+          // 降级方案：使用传统方法
+          fallbackCopyTextToClipboard(textToCopy, columnTitle)
+        })
+    } else {
+      // 降级方案：使用传统方法
+      fallbackCopyTextToClipboard(textToCopy, columnTitle)
+    }
+  } catch (error) {
+    console.error('复制处理错误:', error)
+    message.error('复制失败：' + (error instanceof Error ? error.message : '未知错误'))
+  }
+}
+
+// 降级复制方案（兼容旧浏览器）
+function fallbackCopyTextToClipboard(text: string, columnTitle: string) {
+  try {
+    const textArea = document.createElement('textarea')
+    textArea.value = text
+    textArea.style.position = 'fixed'
+    textArea.style.left = '-999999px'
+    textArea.style.top = '-999999px'
+    document.body.appendChild(textArea)
+    textArea.focus()
+    textArea.select()
+
+    const successful = document.execCommand('copy')
+    document.body.removeChild(textArea)
+
+    if (successful) {
+      const title = columnTitle || '单元格'
+      message.success(`已复制 ${title}：${text}`)
+    } else {
+      message.error('复制失败，请手动复制')
+    }
+  } catch (err) {
+    console.error('降级复制方案失败:', err)
+    message.error('复制失败，请手动复制')
+  }
+}
+
+// 构建导出请求的列定义（排除操作列）
+const getExportColumns = () => {
+  return INITIAL_COLUMNS
+    .filter(col => col.dataIndex !== 'action')
+    .map(col => ({
+      title: col.title,
+      field: col.dataIndex as string,
+    }))
+}
+
+// 构建导出请求的过滤条件
+const getExportFilters = () => {
+  const filters: Record<string, any> = {}
+  if (query.value.tenantCode?.trim()) {
+    filters.tenantCode = query.value.tenantCode.trim()
+  }
+  if (query.value.productCode?.trim()) {
+    filters.productCode = query.value.productCode.trim()
+  }
+  if (query.value.status) {
+    filters.status = query.value.status
+  }
+  return filters
+}
+
+// 同步导出当前页数据
+async function handleExportSync() {
+  exporting.value = true
+  try {
+    const exportRequest = {
+      fileName: 'demo_export_usage',
+      pageSize: pagination.value.pageSize,
+      async: false,
+      sheets: [
+        {
+          sheetName: '导出测试数据',
+          exportType: 'demo_export_usage',
+          filters: getExportFilters(),
+          columns: getExportColumns(),
+        },
+      ],
+    }
+
+    const blob = await request.post<Blob>('/export/sync', exportRequest, {
+      responseType: 'blob' as any,
+    })
+
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `demo_export_usage_${dayjs().format('YYYYMMDD_HHmmss')}.xlsx`
+    a.click()
+    window.URL.revokeObjectURL(url)
+    message.success('导出成功，文件已开始下载')
+  } catch (error: any) {
+    message.error('导出失败: ' + (error?.message || '未知错误'))
+  } finally {
+    exporting.value = false
+  }
+}
+
+// 异步导出全部数据
+async function handleExportAsync() {
+  exportingAsync.value = true
+  try {
+    const exportRequest = {
+      fileName: 'demo_export_usage',
+      pageSize: 5000, // 异步导出使用较大的分页大小
+      async: true,
+      sheets: [
+        {
+          sheetName: '导出测试数据',
+          exportType: 'demo_export_usage',
+          filters: getExportFilters(),
+          columns: getExportColumns(),
+        },
+      ],
+    }
+
+    const res = await request.post<{ taskId: string }>('/export/async', exportRequest)
+    const taskId = (res as any)?.taskId
+    if (taskId) {
+      Modal.success({
+        title: '异步导出任务已创建',
+        content: `任务ID: ${taskId}，请在"导出任务"页面查看进度并下载文件`,
+        okText: '前往导出任务',
+        onOk: () => {
+          // 可以导航到导出任务页面
+          window.location.href = '/export/task'
+        },
+      })
+    } else {
+      message.success('异步导出任务已提交，请在"导出任务"页面查看进度')
+    }
+  } catch (error: any) {
+    message.error('异步导出失败: ' + (error?.message || '未知错误'))
+  } finally {
+    exportingAsync.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -717,6 +1011,8 @@ watch(
   /* 占满父容器剩余空间 */
   min-height: 0;
   /* 关键，防止撑开 */
+  width: 100%;
+  overflow: hidden;
 }
 
 .table-scroll-container {
@@ -724,20 +1020,154 @@ watch(
   min-height: 0;
   /* 可选，防止撑开 */
   overflow: auto;
+  width: 100%;
+  max-width: 100%;
 }
 
 .pagination-container {
   display: flex;
+  /* 启用flex布局 */
   align-items: center;
-  justify-content: flex-end;
+  /* 垂直居中 */
+  justify-content: space-between;
+  /* 左右分布 */
   background: #fff;
+  /* 可选，分页条背景 */
+  padding: 12px 24px;
+  /* 上下留白，确保有足够空间垂直居中 */
+  min-height: 56px;
+  /* 最小高度，确保有足够的垂直空间 */
 }
 
-/* 禁止表格单元格换行，超出内容使用省略号，避免“跨行”撑高行高 */
+.pagination-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+}
+
+.export-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+}
+
+.export-group .export-btn {
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.export-group .export-btn:hover {
+  z-index: 1;
+  position: relative;
+}
+
+.export-group .export-btn[type="primary"] {
+  background: #1890ff;
+  color: #fff;
+  border-color: #1890ff;
+}
+
+.export-group .export-btn[type="primary"]:hover {
+  background: #40a9ff;
+  border-color: #40a9ff;
+}
+
+:deep(.ant-pagination) {
+  display: flex !important;
+  flex-direction: row !important;
+  /* 强制横向排列 */
+  align-items: center !important;
+}
+
+/* 禁止表格单元格换行，超出内容使用省略号，避免"跨行"撑高行高 */
 :deep(.ant-table-cell) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* 隐藏表格内容区的滚动条，但保留滚动功能 */
+:deep(.ant-table-body) {
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE 10+ */
+}
+
+:deep(.ant-table-body::-webkit-scrollbar) {
+  display: none;
+  /* Chrome/Safari/Edge */
+}
+
+/* 现代化表格样式：斑马纹和行悬停效果 */
+:deep(.ant-table-tbody > tr) {
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+  cursor: default;
+}
+
+/* 偶数行背景色（仅在斑马纹开启时生效） */
+:deep(.ant-table-tbody > tr.table-row-even) {
+  background-color: #fafbfc;
+}
+
+/* 奇数行背景色（仅在斑马纹开启时生效） */
+:deep(.ant-table-tbody > tr.table-row-odd) {
+  background-color: #fff;
+}
+
+/* 当斑马纹关闭时，所有行使用统一背景 */
+:deep(.ant-table-tbody > tr:not(.table-row-even):not(.table-row-odd)) {
+  background-color: #fff;
+}
+
+/* 行悬停效果 */
+:deep(.ant-table-tbody > tr:hover) {
+  background-color: #f0f7ff !important;
+  box-shadow: 0 1px 4px rgba(24, 144, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+/* 表头样式优化 */
+:deep(.ant-table-thead > tr > th) {
+  background-color: #fafafa;
+  font-weight: 600;
+  border-bottom: 2px solid #e8e8e8;
+}
+
+/* 表格边框优化 */
+:deep(.ant-table) {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* 单元格内边距由 size 属性控制，移除固定 padding 以支持密度配置 */
+:deep(.ant-table-tbody > tr > td) {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+/* 空状态优化 */
+:deep(.ant-empty) {
+  padding: 48px 0;
+}
+
+:deep(.ant-empty-description) {
+  color: #8c8c8c;
+  font-size: 14px;
+}
+
+/* 加载状态优化 */
+:deep(.ant-spin-nested-loading) {
+  min-height: 200px;
+}
+
+:deep(.ant-spin-container) {
+  transition: opacity 0.3s ease;
 }
 
 .ml-2 {
@@ -772,6 +1202,40 @@ watch(
   color: #595959;
   border-radius: 4px;
   padding: 8px;
+  transition: color 0.2s, background 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+}
+
+.action-icon:hover {
+  color: #1890ff;
+  background: #f5f5f5;
+}
+
+.action-icon.active {
+  color: #1890ff;
+  background: #e6f7ff;
+}
+
+.zebra-stripe-switch {
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.table-density-menu {
+  padding: 8px 0;
+}
+
+.density-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #262626;
+  margin-bottom: 12px;
 }
 
 .action-buttons {
@@ -786,6 +1250,97 @@ watch(
   height: auto;
   line-height: 1.2;
   font-size: 12px;
+}
+
+/* 单元格复制功能样式 */
+.cell-text {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+  user-select: text;
+  padding: 0;
+  margin: 0;
+  border-radius: 2px;
+  box-sizing: border-box;
+}
+
+.cell-copy-icon {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  opacity: 0.4;
+  font-size: 12px;
+  color: #8c8c8c;
+  transition: opacity 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  z-index: 10;
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: 2px;
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  pointer-events: auto;
+  line-height: 1;
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+/* 当鼠标悬停在单元格上时，图标更明显 */
+:deep(.ant-table-tbody > tr > td:hover .cell-copy-icon) {
+  opacity: 1;
+  color: #1890ff;
+  transform: scale(1.1);
+  box-shadow: 0 2px 4px rgba(24, 144, 255, 0.2);
+}
+
+/* 当鼠标悬停在图标上时，图标更突出 */
+.cell-copy-icon:hover {
+  opacity: 1 !important;
+  color: #1890ff !important;
+  transform: scale(1.15);
+  box-shadow: 0 2px 6px rgba(24, 144, 255, 0.3);
+}
+
+/* 确保复制图标在单元格内正确显示，图标浮动不影响内容布局 */
+:deep(.ant-table-tbody > tr > td) {
+  position: relative;
+  overflow: visible;
+}
+
+/* 确保开启复制功能时，单元格和表格整体布局不受影响 */
+:deep(.ant-table-tbody > tr > td .cell-text) {
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* 确保表格整体宽度不受复制功能影响 */
+:deep(.ant-table) {
+  table-layout: auto;
+  width: 100%;
+  max-width: 100%;
+}
+
+:deep(.ant-table-thead > tr > th),
+:deep(.ant-table-tbody > tr > td) {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* 确保表格容器不会因为复制功能而被撑开 */
+:deep(.ant-table-container) {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+:deep(.ant-table-body) {
+  width: 100%;
+  max-width: 100%;
 }
 
 .draggable-columns {
@@ -834,5 +1389,56 @@ watch(
 
 .drag-handle:hover {
   color: #1890ff;
+}
+
+:deep(.ant-pagination),
+:deep(.ant-pagination-item),
+:deep(.ant-pagination-item-link) {
+  height: 32px !important;
+  /* 保证高度一致 */
+  line-height: 32px !important;
+  /* 保证内容垂直居中 */
+  min-width: 32px;
+  /* 保证宽度一致 */
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+
+:deep(.ant-pagination-item-container) {
+  /* 增加一点右边距，防止和"下一页"按钮重叠 */
+  margin-right: 8px;
+}
+
+/* 修正省略号垂直居中 */
+:deep(.ant-pagination-item-ellipsis) {
+  line-height: 32px !important;
+  /* AntD 默认高度 */
+  vertical-align: middle !important;
+  display: inline-block !important;
+  font-size: 16px !important;
+}
+
+/* 保证分页条整体高度和内容一致 */
+:deep(.ant-pagination) {
+  min-height: 32px !important;
+  height: 32px !important;
+  line-height: 32px !important;
+}
+
+/* 保证每个分页项高度一致 */
+:deep(.ant-pagination-item),
+:deep(.ant-pagination-item-link),
+:deep(.ant-pagination-prev),
+:deep(.ant-pagination-next),
+:deep(.ant-pagination-jump-next),
+:deep(.ant-pagination-jump-prev) {
+  height: 32px !important;
+  min-width: 32px !important;
+  line-height: 32px !important;
+  box-sizing: border-box;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
 }
 </style>

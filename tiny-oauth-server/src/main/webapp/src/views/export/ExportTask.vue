@@ -180,12 +180,15 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import { exportApi, type ExportTask } from '@/api/export'
 import { ReloadOutlined, SettingOutlined, HolderOutlined, EyeOutlined, DownloadOutlined, PoweroffOutlined, PlusOutlined } from '@ant-design/icons-vue'
 import VueDraggable from 'vuedraggable'
 import { message } from 'ant-design-vue'
 import { useThrottle } from '@/utils/debounce'
 import ExportTaskExamples from './ExportTaskExamples.vue'
+
+const route = useRoute()
 
 const statusOptions = [
     { label: '排队中', value: 'PENDING' },
@@ -538,14 +541,33 @@ function updateTableBodyHeight() {
     })
 }
 
-onMounted(() => {
-    loadData()
+onMounted(async () => {
+    // 从路由查询参数中读取 taskId，如果存在则自动填充到搜索表单并过滤
+    const taskIdFromQuery = route.query.taskId as string | undefined
+    if (taskIdFromQuery) {
+        query.value.taskId = taskIdFromQuery
+    }
+    
+    // 加载数据
+    await loadData()
+    
+    // 更新表格高度
     updateTableBodyHeight()
     window.addEventListener('resize', updateTableBodyHeight)
 })
 
 onBeforeUnmount(() => {
     window.removeEventListener('resize', updateTableBodyHeight)
+})
+
+// 监听路由 query 参数变化，自动更新过滤条件
+watch(() => route.query.taskId, (newTaskId) => {
+    if (newTaskId) {
+        query.value.taskId = newTaskId as string
+    } else if (route.query.taskId === undefined) {
+        // 如果路由参数被清除，也清除搜索条件（但保留用户手动输入的内容）
+        // 这里不自动清除，因为用户可能已经手动修改了搜索条件
+    }
 })
 
 watch(() => pagination.value.pageSize, () => {

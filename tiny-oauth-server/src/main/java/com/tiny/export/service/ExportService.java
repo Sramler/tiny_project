@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tiny.export.core.AggregateStrategy;
 import com.tiny.export.core.DataProvider;
 import com.tiny.export.core.ExportRequest;
+import com.tiny.export.core.FilterAwareDataProvider;
 import com.tiny.export.core.SheetConfig;
 import com.tiny.export.core.TopInfoDecorator;
 import com.tiny.export.persistence.ExportTaskEntity;
@@ -284,7 +285,21 @@ public class ExportService {
                 sumMap.put(f, null);
             }
 
-            Iterator<?> dataIt = provider.fetchIterator(pageSize);
+            // 如果 DataProvider 支持过滤能力，则在当前导出上下文中传入 SheetConfig.filters
+            Iterator<?> dataIt;
+            if (provider instanceof FilterAwareDataProvider) {
+                FilterAwareDataProvider<?> filterAware = (FilterAwareDataProvider<?>) provider;
+                try {
+                    if (sc.getFilters() != null) {
+                        filterAware.setFilters(sc.getFilters());
+                    }
+                    dataIt = provider.fetchIterator(pageSize);
+                } finally {
+                    filterAware.clearFilters();
+                }
+            } else {
+                dataIt = provider.fetchIterator(pageSize);
+            }
             Iterator<List<Object>> rowIterator = new Iterator<>() {
                 @Override
                 public boolean hasNext() {

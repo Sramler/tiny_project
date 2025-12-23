@@ -288,6 +288,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { PlusOutlined, ReloadOutlined, EditOutlined, DeleteOutlined, PoweroffOutlined, SettingOutlined, HolderOutlined, DownloadOutlined, DownOutlined, ColumnHeightOutlined, CopyOutlined } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import dayjs, { Dayjs } from 'dayjs'
@@ -302,6 +303,8 @@ import {
 } from '@/api/demoExportUsage'
 import { useThrottle } from '@/utils/debounce'
 import request from '@/utils/request'
+
+const router = useRouter()
 
 interface DemoUsageFormState {
   id?: number
@@ -900,6 +903,14 @@ const getExportFilters = () => {
 async function handleExportSync() {
   exporting.value = true
   try {
+    const baseFilters = getExportFilters()
+    const pageFilters: Record<string, any> = {
+      ...baseFilters,
+      __mode: 'page',
+      __page: pagination.value.current,
+      __pageSize: pagination.value.pageSize,
+    }
+
     const exportRequest = {
       fileName: 'demo_export_usage',
       pageSize: pagination.value.pageSize,
@@ -908,7 +919,8 @@ async function handleExportSync() {
         {
           sheetName: '导出测试数据',
           exportType: 'demo_export_usage',
-          filters: getExportFilters(),
+          // 导出当前页：在基础查询条件上增加分页信息
+          filters: pageFilters,
           columns: getExportColumns(),
         },
       ],
@@ -958,8 +970,11 @@ async function handleExportAsync() {
         content: `任务ID: ${taskId}，请在"导出任务"页面查看进度并下载文件`,
         okText: '前往导出任务',
         onOk: () => {
-          // 可以导航到导出任务页面
-          window.location.href = '/export/task'
+          // 使用 Vue Router 导航到导出任务页面，并带上 taskId 作为查询参数进行过滤
+          router.push({
+            path: '/export/task',
+            query: { taskId }
+          })
         },
       })
     } else {

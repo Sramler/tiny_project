@@ -100,6 +100,27 @@
             <PoweroffOutlined :class="['action-icon', { active: showSortTooltip }]"
               @click="showSortTooltip = !showSortTooltip" />
           </a-tooltip>
+          <a-tooltip :title="cellCopyEnabled ? '关闭单元格复制' : '开启单元格复制'">
+            <CopyOutlined :class="['action-icon', { active: cellCopyEnabled }]" @click="cellCopyEnabled = !cellCopyEnabled" />
+          </a-tooltip>
+          <a-dropdown placement="bottomRight" trigger="click">
+            <a-tooltip title="表格密度">
+              <ColumnHeightOutlined class="action-icon" />
+            </a-tooltip>
+            <template #overlay>
+              <a-menu @click="handleDensityMenuClick" :selected-keys="[tableSize]">
+                <a-menu-item key="default">
+                  <span>默认</span>
+                </a-menu-item>
+                <a-menu-item key="middle">
+                  <span>中等</span>
+                </a-menu-item>
+                <a-menu-item key="small">
+                  <span>紧凑</span>
+                </a-menu-item>
+              </a-menu>
+            </template>
+          </a-dropdown>
           <a-popover placement="bottomRight" trigger="click" :destroyTooltipOnHide="false">
             <template #content>
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
@@ -139,10 +160,18 @@
           <a-table :columns="columns" :data-source="tableData" :pagination="false"
             :row-key="(record: any) => String(record.id)" bordered :loading="loading" @change="handleTableChange"
             :row-selection="rowSelection" :custom-row="onCustomRow" :row-class-name="getRowClassName"
-            :scroll="{ x: 1500, y: tableBodyHeight }" :locale="tableLocale" :show-sorter-tooltip="showSortTooltip">
-            <template #bodyCell="{ column, record }">
+            :scroll="{ x: 1500, y: tableBodyHeight }" :locale="tableLocale" :show-sorter-tooltip="showSortTooltip"
+            :size="tableSize === 'default' ? undefined : tableSize">
+            <template #bodyCell="{ column, record, index }">
+              <template v-if="column.dataIndex === 'index'">
+                {{
+                  ((Number(pagination.current) || 1) - 1) *
+                    (Number(pagination.pageSize) || 10) +
+                  index + 1
+                }}
+              </template>
               <template
-                v-if="['enabled', 'accountNonExpired', 'accountNonLocked', 'credentialsNonExpired'].includes(column.dataIndex)">
+                v-else-if="['enabled', 'accountNonExpired', 'accountNonLocked', 'credentialsNonExpired'].includes(column.dataIndex)">
                 <a-tag :color="record[column.dataIndex] ? 'green' : 'red'">
                   {{ record[column.dataIndex] ? '是' : '否' }}
                 </a-tag>
@@ -169,10 +198,37 @@
                   </a-button>
                 </div>
               </template>
+              <template v-else>
+                <template v-if="cellCopyEnabled && column.dataIndex && column.dataIndex !== 'action'">
+                  <span class="cell-text">
+                    {{ record[column.dataIndex as string] ?? '-' }}
+                  </span>
+                  <CopyOutlined class="cell-copy-icon"
+                    @click.stop="handleCellCopy(record[column.dataIndex as string], (column.title as string) || '')" />
+                </template>
+                <span v-else-if="column.dataIndex">{{ record[column.dataIndex as string] }}</span>
+                <span v-else>-</span>
+              </template>
             </template>
           </a-table>
         </div>
         <div class="pagination-container" ref="paginationRef">
+          <div class="pagination-left">
+            <div class="export-group">
+              <a-button type="primary" :loading="exporting" @click="handleExportSync" class="export-btn">
+                <template #icon>
+                  <DownloadOutlined />
+                </template>
+                导出当前页
+              </a-button>
+              <a-button :loading="exportingAsync" @click="handleExportAsync" class="export-btn">
+                <template #icon>
+                  <DownloadOutlined />
+                </template>
+                导出全部（异步）
+              </a-button>
+            </div>
+          </div>
           <a-pagination v-model:current="pagination.current" :page-size="pagination.pageSize" :total="pagination.total"
             :show-size-changer="pagination.showSizeChanger" :page-size-options="paginationConfig.pageSizeOptions"
             :show-total="pagination.showTotal" @change="handlePageChange" @showSizeChange="handlePageSizeChange"
@@ -197,15 +253,16 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, h, onBeforeUnmount, nextTick } from 'vue'
 import { userList, createUser, updateUser, deleteUser, batchDeleteUsers, batchEnableUsers, batchDisableUsers } from '@/api/user'
-import { PlusOutlined, ReloadOutlined, SettingOutlined, HolderOutlined, DeleteOutlined, CheckCircleOutlined, StopOutlined, CloseOutlined, EditOutlined, EyeOutlined, InfoCircleOutlined, QuestionCircleOutlined, PoweroffOutlined } from '@ant-design/icons-vue'
+import { PlusOutlined, ReloadOutlined, SettingOutlined, HolderOutlined, DeleteOutlined, CheckCircleOutlined, StopOutlined, CloseOutlined, EditOutlined, EyeOutlined, InfoCircleOutlined, QuestionCircleOutlined, PoweroffOutlined, DownloadOutlined, ColumnHeightOutlined, CopyOutlined } from '@ant-design/icons-vue'
 import VueDraggable from 'vuedraggable'
 import UserForm from '@/views/user/UserForm.vue'
 import { message, Modal } from 'ant-design-vue'
-import { useRouter } from 'vue-router'
 import { useThrottle } from '@/utils/debounce'
 import RoleTransfer from './RoleTransfer.vue'
 import { getAllRoles, getRoleById } from '@/api/role'
 import { getUserRoles, updateUserRoles } from '@/api/user'
+import request from '@/utils/request'
+import dayjs from 'dayjs'
 
 const query = ref({
   username: '',
@@ -215,6 +272,11 @@ const query = ref({
 const tableData = ref<any[]>([])
 
 const loading = ref(false)
+const exporting = ref(false)
+const exportingAsync = ref(false)
+const cellCopyEnabled = ref(false)
+const tableSize = ref<'default' | 'small' | 'middle' | 'large'>('default')
+const zebraStripeEnabled = ref(true)
 
 const selectedRowKeys = ref<string[]>([])
 
@@ -632,12 +694,14 @@ function clearSelection() {
   console.log('清除选择')
 }
 
-function getRowClassName(record: any) {
+function getRowClassName(record: any, index: number) {
   if (selectedRowKeys.value.includes(record.id)) {
     return 'checkbox-selected-row'
   }
-
+  if (!zebraStripeEnabled.value) {
   return ''
+  }
+  return index % 2 === 0 ? 'table-row-even' : 'table-row-odd'
 }
 
 function handlePageChange(page: number) {
@@ -739,6 +803,26 @@ const selectedRows = computed(() => {
   return tableData.value.filter(row => selectedRowKeys.value.includes(String(row.id)))
 })
 
+const getExportColumns = () => {
+  return INITIAL_COLUMNS
+    .filter(col => col.dataIndex !== 'action')
+    .map(col => ({
+      title: col.title,
+      field: col.dataIndex as string
+    }))
+}
+
+const getExportFilters = () => {
+  const filters: Record<string, any> = {}
+  if (query.value.username?.trim()) {
+    filters.username = query.value.username.trim()
+  }
+  if (query.value.nickname?.trim()) {
+    filters.nickname = query.value.nickname.trim()
+  }
+  return filters
+}
+
 const allDisabled = computed(() => {
   return selectedRows.value.length > 0 && selectedRows.value.every(row => row.enabled === false)
 })
@@ -746,6 +830,128 @@ const allDisabled = computed(() => {
 const allEnabled = computed(() => {
   return selectedRows.value.length > 0 && selectedRows.value.every(row => row.enabled === true)
 })
+
+function handleDensityMenuClick({ key }: { key: string }) {
+  if (key === 'default' || key === 'small' || key === 'middle' || key === 'large') {
+    tableSize.value = key as 'default' | 'small' | 'middle' | 'large'
+    updateTableBodyHeight()
+  }
+}
+
+function handleCellCopy(value: any, columnTitle: string) {
+  if (!cellCopyEnabled.value) return
+  const textToCopy = value !== null && value !== undefined ? String(value) : ''
+  if (!textToCopy.trim()) {
+    message.warning('单元格内容为空，无法复制')
+    return
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(textToCopy)
+      .then(() => message.success(`已复制 ${columnTitle || '单元格'}：${textToCopy}`))
+      .catch(() => fallbackCopy(textToCopy, columnTitle))
+  } else {
+    fallbackCopy(textToCopy, columnTitle)
+  }
+}
+
+function fallbackCopy(text: string, columnTitle: string) {
+  try {
+    const area = document.createElement('textarea')
+    area.value = text
+    area.style.position = 'fixed'
+    area.style.left = '-9999px'
+    document.body.appendChild(area)
+    area.focus()
+    area.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(area)
+    if (ok) {
+      message.success(`已复制 ${columnTitle || '单元格'}：${text}`)
+    } else {
+      message.error('复制失败，请手动复制')
+    }
+  } catch (e) {
+    message.error('复制失败，请手动复制')
+  }
+}
+
+async function handleExportSync() {
+  exporting.value = true
+  try {
+    const baseFilters = getExportFilters()
+    const pageFilters: Record<string, any> = {
+      ...baseFilters,
+      __mode: 'page',
+      __page: pagination.value.current,
+      __pageSize: pagination.value.pageSize,
+    }
+
+    const exportRequest = {
+      fileName: 'user',
+      pageSize: pagination.value.pageSize,
+      async: false,
+      sheets: [
+        {
+          sheetName: '用户列表',
+          exportType: 'user',
+          filters: pageFilters,
+          columns: getExportColumns(),
+        },
+      ],
+    }
+
+    const blob = await request.post<Blob>('/export/sync', exportRequest, { responseType: 'blob' as any })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `user_${dayjs().format('YYYYMMDD_HHmmss')}.xlsx`
+    a.click()
+    window.URL.revokeObjectURL(url)
+    message.success('导出成功，文件已开始下载')
+  } catch (error: any) {
+    message.error('导出失败: ' + (error?.message || '未知错误'))
+  } finally {
+    exporting.value = false
+  }
+}
+
+async function handleExportAsync() {
+  exportingAsync.value = true
+  try {
+    const exportRequest = {
+      fileName: 'user',
+      pageSize: 5000,
+      async: true,
+      sheets: [
+        {
+          sheetName: '用户列表',
+          exportType: 'user',
+          filters: getExportFilters(),
+          columns: getExportColumns(),
+        },
+      ],
+    }
+
+    const res = await request.post<{ taskId: string }>('/export/async', exportRequest)
+    const taskId = (res as any)?.taskId
+    if (taskId) {
+      Modal.success({
+        title: '异步导出任务已创建',
+        content: `任务ID: ${taskId}，请在"导出任务"页面查看进度并下载文件`,
+        okText: '前往导出任务',
+        onOk: () => {
+          window.location.href = '/export/task'
+        },
+      })
+    } else {
+      message.success('异步导出任务已提交，请在"导出任务"页面查看进度')
+    }
+  } catch (error: any) {
+    message.error('异步导出失败: ' + (error?.message || '未知错误'))
+  } finally {
+    exportingAsync.value = false
+  }
+}
 
 const showBatchRoleTransfer = ref(false)
 const allRoles = ref<any[]>([])
@@ -843,17 +1049,43 @@ async function handleBatchRoleAssign(newRoleIds: string[]) {
 
 .pagination-container {
   display: flex;
-  /* 启用flex布局 */
   align-items: center;
-  /* 垂直居中 */
-  justify-content: flex-end;
-  /* 右对齐 */
+  justify-content: space-between;
   background: #fff;
-  /* 可选，分页条背景 */
   padding: 12px 24px;
-  /* 上下留白，确保有足够空间垂直居中 */
   min-height: 56px;
-  /* 最小高度，确保有足够的垂直空间 */
+}
+
+.pagination-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.export-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.export-group .export-btn {
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.export-group .export-btn[type="primary"] {
+  background: #1890ff;
+  color: #fff;
+  border-color: #1890ff;
+}
+
+.export-group .export-btn[type="primary"]:hover {
+  background: #40a9ff;
+  border-color: #40a9ff;
 }
 
 :deep(.ant-pagination) {
@@ -1167,5 +1399,76 @@ async function handleBatchRoleAssign(newRoleIds: string[]) {
   vertical-align: middle !important;
   display: inline-block !important;
   font-size: 16px !important;
+}
+
+/* 斑马纹类名（由 getRowClassName 控制） */
+.table-row-even {
+  background-color: #fafbfc;
+}
+
+.table-row-odd {
+  background-color: #fff;
+}
+
+/* 单元格复制相关样式 */
+.cell-text {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+  user-select: text;
+  padding: 0;
+  margin: 0;
+  border-radius: 2px;
+  box-sizing: border-box;
+}
+
+.cell-copy-icon {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  opacity: 0.4;
+  font-size: 12px;
+  color: #8c8c8c;
+  transition: opacity 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  z-index: 10;
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: 2px;
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  pointer-events: auto;
+  line-height: 1;
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+::deep(.ant-table-tbody > tr > td:hover .cell-copy-icon) {
+  opacity: 1;
+  color: #1890ff;
+  transform: scale(1.1);
+  box-shadow: 0 2px 4px rgba(24, 144, 255, 0.2);
+}
+
+.cell-copy-icon:hover {
+  opacity: 1 !important;
+  color: #1890ff !important;
+  transform: scale(1.15);
+  box-shadow: 0 2px 6px rgba(24, 144, 255, 0.3);
+}
+
+::deep(.ant-table-tbody > tr > td) {
+  position: relative;
+  overflow: visible;
+}
+
+::deep(.ant-table-tbody > tr > td .cell-text) {
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
 }
 </style>
